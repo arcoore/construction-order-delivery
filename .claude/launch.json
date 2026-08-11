@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "buyer-replacement",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["dev_server.py"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}

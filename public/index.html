@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SiteStock &mdash; Orders &amp; Deliveries</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">SiteStock</span>
+    <span class="brand-sub" id="community-indicator">Orders &amp; Deliveries</span>
+  </div>
+  <div class="topbar-right">
+    <button type="button" class="pill-btn" id="communities-pill-btn" hidden>Communities</button>
+    <button type="button" class="pill-btn" id="profile-pill-btn" hidden>Log in</button>
+    <div class="session-bar" id="session-bar" hidden>
+      <span class="session-label" id="session-label"></span>
+      <div class="session-actions">
+        <button type="button" class="circle-btn circle-btn-community" id="community-circle-btn" title="Switch community"></button>
+        <div class="account-menu-wrap">
+          <button type="button" class="circle-btn circle-btn-account" id="account-circle-btn" title="Menu">Menu</button>
+          <div class="account-menu" id="account-menu" hidden>
+            <button type="button" class="account-menu-item" id="menu-switch-role-btn">Switch role</button>
+            <button type="button" class="account-menu-item" id="menu-logout-btn">Log out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ============ AUTH VIEW ============ -->
+  <section id="auth-view" class="view active">
+    <div class="panel">
+      <h1>Log in to SiteStock</h1>
+      <p class="hint">This is still a prototype &mdash; accounts are stored only in this browser, so don't reuse a real password here. You can also skip this for now and come back to it later.</p>
+
+      <div class="driver-tabs" id="auth-tabs">
+        <button class="tab-btn active" data-auth-tab="login">Log in</button>
+        <button class="tab-btn" data-auth-tab="register">Create account</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label class="field-label" for="login-username-input">Username</label>
+        <input type="text" id="login-username-input" class="text-input" autocomplete="username" />
+
+        <label class="field-label" for="login-password-input">Password</label>
+        <input type="password" id="login-password-input" class="text-input" autocomplete="current-password" />
+
+        <button type="submit" class="btn btn-primary btn-block">Log in</button>
+        <p id="login-status" class="form-status"></p>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden>
+        <label class="field-label" for="register-username-input">Username</label>
+        <input type="text" id="register-username-input" class="text-input" autocomplete="username" />
+
+        <label class="field-label" for="register-password-input">Password</label>
+        <input type="password" id="register-password-input" class="text-input" autocomplete="new-password" />
+
+        <label class="field-label" for="register-confirm-input">Confirm password</label>
+        <input type="password" id="register-confirm-input" class="text-input" autocomplete="new-password" />
+
+        <label class="field-label" for="register-displayname-input">Display name</label>
+        <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
+        <p class="hint small-hint">This is the name others in your community will see &mdash; it can be different from your username.</p>
+
+        <label class="field-label">Are you a worker, driver, or owner?</label>
+        <div class="role-toggle-group" id="register-role-group">
+          <button type="button" class="role-toggle-btn" data-role="worker">🧑&zwj;🔧 Worker</button>
+          <button type="button" class="role-toggle-btn" data-role="driver">🚚 Driver</button>
+          <button type="button" class="role-toggle-btn" data-role="owner">👑 Owner</button>
+        </div>
+        <p class="hint small-hint">You'll go straight to this screen when you enter a community. If you create your own community you'll always land on its owner dashboard, whatever you pick here.</p>
+
+        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+        <p id="register-status" class="form-status"></p>
+      </form>
+
+      <button type="button" class="link-btn" id="skip-login-btn">Skip for now &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ COMMUNITY PICKER VIEW ============ -->
+  <section id="community-view" class="view">
+    <div class="panel">
+      <h1>Welcome to SiteStock</h1>
+      <p class="hint">Communities work like servers &mdash; an owner creates one, workers and drivers join it. Enter your name, then head to Communities to create or join one.</p>
+      <button type="button" class="btn btn-secondary" id="account-status-btn">Log in</button>
+      <label class="field-label" for="identity-name-input">Your name</label>
+      <input type="text" id="identity-name-input" class="text-input" placeholder="e.g. Dave" />
+      <button type="button" class="btn btn-primary btn-block" id="go-to-communities-btn">Go to Communities &rarr;</button>
+    </div>
+  </section>
+
+  <!-- ============ COMMUNITIES MANAGEMENT VIEW ============ -->
+  <section id="communities-view" class="view">
+    <div class="panel">
+      <button type="button" class="link-btn" id="communities-back-btn">&larr; Back</button>
+      <h1>Communities</h1>
+      <p class="hint">Create a new community, or join one you've been invited to.</p>
+    </div>
+
+    <div class="panel" id="my-communities-panel" hidden>
+      <h2>Your communities</h2>
+      <div id="my-communities-list" class="community-list"></div>
+    </div>
+
+    <div class="panel" id="pending-requests-panel" hidden>
+      <h2>Your pending requests</h2>
+      <div id="pending-requests-list" class="community-list"></div>
+    </div>
+
+    <div class="panel" id="create-community-panel" hidden>
+      <h2>Create a community</h2>
+      <p class="hint">You'll be the owner and can approve who joins.</p>
+      <label class="field-label" for="create-community-input">Community name</label>
+      <input type="text" id="create-community-input" class="text-input" placeholder="e.g. Riverside Construction" />
+      <button id="create-community-btn" class="btn btn-primary btn-block">Create community</button>
+      <p id="create-community-status" class="form-status"></p>
+    </div>
+
+    <div class="panel" id="join-code-panel" hidden>
+      <h2>Have an invite code?</h2>
+      <label class="field-label" for="join-code-input">Invite code</label>
+      <input type="text" id="join-code-input" class="text-input" placeholder="e.g. XJ4K9P" style="text-transform:uppercase" />
+      <button id="join-code-btn" class="btn btn-secondary btn-block">Request to join</button>
+      <p id="join-code-status" class="form-status"></p>
+    </div>
+
+    <div class="panel" id="browse-communities-panel" hidden>
+      <h2>Browse communities</h2>
+      <p class="hint">Requests need the owner's approval before you get in.</p>
+      <input type="text" id="browse-communities-search" class="text-input" placeholder="Search communities…" autocomplete="off" />
+      <div id="browse-communities-list" class="community-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ PROFILE VIEW ============ -->
+  <section id="profile-view" class="view">
+    <div class="panel">
+      <button type="button" class="link-btn" id="profile-back-btn">&larr; Back</button>
+      <h1>Your profile</h1>
+      <div id="profile-details" class="profile-details"></div>
+    </div>
+  </section>
+
+  <!-- ============ ROLE SELECT VIEW ============ -->
+  <section id="role-select-view" class="view">
+    <div class="panel">
+      <h1>Choose your role</h1>
+      <p class="hint"><strong id="role-select-name"></strong>, what's your role in <strong id="role-select-community-name"></strong>?</p>
+      <p class="hint small-hint">Once you pick a role you'll only see that role's screen. Use &ldquo;Switch role&rdquo; later if you need to log in as someone else.</p>
+      <div class="role-select-list" id="role-select-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ WORKER VIEW ============ -->
+  <section id="worker-view" class="view">
+    <div class="panel search-panel">
+      <h1>What do you need on site?</h1>
+      <p class="hint">Start typing &mdash; e.g. &ldquo;cement&rdquo;, &ldquo;timber post&rdquo;, &ldquo;hi-vis&rdquo;, &ldquo;drill&rdquo;&hellip;</p>
+      <input type="text" id="search-input" class="search-input" placeholder="Search for materials, tools, PPE&hellip;" autocomplete="off" />
+      <div id="search-results" class="results-list"></div>
+    </div>
+
+    <div class="panel order-panel" id="order-panel" hidden>
+      <button class="link-btn" id="back-to-search">&larr; Back to search</button>
+      <div id="order-form"></div>
+    </div>
+
+    <div class="panel history-panel">
+      <h2>Orders placed from this site</h2>
+      <div id="site-orders-list" class="orders-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ OWNER VIEW ============ -->
+  <section id="owner-view" class="view">
+    <div class="panel">
+      <h1 id="dashboard-title">Dashboard</h1>
+      <div class="dashboard-stats" id="dashboard-stats"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Recent activity</h2>
+      <div id="dashboard-activity" class="activity-list"></div>
+    </div>
+
+    <div class="panel" id="owner-join-requests-panel" hidden>
+      <h2>Community join requests</h2>
+      <div id="owner-join-requests-list" class="orders-list"></div>
+    </div>
+
+    <div class="panel" id="owner-team-panel" hidden>
+      <h2>Team</h2>
+      <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard.</p>
+      <div id="owner-team-list" class="orders-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="driver-tabs" id="owner-tabs">
+        <button class="tab-btn active" data-tab="awaiting">Awaiting Approval</button>
+        <button class="tab-btn" data-tab="approved">Approved</button>
+        <button class="tab-btn" data-tab="rejected">Rejected</button>
+      </div>
+      <div id="owner-orders-list" class="orders-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ DRIVER VIEW ============ -->
+  <section id="driver-view" class="view">
+    <div class="panel driver-header-panel">
+      <div class="driver-location">
+        <button id="locate-btn" class="btn btn-primary">Use my current location</button>
+        <span id="location-status" class="location-status">Location not set</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="driver-tabs" id="driver-tabs">
+        <button class="tab-btn active" data-tab="available">Requests</button>
+        <button class="tab-btn" data-tab="mine">My Deliveries</button>
+        <button class="tab-btn" data-tab="done">Completed</button>
+      </div>
+      <div id="driver-orders-list" class="orders-list"></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal-overlay" id="owner-upgrade-modal" hidden>
+  <div class="modal-box">
+    <span class="modal-icon" aria-hidden="true">👑</span>
+    <h2>You have been upgraded to owner level</h2>
+    <p class="hint" id="owner-upgrade-message"></p>
+    <button type="button" class="btn btn-primary btn-block" id="owner-upgrade-ok-btn">Got it</button>
+  </div>
+</div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
