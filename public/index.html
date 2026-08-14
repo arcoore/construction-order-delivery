@@ -15,6 +15,22 @@
   </div>
   <div class="topbar-right">
     <button type="button" class="pill-btn" id="communities-pill-btn" hidden>Communities</button>
+    <button type="button" class="pill-btn" id="sites-pill-btn" hidden>Sites</button>
+    <div class="notif-wrap" id="notif-wrap" hidden>
+      <button type="button" class="circle-btn circle-btn-notif" id="notif-bell-btn" title="Notifications">
+        🔔<span class="notif-badge" id="notif-badge" hidden>0</span>
+      </button>
+      <div class="notif-panel" id="notif-panel" hidden>
+        <div class="notif-panel-header">
+          <strong>Notifications</strong>
+          <button type="button" class="link-btn" id="notif-mark-all-btn">Mark all as read</button>
+        </div>
+        <div class="notif-list" id="notif-list"></div>
+        <div class="notif-panel-footer">
+          <button type="button" class="link-btn" id="notif-prefs-btn">Notification settings</button>
+        </div>
+      </div>
+    </div>
     <button type="button" class="pill-btn" id="profile-pill-btn" hidden>Log in</button>
     <div class="session-bar" id="session-bar" hidden>
       <span class="session-label" id="session-label"></span>
@@ -70,13 +86,14 @@
         <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
         <p class="hint small-hint">This is the name others in your community will see &mdash; it can be different from your username.</p>
 
-        <label class="field-label">Are you a worker, driver, or owner?</label>
+        <label class="field-label">Are you a worker, driver, buyer, or owner?</label>
         <div class="role-toggle-group" id="register-role-group">
           <button type="button" class="role-toggle-btn" data-role="worker">🧑&zwj;🔧 Worker</button>
           <button type="button" class="role-toggle-btn" data-role="driver">🚚 Driver</button>
+          <button type="button" class="role-toggle-btn" data-role="buyer">🛒 Buyer</button>
           <button type="button" class="role-toggle-btn" data-role="owner">👑 Owner</button>
         </div>
-        <p class="hint small-hint">You'll go straight to this screen when you enter a community. If you create your own community you'll always land on its owner dashboard, whatever you pick here.</p>
+        <p class="hint small-hint">You'll go straight to this screen when you enter a community. If you create your own community you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
 
         <button type="submit" class="btn btn-primary btn-block">Create account</button>
         <p id="register-status" class="form-status"></p>
@@ -94,6 +111,7 @@
       <button type="button" class="btn btn-secondary" id="account-status-btn">Log in</button>
       <label class="field-label" for="identity-name-input">Your name</label>
       <input type="text" id="identity-name-input" class="text-input" placeholder="e.g. Dave" />
+      <p class="hint small-hint" id="identity-name-hint" hidden>This is your account's display name and can't be edited here.</p>
       <button type="button" class="btn btn-primary btn-block" id="go-to-communities-btn">Go to Communities &rarr;</button>
     </div>
   </section>
@@ -162,7 +180,14 @@
 
   <!-- ============ WORKER VIEW ============ -->
   <section id="worker-view" class="view">
-    <div class="panel search-panel">
+    <div class="panel" id="site-select-panel">
+      <h1>Which site is this for?</h1>
+      <p class="hint">Pick the site you're ordering for &mdash; ask your owner to assign you to one if you don't see it here.</p>
+      <div id="worker-sites-list" class="community-list"></div>
+    </div>
+
+    <div class="panel search-panel" hidden>
+      <p class="hint">Ordering for <strong id="worker-active-site-label"></strong> &middot; <button type="button" class="link-btn" id="worker-change-site-btn">Change site</button></p>
       <h1>What do you need on site?</h1>
       <p class="hint">Start typing &mdash; e.g. &ldquo;cement&rdquo;, &ldquo;timber post&rdquo;, &ldquo;hi-vis&rdquo;, &ldquo;drill&rdquo;&hellip;</p>
       <input type="text" id="search-input" class="search-input" placeholder="Search for materials, tools, PPE&hellip;" autocomplete="off" />
@@ -192,14 +217,28 @@
       <div id="dashboard-activity" class="activity-list"></div>
     </div>
 
+    <div class="panel">
+      <h2>Order approval</h2>
+      <label class="checkbox-field">
+        <input type="checkbox" id="approval-required-toggle" checked />
+        <span>Require owner approval before new orders go to a buyer</span>
+      </label>
+      <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool — existing orders keep whatever setting applied when they were created.</p>
+    </div>
+
     <div class="panel" id="owner-join-requests-panel" hidden>
       <h2>Community join requests</h2>
       <div id="owner-join-requests-list" class="orders-list"></div>
     </div>
 
+    <div class="panel" id="owner-buyer-requests-panel" hidden>
+      <h2>Buyer access requests</h2>
+      <div id="owner-buyer-requests-list" class="orders-list"></div>
+    </div>
+
     <div class="panel" id="owner-team-panel" hidden>
       <h2>Team</h2>
-      <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard.</p>
+      <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard. Buyer access is separate — grant it to whoever handles purchasing.</p>
       <div id="owner-team-list" class="orders-list"></div>
     </div>
 
@@ -210,6 +249,44 @@
         <button class="tab-btn" data-tab="rejected">Rejected</button>
       </div>
       <div id="owner-orders-list" class="orders-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ SITES VIEW (Owner) ============ -->
+  <section id="sites-view" class="view">
+    <div id="sites-list-view">
+      <div class="panel">
+        <button type="button" class="link-btn" id="sites-back-btn">&larr; Back to dashboard</button>
+        <h1>Sites</h1>
+        <p class="hint">Manage the sites/projects this community is working on, and who's assigned to each one.</p>
+      </div>
+
+      <div class="panel" id="create-site-panel">
+        <h2>New site</h2>
+        <label class="field-label" for="site-name-input">Site name</label>
+        <input type="text" id="site-name-input" class="text-input" placeholder="e.g. 24 High Street" />
+        <label class="field-label" for="site-address-input">Address</label>
+        <input type="text" id="site-address-input" class="text-input" placeholder="e.g. 24 High Street, Leeds" />
+        <label class="field-label" for="site-postcode-input">Postcode</label>
+        <input type="text" id="site-postcode-input" class="text-input" placeholder="e.g. LS1 4AB" />
+        <label class="field-label" for="site-instructions-input">Delivery instructions (optional)</label>
+        <input type="text" id="site-instructions-input" class="text-input" placeholder="e.g. Use the side gate, ask for the foreman" />
+        <button type="button" id="create-site-btn" class="btn btn-primary btn-block">Create site</button>
+        <p id="create-site-status" class="form-status"></p>
+      </div>
+
+      <div class="panel">
+        <div class="driver-tabs" id="sites-tabs">
+          <button class="tab-btn active" data-sites-tab="active">Active</button>
+          <button class="tab-btn" data-sites-tab="archived">Archived</button>
+        </div>
+        <div id="sites-list" class="community-list"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="site-detail-panel" hidden>
+      <button type="button" class="link-btn" id="site-detail-back-btn">&larr; Back to sites</button>
+      <div id="site-detail"></div>
     </div>
   </section>
 
@@ -232,6 +309,20 @@
     </div>
   </section>
 
+  <!-- ============ BUYER VIEW ============ -->
+  <section id="buyer-view" class="view">
+    <div class="panel" id="buyer-list-panel">
+      <h1>Orders to purchase</h1>
+      <p class="hint">Buy these externally, then come back and confirm each purchase here.</p>
+      <div id="buyer-orders-list" class="orders-list"></div>
+    </div>
+
+    <div class="panel" id="buyer-detail-panel" hidden>
+      <button class="link-btn" id="buyer-back-btn">&larr; Back to list</button>
+      <div id="buyer-detail"></div>
+    </div>
+  </section>
+
 </main>
 
 <div class="modal-overlay" id="owner-upgrade-modal" hidden>
@@ -240,6 +331,49 @@
     <h2>You have been upgraded to owner level</h2>
     <p class="hint" id="owner-upgrade-message"></p>
     <button type="button" class="btn btn-primary btn-block" id="owner-upgrade-ok-btn">Got it</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notif-prefs-modal" hidden>
+  <div class="modal-box">
+    <h2>Notification settings</h2>
+    <div class="notif-prefs-list">
+      <label class="checkbox-field">
+        <input type="checkbox" id="pref-order-updates" />
+        <span>Order updates</span>
+      </label>
+      <label class="checkbox-field">
+        <input type="checkbox" id="pref-approval-updates" />
+        <span>Approval updates</span>
+      </label>
+      <label class="checkbox-field">
+        <input type="checkbox" id="pref-delivery-updates" />
+        <span>Delivery updates</span>
+      </label>
+      <div class="notif-prefs-sub">
+        <label class="checkbox-field checkbox-field-sub">
+          <input type="checkbox" id="pref-delivery-available" />
+          <span>New delivery available (drivers)</span>
+        </label>
+        <label class="checkbox-field checkbox-field-sub">
+          <input type="checkbox" id="pref-delivery-claimed" />
+          <span>Driver claimed delivery</span>
+        </label>
+        <label class="checkbox-field checkbox-field-sub">
+          <input type="checkbox" id="pref-delivery-collected" />
+          <span>Delivery collected</span>
+        </label>
+      </div>
+      <label class="checkbox-field">
+        <input type="checkbox" id="pref-role-updates" />
+        <span>Role updates</span>
+      </label>
+      <p class="hint small-hint">Buyer access granted/removed notifications always send, regardless of this setting — they directly affect your permissions.</p>
+    </div>
+    <div class="reject-form-actions">
+      <button type="button" class="btn btn-secondary" id="notif-prefs-cancel-btn">Cancel</button>
+      <button type="button" class="btn btn-primary" id="notif-prefs-save-btn">Save Changes</button>
+    </div>
   </div>
 </div>
 

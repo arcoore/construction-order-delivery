@@ -1,18 +1,78 @@
 import { searchProducts, getBranchesForProduct, getAvailability, getCategoryIcon, formatPrice } from './data.js';
 import { geocodePostcode } from './geo.js';
-import { addOrder, subscribe, newId } from './store.js';
-import { getIdentityName, getActiveCommunityId } from './community.js';
+import { subscribe } from './store.js';
+import { createOrder } from './orderLifecycle.js';
+import { getActiveCommunityId, isApprovalRequired } from './community.js';
+import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
+import { getActiveSitesForUser } from './sites.js';
 
+const siteSelectPanel = document.getElementById('site-select-panel');
+const workerSitesList = document.getElementById('worker-sites-list');
 const searchInput = document.getElementById('search-input');
 const resultsEl = document.getElementById('search-results');
 const searchPanel = document.querySelector('.search-panel');
+const workerActiveSiteLabel = document.getElementById('worker-active-site-label');
+const workerChangeSiteBtn = document.getElementById('worker-change-site-btn');
 const orderPanel = document.getElementById('order-panel');
 const orderFormEl = document.getElementById('order-form');
 const backBtn = document.getElementById('back-to-search');
 const siteOrdersList = document.getElementById('site-orders-list');
 
 let selectedProduct = null;
+let selectedSite = null;
 let latestOrders = [];
+
+// A site must be chosen before the search panel is even reachable — this is
+// what makes it impossible for a worker to submit an order without a real
+// siteId, on top of the authorization check orderLifecycle.js's createOrder
+// performs independently (see its header comment: a reference is never
+// itself a permission, so that check exists regardless of what this UI
+// allows, but gating the flow here keeps the common path from ever hitting
+// it).
+function showSiteSelect() {
+  selectedSite = null;
+  orderPanel.hidden = true;
+  searchPanel.hidden = true;
+  siteSelectPanel.hidden = false;
+  renderSiteSelectList();
+}
+
+function renderSiteSelectList() {
+  const communityId = getActiveCommunityId();
+  const userId = getCurrentUserId();
+  const sites = getActiveSitesForUser(communityId, userId);
+
+  if (sites.length === 0) {
+    workerSitesList.innerHTML = '<p class="empty-hint">You haven\'t been assigned to a site yet — ask your owner to add you to one.</p>';
+    return;
+  }
+
+  workerSitesList.innerHTML = sites.map(s => `
+    <button type="button" class="result-card" data-site-id="${s.id}">
+      <span class="result-name">${s.name}</span>
+      <span class="result-meta">${[s.address, s.postcode].filter(Boolean).join(' · ') || 'No address on file'}</span>
+    </button>
+  `).join('');
+
+  workerSitesList.querySelectorAll('[data-site-id]').forEach(btn => {
+    btn.addEventListener('click', () => chooseSite(sites.find(s => s.id === btn.dataset.siteId)));
+  });
+}
+
+function chooseSite(site) {
+  if (!site) return;
+  selectedSite = site;
+  siteSelectPanel.hidden = true;
+  searchPanel.hidden = false;
+  workerActiveSiteLabel.textContent = site.name;
+  searchInput.value = '';
+  resultsEl.innerHTML = '';
+}
+
+workerChangeSiteBtn.addEventListener('click', () => {
+  closeOrderForm();
+  showSiteSelect();
+});
 
 searchInput.addEventListener('input', () => {
   const results = searchProducts(searchInput.value);
@@ -132,13 +192,13 @@ function renderDetailsStep(product, variant, prefill = null) {
 
   orderFormEl.innerHTML = `
     <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
-    <p class="hint">${product.category} &middot; requesting as <strong>${getIdentityName() || 'Unknown'}</strong></p>
+    <p class="hint">${product.category} &middot; requesting as <strong>${getCurrentDisplayName() || 'Unknown'}</strong></p>
 
     <label class="field-label" for="qty-input">Quantity (${product.unit})</label>
     <input type="number" id="qty-input" class="text-input" min="1" value="${prefill ? prefill.quantity : 1}" />
 
     <label class="field-label" for="postcode-input">Deliver to postcode</label>
-    <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${prefill ? prefill.deliveryPostcode : ''}" />
+    <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${prefill ? prefill.deliveryPostcode : (selectedSite ? selectedSite.postcode : '')}" />
 
     <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order this from</button>
     <p id="order-form-status" class="form-status"></p>
@@ -173,7 +233,8 @@ async function goToSourceStep(product, variant) {
     deliveryPostcode: postcode.toUpperCase(),
     deliveryLat: location.lat,
     deliveryLon: location.lon,
-    requestedBy: getIdentityName() || 'Unknown',
+    requestedBy: getCurrentDisplayName() || 'Unknown',
+    requestedById: getCurrentUserId(),
   };
 
   renderSourceStep(product, variant, details);
@@ -259,9 +320,12 @@ function renderConfirmStep(product, variant, details, branch) {
 }
 
 function submitOrder(product, variant, details, branch, avail) {
-  const order = {
-    id: newId(),
-    communityId: getActiveCommunityId(),
+  const communityId = getActiveCommunityId();
+  const approvalRequired = isApprovalRequired(communityId);
+
+  const result = createOrder({
+    communityId,
+    siteId: selectedSite ? selectedSite.id : null,
     productId: product.id,
     productName: product.name,
     variant,
@@ -271,9 +335,7 @@ function submitOrder(product, variant, details, branch, avail) {
     deliveryLat: details.deliveryLat,
     deliveryLon: details.deliveryLon,
     requestedBy: details.requestedBy,
-    status: 'pending_approval',
-    createdAt: Date.now(),
-    driver: null,
+    requestedById: details.requestedById,
     stockistId: branch.id,
     stockistName: branch.name,
     stockistWebsite: branch.website,
@@ -281,21 +343,18 @@ function submitOrder(product, variant, details, branch, avail) {
     pickupEstimate: avail ? avail.label : null,
     unitPrice: product.unitPrice,
     totalPrice: product.unitPrice * details.quantity,
-    approvedBy: null,
-    approvedAt: null,
-    rejectedBy: null,
-    rejectedAt: null,
-    rejectionReason: null,
-    acceptedAt: null,
-    pickedUpAt: null,
-    deliveredAt: null,
-  };
+  }, details.requestedById, details.requestedBy, approvalRequired);
 
-  addOrder(order);
+  if (!result.ok) {
+    alert(result.error);
+    return;
+  }
 
   orderFormEl.innerHTML = `
     <h2>Request sent</h2>
-    <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. Waiting for the owner to approve it before a driver can pick it up.</p>
+    <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${approvalRequired
+      ? 'Waiting for the owner to approve it before a buyer can purchase it.'
+      : 'It\'s gone straight to a buyer to purchase — this community doesn\'t require owner approval.'}</p>
   `;
   backBtn.hidden = true;
 
@@ -315,10 +374,12 @@ function closeOrderForm() {
 
 const STATUS_LABELS = {
   pending_approval: 'Awaiting owner approval',
-  pending: 'Waiting for a driver',
   rejected: 'Rejected by owner',
-  accepted: 'Driver assigned',
-  picked_up: 'Picked up — in transit',
+  pending_purchase: 'Waiting for a buyer to purchase',
+  purchase_in_progress: 'Buyer confirming purchase…',
+  purchased: 'Purchased — waiting for a driver',
+  claimed: 'Driver assigned',
+  collected: 'Collected — in transit',
   delivered: 'Delivered',
 };
 
@@ -332,12 +393,13 @@ function renderSiteOrders() {
     return;
   }
   siteOrdersList.innerHTML = sorted.map(o => `
-    <div class="order-card status-${o.status}">
+    <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
-        <span>${o.quantity} × ${o.unit} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
+        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} × ${o.unit} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
         ${o.stockistName ? `<span>From ${o.stockistName} (${o.stockistWebsite})</span>` : ''}
         ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${o.rejectionReason}</span>` : ''}
+        ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${o.deliveryLocation} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
       </div>
       <span class="status-badge status-${o.status}">${STATUS_LABELS[o.status] || o.status}</span>
     </div>
@@ -346,6 +408,7 @@ function renderSiteOrders() {
 
 export function refreshWorkerView() {
   closeOrderForm();
+  showSiteSelect();
   renderSiteOrders();
 }
 

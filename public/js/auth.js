@@ -44,7 +44,12 @@ export function findAccount(username) {
   return readAccounts().find(a => a.username.toLowerCase() === clean) || null;
 }
 
-const VALID_ROLES = ['worker', 'driver', 'owner'];
+export function findAccountById(id) {
+  if (!id) return null;
+  return readAccounts().find(a => a.id === id) || null;
+}
+
+const VALID_ROLES = ['worker', 'driver', 'buyer', 'owner'];
 
 export function createAccount(username, password, displayName, defaultRole) {
   username = (username || '').trim();
@@ -53,7 +58,7 @@ export function createAccount(username, password, displayName, defaultRole) {
     return { error: 'Please fill in every field.' };
   }
   if (!VALID_ROLES.includes(defaultRole)) {
-    return { error: 'Please choose whether you\'re a worker, driver, or owner.' };
+    return { error: 'Please choose your role.' };
   }
   if (findAccount(username)) {
     return { error: 'That username is already taken.' };

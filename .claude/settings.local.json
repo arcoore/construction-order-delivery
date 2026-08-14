@@ -5,7 +5,18 @@
       "Bash(gh auth *)",
       "Bash(git fetch *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(uv tool *)",
+      "Bash(command -v pipx)",
+      "Bash(command -v pip)",
+      "Bash(command -v python)",
+      "Bash(command -v python3)",
+      "Bash(pipx install *)",
+      "Bash(graphify install *)",
+      "Bash(pipx environment *)",
+      "Bash(ls \"C:\\\\Users\\\\Archie\\\\AppData\\\\Local\\\\pipx\\\\pipx\\\\venvs\\\\graphifyy\\\\Scripts\\\\\" | head -20)",
+      "Bash(cd \"/c/Users/Archie/buyer replacement\" && ls .claude/skills/graphify/references/ 2>/dev/null; find / -maxdepth 1 2>/dev/null; ls \"/c/Users/Archie/.claude/skills/graphify/references/\" 2>/dev/null)",
+      "Bash(python -c \"import json; d=json.load\\(open\\(r'C:\\\\Users\\\\Archie\\\\buyer replacement\\\\graphify-out\\\\.graphify_chunk_01.json', encoding='utf-8'\\)\\); print\\('nodes:', len\\(d['nodes']\\)\\); print\\('edges:', len\\(d['edges']\\)\\); print\\('hyperedges:', len\\(d['hyperedges']\\)\\)\")"
     ]
   }
 }

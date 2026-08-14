@@ -1,13 +1,18 @@
 import {
-  getIdentityName, setIdentityName, getCommunities, subscribeCommunities,
+  getCommunities, subscribeCommunities,
   createCommunity, requestToJoinByCode, requestToJoin, membershipStatus,
   myCommunities, myPendingRequests, setActiveCommunityId,
 } from './community.js';
 import { getLoggedInAccount, subscribeAuth } from './auth.js';
 import { timeAgo } from './data.js';
+import {
+  getCurrentUserId, getCurrentDisplayName, isGuest, getGuestName, setGuestName,
+  resolveDisplayName, subscribeIdentity,
+} from './identity.js';
 
 const accountStatusBtn = document.getElementById('account-status-btn');
 const identityInput = document.getElementById('identity-name-input');
+const identityHint = document.getElementById('identity-name-hint');
 const myCommunitiesPanel = document.getElementById('my-communities-panel');
 const myCommunitiesList = document.getElementById('my-communities-list');
 const pendingRequestsPanel = document.getElementById('pending-requests-panel');
@@ -26,16 +31,30 @@ const browseSearchInput = document.getElementById('browse-communities-search');
 
 browseSearchInput.addEventListener('input', render);
 
-identityInput.value = getIdentityName();
+function syncIdentityField() {
+  if (isGuest()) {
+    identityInput.value = getGuestName();
+    identityInput.readOnly = false;
+    identityHint.hidden = true;
+  } else {
+    identityInput.value = getCurrentDisplayName();
+    identityInput.readOnly = true;
+    identityHint.hidden = false;
+  }
+}
+syncIdentityField();
+
 identityInput.addEventListener('input', () => {
-  setIdentityName(identityInput.value);
+  if (!isGuest()) return; // read-only for logged-in accounts, guarded here too
+  setGuestName(identityInput.value);
   render();
 });
 
 createBtn.addEventListener('click', () => {
-  const name = getIdentityName();
+  const userId = getCurrentUserId();
+  const displayName = getCurrentDisplayName();
   const communityName = createInput.value.trim();
-  if (!name) {
+  if (!displayName) {
     createStatus.textContent = 'Enter your name above first.';
     createStatus.className = 'form-status error';
     return;
@@ -45,16 +64,17 @@ createBtn.addEventListener('click', () => {
     createStatus.className = 'form-status error';
     return;
   }
-  const community = createCommunity(communityName, name);
+  const community = createCommunity(communityName, userId);
   createInput.value = '';
   createStatus.textContent = '';
   enterCommunity(community.id);
 });
 
 joinCodeBtn.addEventListener('click', () => {
-  const name = getIdentityName();
+  const userId = getCurrentUserId();
+  const displayName = getCurrentDisplayName();
   const code = joinCodeInput.value.trim();
-  if (!name) {
+  if (!displayName) {
     joinCodeStatus.textContent = 'Enter your name above first.';
     joinCodeStatus.className = 'form-status error';
     return;
@@ -64,7 +84,7 @@ joinCodeBtn.addEventListener('click', () => {
     joinCodeStatus.className = 'form-status error';
     return;
   }
-  const result = requestToJoinByCode(code, name);
+  const result = requestToJoinByCode(code, userId);
   if (result.error) {
     joinCodeStatus.textContent = result.error;
     joinCodeStatus.className = 'form-status error';
@@ -105,10 +125,11 @@ accountStatusBtn.addEventListener('click', () => {
 
 function render() {
   renderAccountStatus();
+  syncIdentityField();
 
-  const name = getIdentityName();
+  const userId = getCurrentUserId();
 
-  const mine = name ? myCommunities(name) : [];
+  const mine = myCommunities(userId);
   myCommunitiesPanel.hidden = mine.length === 0;
   myCommunitiesList.innerHTML = mine.map(c => `
     <div class="community-card">
@@ -123,7 +144,7 @@ function render() {
     btn.addEventListener('click', () => enterCommunity(btn.dataset.enter));
   });
 
-  const pending = name ? myPendingRequests(name) : [];
+  const pending = myPendingRequests(userId);
   pendingRequestsPanel.hidden = pending.length === 0;
   pendingRequestsList.innerHTML = pending.map(r => {
     const community = getCommunities().find(c => c.id === r.communityId);
@@ -155,7 +176,7 @@ function render() {
   browseList.innerHTML = emptyMessage
     ? `<p class="empty-hint">${emptyMessage}</p>`
     : visible.map(c => {
-      const status = name ? membershipStatus(c.id, name) : 'none';
+      const status = membershipStatus(c.id, userId);
       let actionHtml;
       if (status === 'owner' || status === 'approved') {
         actionHtml = `<button class="btn btn-primary" data-enter="${c.id}">Enter</button>`;
@@ -168,7 +189,7 @@ function render() {
         <div class="community-card">
           <div class="community-card-info">
             <strong>${c.name}</strong>
-            <span>Owner: ${c.ownerName}</span>
+            <span>Owner: ${resolveDisplayName(c.ownerId)}</span>
           </div>
           ${actionHtml}
         </div>
@@ -180,15 +201,27 @@ function render() {
   });
   browseList.querySelectorAll('[data-request]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const identityName = getIdentityName();
-      if (!identityName) {
+      if (!getCurrentDisplayName()) {
         identityInput.focus();
         return;
       }
-      requestToJoin(btn.dataset.request, identityName);
+      requestToJoin(btn.dataset.request, getCurrentUserId());
     });
   });
 }
 
 subscribeCommunities(render);
 subscribeAuth(render);
+subscribeIdentity(render);
+
+// Clears leftover status text (e.g. "Request sent…") left behind by a
+// previous visit/account before this screen is shown again — those
+// messages are meant as one-time feedback for the action that produced
+// them, not a persistent label.
+export function refreshCommunitiesView() {
+  createStatus.textContent = '';
+  createStatus.className = 'form-status';
+  joinCodeStatus.textContent = '';
+  joinCodeStatus.className = 'form-status';
+  render();
+}

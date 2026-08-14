@@ -1,24 +1,31 @@
 import { formatPrice, getInitials, getCategoryIcon, getProduct, timeAgo } from './data.js';
-import { subscribe, updateOrder } from './store.js';
+import { subscribe } from './store.js';
 import {
-  getIdentityName, getActiveCommunityId, getJoinRequests, decideJoinRequest, subscribeCommunities,
-  approvedMemberCount, isCreator, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
+  getActiveCommunityId, getJoinRequests, decideJoinRequest, subscribeCommunities,
+  approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
+  hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
+  isApprovalRequired, setApprovalRequired,
 } from './community.js';
+import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
+import {
+  approveOrder, rejectOrder, revertApproval, getEventsForCommunity, subscribeOrderEvents, REVERT_WINDOW_MS,
+} from './orderLifecycle.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const listEl = document.getElementById('owner-orders-list');
 const joinRequestsPanel = document.getElementById('owner-join-requests-panel');
 const joinRequestsList = document.getElementById('owner-join-requests-list');
+const buyerRequestsPanel = document.getElementById('owner-buyer-requests-panel');
+const buyerRequestsList = document.getElementById('owner-buyer-requests-list');
 const teamPanel = document.getElementById('owner-team-panel');
 const teamList = document.getElementById('owner-team-list');
 const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
+const approvalToggle = document.getElementById('approval-required-toggle');
 
 let activeTab = 'awaiting';
 let latestOrders = [];
 let rejectingId = null;
-
-const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 function getDecisionTime(order) {
   return order.approvedAt || order.rejectedAt || null;
@@ -35,8 +42,11 @@ function formatCountdown(ms) {
 }
 
 function renderRevertSection(order) {
-  if (order.status === 'picked_up' || order.status === 'delivered') {
-    return `<p class="revert-note revert-final">Once picked up from the supplier, orders can't be reverted</p>`;
+  if (!order.approvalWasRequired) {
+    return `<p class="revert-note">This order skipped owner approval (setting was off when it was created)</p>`;
+  }
+  if (order.status !== 'pending_purchase' && order.status !== 'rejected') {
+    return `<p class="revert-note revert-final">Once purchased, orders can't be reverted</p>`;
   }
   const decidedAt = getDecisionTime(order);
   if (!decidedAt) return '';
@@ -53,7 +63,11 @@ function renderRevertSection(order) {
 }
 
 function currentOwnerName() {
-  return getIdentityName() || 'Unnamed owner';
+  return getCurrentDisplayName() || 'Unnamed owner';
+}
+
+function currentOwnerId() {
+  return getCurrentUserId();
 }
 
 tabsEl.addEventListener('click', e => {
@@ -65,13 +79,34 @@ tabsEl.addEventListener('click', e => {
   render();
 });
 
+approvalToggle.addEventListener('change', () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  setApprovalRequired(communityId, approvalToggle.checked);
+});
+
+const EVENT_RENDER = {
+  order_created: (e, label) => ({ icon: '📝', text: `${e.actorName || 'Someone'} requested ${label}` }),
+  approved: (e, label) => ({ icon: '✅', text: `${e.actorName || 'Owner'} approved ${label}` }),
+  rejected: (e, label) => ({ icon: '🚫', text: `${e.actorName || 'Owner'} rejected ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
+  approval_reverted: (e, label) => ({ icon: '↩️', text: `${e.actorName || 'Owner'} reverted the decision on ${label}` }),
+  purchase_started: (e, label) => ({ icon: '🛒', text: `${e.actorName || 'A buyer'} started purchasing ${label}` }),
+  purchase_abandoned: (e, label) => ({ icon: '↩️', text: `${e.actorName || 'A buyer'} released ${label} back to the purchase queue` }),
+  purchased: (e, label) => ({ icon: '💳', text: `${e.actorName || 'A buyer'} purchased ${label}` }),
+  delivery_claimed: (e, label) => ({ icon: '🚚', text: `${e.actorName || 'A driver'} claimed ${label}` }),
+  delivery_cancelled: (e, label) => ({ icon: '⚠️', text: `${e.actorName || 'A driver'} cancelled ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
+  delivery_returned_to_pool: (e, label) => ({ icon: '🔁', text: `${label} is back in the driver pool` }),
+  collected: (e, label) => ({ icon: '📦', text: `${e.actorName || 'Driver'} collected ${label}` }),
+  delivered: (e, label) => ({ icon: '🏁', text: `${label} delivered to ${e.meta?.deliveryLocation || 'site'}` }),
+};
+
 function renderDashboard(inCommunity, communityId) {
   const pendingJoinCount = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
   const awaitingApproval = inCommunity.filter(o => o.status === 'pending_approval').length;
-  const outForDelivery = inCommunity.filter(o => o.status === 'accepted' || o.status === 'picked_up').length;
+  const outForDelivery = inCommunity.filter(o => o.status === 'claimed' || o.status === 'collected').length;
   const delivered = inCommunity.filter(o => o.status === 'delivered').length;
   const totalSpend = inCommunity
-    .filter(o => o.status !== 'pending_approval' && o.status !== 'rejected')
+    .filter(o => o.purchasedAt != null)
     .reduce((sum, o) => sum + (o.totalPrice || 0), 0);
 
   const tiles = [
@@ -80,7 +115,7 @@ function renderDashboard(inCommunity, communityId) {
     { value: awaitingApproval, label: 'Awaiting Order Approval', highlight: awaitingApproval > 0 },
     { value: outForDelivery, label: 'Out for Delivery' },
     { value: delivered, label: 'Delivered' },
-    { value: formatPrice(totalSpend), label: 'Total Spend (Approved)' },
+    { value: formatPrice(totalSpend), label: 'Total Spend (Purchased)' },
   ];
 
   dashboardStatsEl.innerHTML = tiles.map(t => `
@@ -90,37 +125,37 @@ function renderDashboard(inCommunity, communityId) {
     </div>
   `).join('');
 
-  const events = [];
-  inCommunity.forEach(o => {
-    const itemLabel = `${o.productName}${o.variant ? ` (${o.variant})` : ''}`;
-    events.push({ ts: o.createdAt, icon: '📝', text: `${o.requestedBy || 'Someone'} requested ${itemLabel}` });
-    if (o.approvedAt) events.push({ ts: o.approvedAt, icon: '✅', text: `${o.approvedBy || 'Owner'} approved ${itemLabel}` });
-    if (o.rejectedAt) events.push({ ts: o.rejectedAt, icon: '🚫', text: `${o.rejectedBy || 'Owner'} rejected ${itemLabel}${o.rejectionReason ? ` — ${o.rejectionReason}` : ''}` });
-    if (o.acceptedAt) events.push({ ts: o.acceptedAt, icon: '🚚', text: `${o.driver || 'A driver'} accepted ${itemLabel}` });
-    if (o.pickedUpAt) events.push({ ts: o.pickedUpAt, icon: '📦', text: `${o.driver || 'Driver'} picked up ${itemLabel}` });
-    if (o.deliveredAt) events.push({ ts: o.deliveredAt, icon: '🏁', text: `${itemLabel} delivered to ${o.deliveryPostcode}` });
-  });
-  events.sort((a, b) => b.ts - a.ts);
-
+  const events = getEventsForCommunity(communityId);
   dashboardActivityEl.innerHTML = events.length === 0
     ? '<p class="empty-hint">Nothing has happened yet.</p>'
-    : events.slice(0, 8).map(e => `
-      <div class="activity-item">
-        <span class="activity-icon" aria-hidden="true">${e.icon}</span>
-        <span class="activity-text">${e.text}</span>
-        <span class="activity-time">${timeAgo(e.ts)}</span>
-      </div>
-    `).join('');
+    : events.slice(0, 8).map(e => {
+      const order = inCommunity.find(o => o.id === e.orderId);
+      const label = order ? `${order.productName}${order.variant ? ` (${order.variant})` : ''}` : 'an order';
+      const render = EVENT_RENDER[e.type];
+      const { icon, text } = render ? render(e, label) : { icon: '•', text: `${e.type} on ${label}` };
+      return `
+        <div class="activity-item">
+          <span class="activity-icon" aria-hidden="true">${icon}</span>
+          <span class="activity-text">${text}</span>
+          <span class="activity-time">${timeAgo(e.createdAt)}</span>
+        </div>
+      `;
+    }).join('');
+}
+
+function renderApprovalSetting(communityId) {
+  approvalToggle.checked = isApprovalRequired(communityId);
 }
 
 function renderTeam(communityId) {
-  const name = currentOwnerName();
-  if (!isCreator(communityId, name)) {
+  const userId = currentOwnerId();
+  if (!isOwner(communityId, userId)) {
     teamPanel.hidden = true;
     return;
   }
+  const viewerIsCreator = isCreator(communityId, userId);
 
-  const members = approvedMembers(communityId).filter(m => m.trim().toLowerCase() !== name.trim().toLowerCase());
+  const members = approvedMembers(communityId).filter(id => id !== userId);
   teamPanel.hidden = false;
 
   if (members.length === 0) {
@@ -128,23 +163,29 @@ function renderTeam(communityId) {
     return;
   }
 
-  teamList.innerHTML = members.map(m => {
-    const granted = hasOwnerGrant(communityId, m);
+  teamList.innerHTML = members.map(memberId => {
+    const displayName = resolveDisplayName(memberId);
+    const ownerGranted = hasOwnerGrant(communityId, memberId);
+    const buyerGranted = hasBuyerGrant(communityId, memberId);
+    const badges = [ownerGranted ? 'Owner access' : null, buyerGranted ? 'Buyer access' : null].filter(Boolean);
     return `
       <div class="order-card">
         <div class="request-header">
-          <div class="requester-badge" title="${m}">
-            <span class="requester-avatar">${getInitials(m)}</span>
-            <span class="requester-name">${m}</span>
+          <div class="requester-badge" title="${displayName}">
+            <span class="requester-avatar">${getInitials(displayName)}</span>
+            <span class="requester-name">${displayName}</span>
           </div>
           <div class="order-card-main">
-            <strong>${granted ? 'Owner access granted' : 'Member'}</strong>
+            <strong>${badges.length ? badges.join(' + ') : 'Member'}</strong>
           </div>
         </div>
         <div class="owner-actions">
-          ${granted
-            ? `<button class="btn btn-secondary btn-block" data-team-action="revoke" data-team-name="${m}">Revoke owner access</button>`
-            : `<button class="btn btn-primary btn-block" data-team-action="grant" data-team-name="${m}">Give owner access</button>`}
+          ${viewerIsCreator ? (ownerGranted
+            ? `<button class="btn btn-secondary" data-team-action="revoke-owner" data-team-id="${memberId}">Revoke owner access</button>`
+            : `<button class="btn btn-primary" data-team-action="grant-owner" data-team-id="${memberId}">Give owner access</button>`) : ''}
+          ${buyerGranted
+            ? `<button class="btn btn-secondary" data-team-action="revoke-buyer" data-team-id="${memberId}">Revoke buyer access</button>`
+            : `<button class="btn btn-primary" data-team-action="grant-buyer" data-team-id="${memberId}">Give buyer access</button>`}
         </div>
       </div>
     `;
@@ -152,19 +193,24 @@ function renderTeam(communityId) {
 
   teamList.querySelectorAll('[data-team-action]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.teamAction === 'grant') {
-        grantOwnerAccess(communityId, btn.dataset.teamName, name);
-      } else {
-        revokeOwnerAccess(communityId, btn.dataset.teamName);
-      }
+      const memberId = btn.dataset.teamId;
+      const action = btn.dataset.teamAction;
+      if (action === 'grant-owner') grantOwnerAccess(communityId, memberId, userId);
+      else if (action === 'revoke-owner') revokeOwnerAccess(communityId, memberId);
+      else if (action === 'grant-buyer') grantBuyerAccess(communityId, memberId, userId);
+      else if (action === 'revoke-buyer') revokeBuyerAccess(communityId, memberId, userId);
     });
   });
 }
 
 function render() {
-  renderJoinRequests();
-
   const communityId = getActiveCommunityId();
+  if (!communityId) return;
+
+  renderJoinRequests(communityId);
+  renderBuyerRequests(communityId);
+  renderApprovalSetting(communityId);
+
   const inCommunity = latestOrders.filter(o => o.communityId === communityId);
 
   renderDashboard(inCommunity, communityId);
@@ -196,22 +242,19 @@ function render() {
   if (reasonInput) reasonInput.focus();
 }
 
-function renderJoinRequests() {
-  const communityId = getActiveCommunityId();
-  if (!communityId) {
-    joinRequestsPanel.hidden = true;
-    return;
-  }
+function renderJoinRequests(communityId) {
   const pending = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending');
   joinRequestsPanel.hidden = pending.length === 0;
   if (pending.length === 0) return;
 
-  joinRequestsList.innerHTML = pending.map(r => `
+  joinRequestsList.innerHTML = pending.map(r => {
+    const displayName = resolveDisplayName(r.userId);
+    return `
     <div class="order-card">
       <div class="request-header">
-        <div class="requester-badge" title="${r.name}">
-          <span class="requester-avatar">${getInitials(r.name)}</span>
-          <span class="requester-name">${r.name}</span>
+        <div class="requester-badge" title="${displayName}">
+          <span class="requester-avatar">${getInitials(displayName)}</span>
+          <span class="requester-name">${displayName}</span>
         </div>
         <div class="order-card-main">
           <strong>Wants to join this community</strong>
@@ -222,12 +265,46 @@ function renderJoinRequests() {
         <button class="btn btn-primary" data-join-action="approve" data-join-id="${r.id}">Approve</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   joinRequestsList.querySelectorAll('[data-join-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const decision = btn.dataset.joinAction === 'approve' ? 'approved' : 'declined';
-      decideJoinRequest(btn.dataset.joinId, decision, currentOwnerName());
+      decideJoinRequest(btn.dataset.joinId, decision, currentOwnerId());
+    });
+  });
+}
+
+function renderBuyerRequests(communityId) {
+  const pending = getBuyerRequests().filter(r => r.communityId === communityId && r.status === 'pending');
+  buyerRequestsPanel.hidden = pending.length === 0;
+  if (pending.length === 0) return;
+
+  buyerRequestsList.innerHTML = pending.map(r => {
+    const displayName = resolveDisplayName(r.userId);
+    return `
+    <div class="order-card">
+      <div class="request-header">
+        <div class="requester-badge" title="${displayName}">
+          <span class="requester-avatar">${getInitials(displayName)}</span>
+          <span class="requester-name">${displayName}</span>
+        </div>
+        <div class="order-card-main">
+          <strong>Wants buyer access</strong>
+        </div>
+      </div>
+      <div class="owner-actions">
+        <button class="btn btn-secondary" data-buyer-req-action="declined" data-req-id="${r.id}">Decline</button>
+        <button class="btn btn-primary" data-buyer-req-action="approved" data-req-id="${r.id}">Approve</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+
+  buyerRequestsList.querySelectorAll('[data-buyer-req-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      decideBuyerRequest(btn.dataset.reqId, btn.dataset.buyerReqAction, currentOwnerId());
     });
   });
 }
@@ -262,7 +339,7 @@ function renderOrderCard(order) {
   }
 
   return `
-    <div class="order-card driver-card status-${order.status}">
+    <div class="order-card driver-card status-${order.status}" data-order-id="${order.id}">
       <div class="request-header">
         <div class="requester-badge" title="Requested by ${requesterName}">
           <span class="requester-avatar">${getInitials(requesterName)}</span>
@@ -284,50 +361,47 @@ function renderOrderCard(order) {
         <div class="route-arrow">&rarr;</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
-          <span class="route-value">${order.deliveryPostcode}</span>
+          <span class="route-value">${order.siteName || order.deliveryPostcode}</span>
+          ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
         </div>
       </div>
       ${order.status === 'rejected' ? `<p class="rejection-reason">Rejected by ${order.rejectedBy || 'owner'}${order.rejectionReason ? `: ${order.rejectionReason}` : ''}</p>` : ''}
+      ${order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected' || order.status === 'delivered'
+        ? `<p class="hint small-hint">Purchased by ${order.purchasedBy || 'a buyer'}${order.driver ? ` &middot; driver: ${order.driver}` : ''}</p>` : ''}
+      ${order.cancelledAt ? `<p class="rejection-reason">Cancelled by ${order.cancelledBy || 'a driver'}: ${order.cancellationReason || ''}</p>` : ''}
+      ${order.status === 'delivered' && order.deliveryLocation
+        ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()} (confirmed by ${order.driver || 'driver'})</p>` : ''}
       ${actionHtml}
     </div>
   `;
 }
 
 function handleAction(action, orderId) {
+  const actorId = currentOwnerId();
+  const actorName = currentOwnerName();
+
+  let result;
   if (action === 'approve') {
-    updateOrder(orderId, {
-      status: 'pending',
-      approvedBy: currentOwnerName(),
-      approvedAt: Date.now(),
-    });
+    result = approveOrder(orderId, actorId, actorName);
   } else if (action === 'reject') {
     rejectingId = orderId;
     render();
+    return;
   } else if (action === 'cancel-reject') {
     rejectingId = null;
     render();
+    return;
   } else if (action === 'confirm-reject') {
     const reasonInput = document.getElementById('reject-reason-input');
     const reason = reasonInput ? reasonInput.value.trim() : '';
-    updateOrder(orderId, {
-      status: 'rejected',
-      rejectedBy: currentOwnerName(),
-      rejectedAt: Date.now(),
-      rejectionReason: reason || null,
-    });
+    result = rejectOrder(orderId, actorId, actorName, reason);
     rejectingId = null;
   } else if (action === 'revert') {
-    updateOrder(orderId, {
-      status: 'pending_approval',
-      approvedBy: null,
-      approvedAt: null,
-      rejectedBy: null,
-      rejectedAt: null,
-      rejectionReason: null,
-      driver: null,
-      acceptedAt: null,
-      pickedUpAt: null,
-    });
+    result = revertApproval(orderId, actorId, actorName);
+  }
+
+  if (result && !result.ok) {
+    alert(result.error);
   }
 }
 
@@ -344,6 +418,7 @@ subscribe(orders => {
 });
 
 subscribeCommunities(render);
+subscribeOrderEvents(render);
 
 // Keep the revert countdowns ticking even when nothing else changes.
 setInterval(() => {

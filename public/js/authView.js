@@ -1,5 +1,4 @@
 import { createAccount, login, skipLogin } from './auth.js';
-import { setIdentityName } from './community.js';
 
 const authTabs = document.getElementById('auth-tabs');
 const loginForm = document.getElementById('login-form');
@@ -29,8 +28,7 @@ authTabs.addEventListener('click', e => {
   registerStatus.textContent = '';
 });
 
-function loggedIn(account) {
-  setIdentityName(account.displayName);
+function loggedIn() {
   window.dispatchEvent(new CustomEvent('sitestock:logged-in'));
 }
 
@@ -44,7 +42,7 @@ loginForm.addEventListener('submit', e => {
     loginStatus.className = 'form-status error';
     return;
   }
-  loggedIn(result.account);
+  loggedIn();
 });
 
 registerForm.addEventListener('submit', e => {
@@ -72,7 +70,7 @@ registerForm.addEventListener('submit', e => {
     registerStatus.className = 'form-status error';
     return;
   }
-  loggedIn(result.account);
+  loggedIn();
 });
 
 skipBtn.addEventListener('click', () => {

@@ -1,6 +1,10 @@
 // Orders are persisted in localStorage and synced live across browser tabs
 // (e.g. one tab acting as "Site", another as "Driver") via the storage event.
-const STORAGE_KEY = 'sitestock_orders_v1';
+//
+// Bumped to v4 for Phase 4A (mandatory siteId + historical site snapshot on
+// every order) — a clean reset, old local/test data intentionally discarded
+// rather than migrated, matching every prior structural change to this key.
+const STORAGE_KEY = 'sitestock_orders_v4';
 const listeners = new Set();
 
 function readOrders() {
