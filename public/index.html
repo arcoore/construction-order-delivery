@@ -242,13 +242,21 @@
       <div id="owner-team-list" class="orders-list"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="owner-orders-panel">
       <div class="driver-tabs" id="owner-tabs">
         <button class="tab-btn active" data-tab="awaiting">Awaiting Approval</button>
-        <button class="tab-btn" data-tab="approved">Approved</button>
+        <button class="tab-btn" data-tab="purchase">Waiting for Purchase</button>
+        <button class="tab-btn" data-tab="purchased">Purchased</button>
+        <button class="tab-btn" data-tab="delivery">Out for Delivery</button>
+        <button class="tab-btn" data-tab="delivered">Delivered</button>
         <button class="tab-btn" data-tab="rejected">Rejected</button>
       </div>
       <div id="owner-orders-list" class="orders-list"></div>
+    </div>
+
+    <div class="panel" id="owner-order-detail-panel" hidden>
+      <button type="button" class="link-btn" id="owner-order-detail-back-btn">&larr; Back to orders</button>
+      <div id="owner-order-detail"></div>
     </div>
   </section>
 
@@ -368,7 +376,7 @@
         <input type="checkbox" id="pref-role-updates" />
         <span>Role updates</span>
       </label>
-      <p class="hint small-hint">Buyer access granted/removed notifications always send, regardless of this setting — they directly affect your permissions.</p>
+      <p class="hint small-hint">Buyer access and site assignment/archive notifications always send, regardless of this setting — they directly affect your permissions.</p>
     </div>
     <div class="reject-form-actions">
       <button type="button" class="btn btn-secondary" id="notif-prefs-cancel-btn">Cancel</button>

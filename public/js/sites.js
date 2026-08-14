@@ -14,6 +14,7 @@
 // follow.
 import { isOwner, isApprovedMember, isBuyer } from './community.js';
 import { resolveDisplayName } from './identity.js';
+import { notifyUsers } from './notifications.js';
 
 const SITES_KEY = 'sitestock_sites_v1';
 const MEMBERSHIPS_KEY = 'sitestock_site_memberships_v1';
@@ -146,8 +147,31 @@ function setSiteStatus(siteId, status, actorId) {
 // canCreateOrderForSite below and getActiveSitesForUser). All historical
 // orders keep their own siteName/siteAddress/sitePostcode snapshot
 // regardless of what happens to the live site record afterward.
+//
+// Only members lose anything by an archive (they can no longer start new
+// orders here) — that's who gets notified, not the whole company. No
+// notification on restore: nothing breaks if a member finds out next time
+// they look, so it isn't worth the push (same "not every event needs a
+// notification" judgment Phase 3A already applied elsewhere).
 export function archiveSite(siteId, actorId) {
-  return setSiteStatus(siteId, 'archived', actorId);
+  const result = setSiteStatus(siteId, 'archived', actorId);
+  if (result.ok) {
+    const memberIds = getSiteMembers(siteId);
+    if (memberIds.length > 0) {
+      const actorName = resolveDisplayName(actorId);
+      notifyUsers(memberIds, {
+        type: 'site_archived',
+        title: 'Site archived',
+        message: `${actorName} archived ${result.site.name}. You can no longer create new orders for it.`,
+        communityId: result.site.communityId,
+        siteId: result.site.id,
+        actorId,
+        actorName,
+        navigationTarget: { communityId: result.site.communityId, role: 'worker', siteId: result.site.id },
+      });
+    }
+  }
+  return result;
 }
 
 export function restoreSite(siteId, actorId) {
@@ -188,8 +212,18 @@ export function getSitesForMember(userId) {
 // list a worker/buyer picks from. Scoped by communityId explicitly (via
 // getActiveSites), so a membership row can never leak a site from a
 // different company even if the same user belongs to sites in both.
+//
+// The owner bypass here mirrors canAccessSite/canCreateOrderForSite/
+// canPurchaseForSite exactly: an owner already has unconditional access to
+// every site in their own community (see those composites), but this
+// function previously only consulted membership rows, so an owner who
+// wasn't separately added as a site member couldn't even see their own
+// site in the worker order-flow picker — a real UI/permission mismatch,
+// not a security gap (createOrder's canCreateOrderForSite check already
+// allowed it), fixed by applying the same bypass here.
 export function getActiveSitesForUser(communityId, userId) {
   if (!userId) return [];
+  if (isOwner(communityId, userId)) return getActiveSites(communityId);
   const memberSiteIds = new Set(
     readList(MEMBERSHIPS_KEY).filter(m => m.userId === userId).map(m => m.siteId)
   );
@@ -220,6 +254,18 @@ export function addSiteMember(siteId, userId, actorId) {
     addedBy: actorName,
   });
   writeList(MEMBERSHIPS_KEY, memberships);
+
+  notifyUsers([userId], {
+    type: 'site_member_added',
+    title: 'Added to a site',
+    message: `${actorName} added you to ${site.name}.`,
+    communityId: site.communityId,
+    siteId: site.id,
+    actorId,
+    actorName,
+    navigationTarget: { communityId: site.communityId, role: 'worker', siteId: site.id },
+  });
+
   return { ok: true };
 }
 
@@ -229,10 +275,29 @@ export function removeSiteMember(siteId, userId, actorId) {
   if (!isOwner(site.communityId, actorId)) {
     return { ok: false, error: 'Only the owner can remove employees from a site.' };
   }
+  const wasMember = isSiteMember(siteId, userId);
   const memberships = readList(MEMBERSHIPS_KEY).filter(
     m => !(m.siteId === siteId && m.userId === userId)
   );
   writeList(MEMBERSHIPS_KEY, memberships);
+
+  // Only notify if this was a real state change — a redundant "remove"
+  // call on someone who was never a member shouldn't tell them they lost
+  // access they never had.
+  if (wasMember) {
+    const actorName = resolveDisplayName(actorId);
+    notifyUsers([userId], {
+      type: 'site_member_removed',
+      title: 'Removed from a site',
+      message: `${actorName} removed you from ${site.name}.`,
+      communityId: site.communityId,
+      siteId: site.id,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: site.communityId, role: 'worker', siteId: site.id },
+    });
+  }
+
   return { ok: true };
 }
 

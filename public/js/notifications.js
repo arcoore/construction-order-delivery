@@ -33,6 +33,12 @@ const NOTIFICATION_TYPES = {
   buyer_access_granted: { category: 'roleUpdates', configurable: false },
   buyer_access_rejected: { category: 'roleUpdates', configurable: true },
   buyer_access_revoked: { category: 'roleUpdates', configurable: false },
+  // Site membership/archive changes directly affect what the recipient can
+  // create orders for or purchase, exactly like buyer access above — same
+  // non-configurable treatment, same reasoning, same category.
+  site_member_added: { category: 'roleUpdates', configurable: false },
+  site_member_removed: { category: 'roleUpdates', configurable: false },
+  site_archived: { category: 'roleUpdates', configurable: false },
 };
 
 // Delivery updates deliberately has mixed defaults within one category
@@ -141,7 +147,7 @@ function isTypeEnabledFor(userId, type) {
 // they'd otherwise be in the recipient list (no self-notifications).
 export function notifyUsers(recipientUserIds, {
   type, title, message, communityId = null, orderId = null, requestId = null,
-  eventId = null, actorId = null, actorName = null, navigationTarget = null,
+  eventId = null, siteId = null, actorId = null, actorName = null, navigationTarget = null,
 }) {
   const uniqueRecipients = Array.from(new Set((recipientUserIds || []).filter(Boolean)));
   const notifs = readNotifs();
@@ -160,6 +166,7 @@ export function notifyUsers(recipientUserIds, {
       orderId,
       requestId,
       eventId,
+      siteId,
       actorId,
       actorName,
       navigationTarget,

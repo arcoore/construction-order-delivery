@@ -722,6 +722,13 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.order-detail-link {
+  margin-left: auto;
+  white-space: nowrap;
+  padding: 4px 0;
 }
 
 .requester-badge {
@@ -1223,6 +1230,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .driver-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 16px;
   border-bottom: 1px solid var(--border);

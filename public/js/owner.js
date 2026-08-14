@@ -8,11 +8,15 @@ import {
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
-  approveOrder, rejectOrder, revertApproval, getEventsForCommunity, subscribeOrderEvents, REVERT_WINDOW_MS,
+  approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
 } from './orderLifecycle.js';
 
 const tabsEl = document.getElementById('owner-tabs');
+const ordersPanel = document.getElementById('owner-orders-panel');
 const listEl = document.getElementById('owner-orders-list');
+const orderDetailPanel = document.getElementById('owner-order-detail-panel');
+const orderDetailEl = document.getElementById('owner-order-detail');
+const orderDetailBackBtn = document.getElementById('owner-order-detail-back-btn');
 const joinRequestsPanel = document.getElementById('owner-join-requests-panel');
 const joinRequestsList = document.getElementById('owner-join-requests-list');
 const buyerRequestsPanel = document.getElementById('owner-buyer-requests-panel');
@@ -23,9 +27,34 @@ const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
 const approvalToggle = document.getElementById('approval-required-toggle');
 
+// Groups the existing order.status values into the tabs an owner actually
+// needs to scan for "what needs attention" — no new statuses, this is a
+// pure UI regrouping of the same lifecycle already enforced by
+// orderLifecycle.js's TRANSITIONS table.
+const TAB_GROUPS = {
+  awaiting: ['pending_approval'],
+  purchase: ['pending_purchase', 'purchase_in_progress'],
+  purchased: ['purchased'],
+  delivery: ['claimed', 'collected'],
+  delivered: ['delivered'],
+  rejected: ['rejected'],
+};
+
+const DETAIL_STATUS_LABELS = {
+  pending_approval: 'Awaiting owner approval',
+  rejected: 'Rejected',
+  pending_purchase: 'Waiting for a buyer to purchase',
+  purchase_in_progress: 'Buyer confirming purchase…',
+  purchased: 'Purchased — waiting for a driver',
+  claimed: 'Driver assigned',
+  collected: 'Collected — in transit',
+  delivered: 'Delivered',
+};
+
 let activeTab = 'awaiting';
 let latestOrders = [];
 let rejectingId = null;
+let selectedOrderId = null;
 
 function getDecisionTime(order) {
   return order.approvedAt || order.rejectedAt || null;
@@ -216,14 +245,18 @@ function render() {
   renderDashboard(inCommunity, communityId);
   renderTeam(communityId);
 
-  let filtered;
-  if (activeTab === 'awaiting') {
-    filtered = inCommunity.filter(o => o.status === 'pending_approval');
-  } else if (activeTab === 'approved') {
-    filtered = inCommunity.filter(o => o.status !== 'pending_approval' && o.status !== 'rejected');
-  } else {
-    filtered = inCommunity.filter(o => o.status === 'rejected');
+  if (selectedOrderId) {
+    const order = inCommunity.find(o => o.id === selectedOrderId);
+    if (!order) {
+      showOrdersList();
+    } else {
+      renderOrderDetail(order);
+    }
+    return;
   }
+
+  const statuses = TAB_GROUPS[activeTab] || [];
+  let filtered = inCommunity.filter(o => statuses.includes(o.status));
 
   filtered = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
 
@@ -238,8 +271,89 @@ function render() {
     btn.addEventListener('click', () => handleAction(btn.dataset.action, btn.dataset.id));
   });
 
+  listEl.querySelectorAll('[data-detail-id]').forEach(btn => {
+    btn.addEventListener('click', () => showOrderDetail(btn.dataset.detailId));
+  });
+
   const reasonInput = listEl.querySelector('#reject-reason-input');
   if (reasonInput) reasonInput.focus();
+}
+
+function showOrderDetail(orderId) {
+  selectedOrderId = orderId;
+  ordersPanel.hidden = true;
+  orderDetailPanel.hidden = false;
+  render();
+}
+
+function showOrdersList() {
+  selectedOrderId = null;
+  orderDetailPanel.hidden = true;
+  ordersPanel.hidden = false;
+  render();
+}
+
+orderDetailBackBtn.addEventListener('click', showOrdersList);
+
+// Read-only accountability view: everything shown here is either a field
+// already sitting on the order or an event already sitting in the
+// append-only log from orderLifecycle.js — no new history system, no
+// editing, no lifecycle actions.
+function renderOrderDetail(order) {
+  const product = getProduct(order.productId);
+  const label = `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
+  const events = getOrderEvents(order.id);
+
+  const peopleRows = [
+    order.requestedBy ? `<p class="hint"><strong>Requested by</strong> ${order.requestedBy}</p>` : '',
+    order.approvedBy ? `<p class="hint"><strong>Approved by</strong> ${order.approvedBy}</p>` : '',
+    order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${order.rejectedBy}${order.rejectionReason ? ` — ${order.rejectionReason}` : ''}</p>` : '',
+    order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${order.purchasedBy}</p>` : '',
+    order.driver ? `<p class="hint"><strong>Driver</strong> ${order.driver}</p>` : '',
+    order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${order.cancelledBy}${order.cancellationReason ? ` — ${order.cancellationReason}` : ''}</p>` : '',
+  ].filter(Boolean).join('');
+
+  orderDetailEl.innerHTML = `
+    <h1>${label}</h1>
+    <span class="status-badge status-${order.status}">${DETAIL_STATUS_LABELS[order.status] || order.status}</span>
+
+    <div class="product-preview">
+      <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
+      <div class="product-preview-info">
+        <strong>${label}</strong>
+        <span>${order.quantity} &times; ${order.unit}${order.totalPrice != null ? ` &middot; ${formatPrice(order.totalPrice)} (${formatPrice(order.unitPrice)} each)` : ''}</span>
+      </div>
+    </div>
+
+    <h2>Site</h2>
+    <p class="hint">${order.siteName || 'Unknown site'}${[order.siteAddress, order.sitePostcode].filter(Boolean).length ? `<br>${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ')}` : ''}${order.siteDeliveryInstructions ? `<br>${order.siteDeliveryInstructions}` : ''}</p>
+
+    <h2>Sourcing</h2>
+    <p class="hint">${order.stockistName || 'Not yet chosen'}${order.stockistWebsite ? ` &middot; ${order.stockistWebsite}` : ''}${order.stockistPostcode ? ` &middot; ${order.stockistPostcode}` : ''}</p>
+
+    <h2>People</h2>
+    ${peopleRows || '<p class="empty-hint">No actions taken yet.</p>'}
+
+    ${order.status === 'delivered' ? `
+      <h2>Delivery</h2>
+      <p class="hint">Delivered to ${order.deliveryLocation || 'an unrecorded location'} at ${order.deliveryTime ? new Date(order.deliveryTime).toLocaleString() : 'an unrecorded time'}${order.deliveredAt ? ` &middot; confirmed ${new Date(order.deliveredAt).toLocaleString()}` : ''}.</p>
+    ` : ''}
+
+    <h2>Timeline</h2>
+    <div class="activity-list">
+      ${events.length === 0 ? '<p class="empty-hint">No events recorded.</p>' : events.map(e => {
+        const renderFn = EVENT_RENDER[e.type];
+        const { icon, text } = renderFn ? renderFn(e, label) : { icon: '•', text: `${e.type} on ${label}` };
+        return `
+          <div class="activity-item">
+            <span class="activity-icon" aria-hidden="true">${icon}</span>
+            <span class="activity-text">${text}</span>
+            <span class="activity-time">${new Date(e.createdAt).toLocaleString()}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
 }
 
 function renderJoinRequests(communityId) {
@@ -350,6 +464,7 @@ function renderOrderCard(order) {
           <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
           <span>${order.quantity} × ${order.unit}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span> (${formatPrice(order.unitPrice)} each)` : ''}</span>
         </div>
+        <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
       </div>
       <div class="driver-route">
         <div class="route-step">
@@ -405,11 +520,28 @@ function handleAction(action, orderId) {
   }
 }
 
-export function refreshOwnerView() {
+// Mirrors buyer.js's refreshBuyerView(orderId): an optional order id from a
+// notification click opens straight into that order's existing read-only
+// detail view (showOrderDetail below) instead of the default tab list. The
+// order must be found in latestOrders AND belong to the *active* community —
+// this is what keeps a stale or cross-community id from ever opening a
+// detail view main.js's navigateToNotification hasn't already re-authorized
+// (it already re-checks role/community/site access before ever setting
+// pendingNotifOrderId; this is just the last-mile "does this order actually
+// exist here" check, same discipline as every other id-is-not-permission
+// check in this codebase).
+export function refreshOwnerView(orderId = null) {
   activeTab = 'awaiting';
   rejectingId = null;
   tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'awaiting'));
-  render();
+
+  const communityId = getActiveCommunityId();
+  const target = orderId && communityId && latestOrders.find(o => o.id === orderId && o.communityId === communityId);
+  if (target) {
+    showOrderDetail(orderId);
+  } else {
+    showOrdersList();
+  }
 }
 
 subscribe(orders => {
@@ -420,7 +552,10 @@ subscribe(orders => {
 subscribeCommunities(render);
 subscribeOrderEvents(render);
 
-// Keep the revert countdowns ticking even when nothing else changes.
+// Keep the revert countdowns ticking even when nothing else changes — only
+// the tabs whose orders can actually show a live countdown (pending_purchase
+// and rejected are the only statuses orderLifecycle.js's revert transition
+// applies to).
 setInterval(() => {
-  if (activeTab === 'approved' || activeTab === 'rejected') render();
+  if (activeTab === 'purchase' || activeTab === 'rejected') render();
 }, 60000);

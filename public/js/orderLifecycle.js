@@ -198,23 +198,25 @@ export function createOrder(fields, actorId, actorName, approvalRequired) {
     notifyUsers(getOwnerIds(order.communityId), {
       type: 'order_awaiting_approval',
       title: 'New order needs approval',
-      message: `${actorName || 'A worker'} requested ${orderLabel(order)}.`,
+      message: `${actorName || 'A worker'} requested ${orderLabel(order)} for ${order.siteName || 'the site'}.`,
       communityId: order.communityId,
       orderId: order.id,
+      siteId: order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id },
+      navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
     });
   } else {
     notifyUsers(getBuyerIds(order.communityId), {
       type: 'order_ready_for_purchase',
       title: 'Order ready to purchase',
-      message: `${orderLabel(order)} — ${formatPrice(order.totalPrice)} — is ready to purchase.`,
+      message: `${orderLabel(order)} for ${order.siteName || 'the site'} — ${formatPrice(order.totalPrice)} — is ready to purchase.`,
       communityId: order.communityId,
       orderId: order.id,
+      siteId: order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id },
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
     });
   }
 
@@ -238,12 +240,13 @@ export function approveOrder(orderId, actorId, actorName) {
     notifyUsers(getBuyerIds(result.order.communityId), {
       type: 'order_ready_for_purchase',
       title: 'Order ready to purchase',
-      message: `${orderLabel(result.order)} — ${formatPrice(result.order.totalPrice)} — was approved and is ready to purchase.`,
+      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — ${formatPrice(result.order.totalPrice)} — was approved and is ready to purchase.`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -265,12 +268,13 @@ export function rejectOrder(orderId, actorId, actorName, reason) {
     notifyUsers([result.order.requestedById], {
       type: 'order_rejected',
       title: 'Your order was rejected',
-      message: `${actorName || 'The owner'} rejected ${orderLabel(result.order)}${reason ? `: ${reason}` : '.'}`,
+      message: `${actorName || 'The owner'} rejected ${orderLabel(result.order)} for ${result.order.siteName || 'the site'}${reason ? `: ${reason}` : '.'}`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -302,12 +306,13 @@ export function revertApproval(orderId, actorId, actorName) {
     notifyUsers([result.order.requestedById], {
       type: 'approval_reverted',
       title: 'Approval decision reverted',
-      message: `${actorName || 'The owner'} reverted the decision on ${orderLabel(result.order)} — it's back awaiting approval.`,
+      message: `${actorName || 'The owner'} reverted the decision on ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — it's back awaiting approval.`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -368,15 +373,20 @@ export function completePurchase(orderId, actorId, actorName) {
   if (result.ok) {
     // Driver-pool broadcast — deliberately no price anywhere in this
     // content, generated here rather than left to the UI to hide later.
+    // Carries siteId like every other order notification, but drivers are
+    // never site-scoped (see main.js's navigateToNotification) — any
+    // approved member can claim any purchased order regardless of site
+    // membership, unchanged from Phase 4A.
     notifyUsers(approvedMembers(result.order.communityId), {
       type: 'delivery_available',
       title: 'New delivery available',
-      message: `${orderLabel(result.order)} is ready for pickup from ${result.order.stockistName || 'the stockist'}.`,
+      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} is ready for pickup from ${result.order.stockistName || 'the stockist'}.`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'driver', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'driver', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -401,12 +411,13 @@ export function claimDelivery(orderId, actorId, actorName) {
     notifyUsers([result.order.purchasedById], {
       type: 'delivery_claimed',
       title: 'Driver assigned to your order',
-      message: `${actorName || 'A driver'} claimed ${orderLabel(result.order)} for delivery.`,
+      message: `${actorName || 'A driver'} claimed ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} for delivery.`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -425,12 +436,13 @@ export function collectDelivery(orderId, actorId, actorName) {
     notifyUsers([result.order.purchasedById], {
       type: 'delivery_collected',
       title: 'Order collected',
-      message: `${orderLabel(result.order)} has been collected and is on its way.`,
+      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} has been collected and is on its way.`,
       communityId: result.order.communityId,
       orderId: result.order.id,
+      siteId: result.order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id },
+      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
     });
   }
   return result;
@@ -461,7 +473,7 @@ export function deliverOrder(orderId, actorId, actorName, deliveryTime, delivery
 
   if (result.ok) {
     const o = result.order;
-    const message = `${orderLabel(o)} was delivered to ${o.deliveryLocation}.`;
+    const message = `${orderLabel(o)} for ${o.siteName || 'the site'} was delivered to ${o.deliveryLocation}.`;
     // Split into two calls rather than one shared recipient list — buyer and
     // worker land in different role-views, so each needs its own
     // navigationTarget rather than one target trying to serve both.
@@ -472,9 +484,10 @@ export function deliverOrder(orderId, actorId, actorName, deliveryTime, delivery
         message,
         communityId: o.communityId,
         orderId: o.id,
+        siteId: o.siteId,
         actorId,
         actorName,
-        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id },
+        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id, siteId: o.siteId },
       });
     }
     if (o.requestedById) {
@@ -484,9 +497,10 @@ export function deliverOrder(orderId, actorId, actorName, deliveryTime, delivery
         message,
         communityId: o.communityId,
         orderId: o.id,
+        siteId: o.siteId,
         actorId,
         actorName,
-        navigationTarget: { communityId: o.communityId, role: 'worker', orderId: o.id },
+        navigationTarget: { communityId: o.communityId, role: 'worker', orderId: o.id, siteId: o.siteId },
       });
     }
   }
@@ -530,23 +544,25 @@ export function cancelDelivery(orderId, actorId, actorName, reason) {
       notifyUsers([o.purchasedById], {
         type: 'delivery_cancelled',
         title: 'Delivery cancelled',
-        message: `${actorName || 'The driver'} cancelled the delivery for ${orderLabel(o)}: ${trimmedReason}. It's back in the driver pool.`,
+        message: `${actorName || 'The driver'} cancelled the delivery for ${orderLabel(o)} for ${o.siteName || 'the site'}: ${trimmedReason}. It's back in the driver pool.`,
         communityId: o.communityId,
         orderId: o.id,
+        siteId: o.siteId,
         actorId,
         actorName,
-        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id },
+        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id, siteId: o.siteId },
       });
     }
     notifyUsers(getOwnerIds(o.communityId), {
       type: 'delivery_cancelled',
       title: 'Delivery cancelled',
-      message: `${actorName || 'A driver'} cancelled the delivery for ${orderLabel(o)}: ${trimmedReason}.`,
+      message: `${actorName || 'A driver'} cancelled the delivery for ${orderLabel(o)} for ${o.siteName || 'the site'}: ${trimmedReason}.`,
       communityId: o.communityId,
       orderId: o.id,
+      siteId: o.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: o.communityId, role: 'owner', orderId: o.id },
+      navigationTarget: { communityId: o.communityId, role: 'owner', orderId: o.id, siteId: o.siteId },
     });
   }
   return result;

@@ -19,6 +19,7 @@ import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
   markRead, markUnread, markAllRead, getPreferences, savePreferences,
 } from './notifications.js';
+import { canAccessSite } from './sites.js';
 
 const authView = document.getElementById('auth-view');
 const communityView = document.getElementById('community-view');
@@ -84,6 +85,9 @@ const NOTIF_ICONS = {
   buyer_access_granted: '✅',
   buyer_access_rejected: '🚫',
   buyer_access_revoked: '⛔',
+  site_member_added: '📍',
+  site_member_removed: '➖',
+  site_archived: '🗄️',
 };
 
 const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
@@ -290,8 +294,8 @@ function showRoleView() {
     highlightOrderIfPending();
   } else if (role === 'owner') {
     showOnly(ownerView);
-    refreshOwnerView();
-    highlightOrderIfPending();
+    refreshOwnerView(pendingNotifOrderId);
+    pendingNotifOrderId = null;
   } else if (role === 'driver') {
     showOnly(driverView);
     refreshDriverView();
@@ -573,7 +577,17 @@ function navigateToNotification(n) {
   if (target.role) {
     const communityId = target.communityId || getActiveCommunityId();
     const roles = communityId ? eligibleRoles(communityId, userId) : [];
-    if (roles.includes(target.role)) {
+    // Site-scoped notifications carry a siteId that must still resolve to
+    // real, current access — a stale notification can point somewhere, it
+    // can never grant getting there. Drivers are the one deliberate
+    // exception: Phase 4A never gave them a site permission function at
+    // all (any approved member can claim any purchased order regardless of
+    // site membership), so canAccessSite doesn't apply to driver-routed
+    // targets — applying it there would incorrectly deny access drivers
+    // were always meant to have.
+    const siteOk = !target.siteId || target.role === 'driver'
+      || canAccessSite(target.siteId, communityId, userId);
+    if (roles.includes(target.role) && siteOk) {
       pendingNotifOrderId = target.orderId || null;
       setActiveRole(target.role);
       showRoleView();
@@ -582,8 +596,9 @@ function navigateToNotification(n) {
   }
 
   // No longer eligible for whatever this pointed at (role/community
-  // membership changed since it was created) — never open the protected
-  // content, just route them to wherever they legitimately belong now.
+  // membership, or site access, changed since it was created) — never open
+  // the protected content, just route them to wherever they legitimately
+  // belong now.
   routeFromTop();
 }
 
