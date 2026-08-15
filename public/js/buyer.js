@@ -16,6 +16,15 @@ const cancellationRequestsList = document.getElementById('buyer-cancellation-req
 
 const HOLD_MS = 3000;
 
+// Only the statuses a pending cancellation request can actually be shown
+// against — purchased/claimed are the normal cases, collected covers the
+// window between a driver collecting and the request auto-closing.
+const CANCEL_REQUEST_STATUS_LABELS = {
+  purchased: 'Purchased — awaiting driver',
+  claimed: 'Driver assigned',
+  collected: 'Collected — in transit',
+};
+
 let latestOrders = [];
 let selectedOrderId = null;
 let holdState = null; // { startedAt, rafId, orderId } while a hold is in progress
@@ -115,7 +124,7 @@ function renderCancellationRequests() {
           <span>${order.siteName ? `${order.siteName} &middot; ` : ''}${order.quantity} &times; ${order.unit} &middot; ${formatPrice(order.totalPrice)}</span>
           <span>Requested by ${r.requestedBy || 'Unknown'}</span>
         </div>
-        <span class="status-badge status-${order.status}">${order.status === 'claimed' ? 'Driver assigned' : 'Purchased — awaiting driver'}</span>
+        <span class="status-badge status-${order.status}">${CANCEL_REQUEST_STATUS_LABELS[order.status] || order.status}</span>
         <p class="hint small-hint">Reason: ${r.reason}</p>
         ${actionHtml}
       </div>

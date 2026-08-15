@@ -130,6 +130,7 @@ const STATUS_LABELS = {
   claimed: 'Driver assigned',
   collected: 'Collected — in transit',
   delivered: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
 function renderSiteInfo(site) {
