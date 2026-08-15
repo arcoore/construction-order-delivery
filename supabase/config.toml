@@ -1,0 +1,20 @@
+# Minimal Supabase CLI project config — inert until the Supabase CLI is
+# actually installed and run against this directory. Written now so
+# `supabase/` is immediately usable once that happens; creates no
+# infrastructure by existing as a file.
+project_id = "sitestock"
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false # revisit once real email delivery is configured
+
+[api]
+enabled = true
+port = 54321
