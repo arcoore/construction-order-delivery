@@ -250,6 +250,7 @@
         <button class="tab-btn" data-tab="delivery">Out for Delivery</button>
         <button class="tab-btn" data-tab="delivered">Delivered</button>
         <button class="tab-btn" data-tab="rejected">Rejected</button>
+        <button class="tab-btn" data-tab="cancelled">Cancelled</button>
       </div>
       <div id="owner-orders-list" class="orders-list"></div>
     </div>
@@ -319,6 +320,12 @@
 
   <!-- ============ BUYER VIEW ============ -->
   <section id="buyer-view" class="view">
+    <div class="panel" id="buyer-cancellation-requests-panel" hidden>
+      <h2>Cancellation requests</h2>
+      <p class="hint">A worker wants to cancel one of these orders. Approving cancels it inside SiteStock only — it doesn't contact the supplier for you.</p>
+      <div id="buyer-cancellation-requests-list" class="orders-list"></div>
+    </div>
+
     <div class="panel" id="buyer-list-panel">
       <h1>Orders to purchase</h1>
       <p class="hint">Buy these externally, then come back and confirm each purchase here.</p>

@@ -2,20 +2,25 @@ import { formatPrice, getCategoryIcon, getProduct } from './data.js';
 import { subscribe } from './store.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
-import { startPurchase, abandonPurchase, completePurchase } from './orderLifecycle.js';
+import { startPurchase, abandonPurchase, completePurchase, decideCancellationRequest } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
+import { getCancellationRequests, subscribeCancellationRequests } from './cancellationRequests.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
 const detailPanel = document.getElementById('buyer-detail-panel');
 const detailEl = document.getElementById('buyer-detail');
 const backBtn = document.getElementById('buyer-back-btn');
+const cancellationRequestsPanel = document.getElementById('buyer-cancellation-requests-panel');
+const cancellationRequestsList = document.getElementById('buyer-cancellation-requests-list');
 
 const HOLD_MS = 3000;
 
 let latestOrders = [];
 let selectedOrderId = null;
 let holdState = null; // { startedAt, rafId, orderId } while a hold is in progress
+let decidingRequestId = null;
+let decidingAction = null; // 'approved' | 'rejected'
 
 backBtn.addEventListener('click', () => {
   releaseHoldIfAny();
@@ -51,6 +56,131 @@ function showDetail(orderId) {
 // losing buyer access already does.
 function visibleToCurrentBuyer(order) {
   return canPurchaseForSite(order.siteId, order.communityId, currentBuyerId());
+}
+
+// --- Phase 7C: cancellation-request decisions ---------------------------
+// Visibility here mirrors the exact authorization decideCancellationRequest
+// itself re-checks when a decision is actually made (canPurchaseForSite) —
+// this list is a display convenience only; losing site/buyer access makes a
+// request disappear from here immediately, and even if one were somehow
+// still shown, the guarded function underneath would refuse it regardless.
+function visibleCancellationRequests() {
+  const communityId = getActiveCommunityId();
+  const userId = currentBuyerId();
+  return getCancellationRequests().filter(r => {
+    if (r.communityId !== communityId || r.status !== 'pending') return false;
+    const order = latestOrders.find(o => o.id === r.orderId);
+    if (!order) return false;
+    return canPurchaseForSite(order.siteId, order.communityId, userId);
+  });
+}
+
+function renderCancellationRequests() {
+  const pending = visibleCancellationRequests();
+  cancellationRequestsPanel.hidden = pending.length === 0;
+  if (pending.length === 0) return;
+
+  cancellationRequestsList.innerHTML = pending.map(r => {
+    const order = latestOrders.find(o => o.id === r.orderId);
+    if (!order) return '';
+
+    let actionHtml;
+    if (decidingRequestId === r.id) {
+      actionHtml = `
+        <div class="reject-form">
+          ${decidingAction === 'rejected'
+            ? `<label class="field-label" for="cancel-decision-reason-input">Reason (optional)</label>
+               <input type="text" id="cancel-decision-reason-input" class="text-input" placeholder="e.g. Already collecting this afternoon" />`
+            : `<p class="hint small-hint">This cancels the order inside SiteStock — it doesn't process a refund or contact the supplier for you.</p>`}
+          <div class="reject-form-actions">
+            <button class="btn btn-secondary" data-cancel-action="never-mind" data-req-id="${r.id}">Never mind</button>
+            <button class="btn btn-primary" data-cancel-action="confirm" data-req-id="${r.id}">${decidingAction === 'rejected' ? 'Confirm rejection' : 'Confirm cancellation'}</button>
+          </div>
+          <p id="cancel-decision-status" class="form-status"></p>
+        </div>
+      `;
+    } else {
+      actionHtml = `
+        <div class="owner-actions">
+          <button class="btn btn-secondary" data-cancel-action="start-reject" data-req-id="${r.id}">Reject</button>
+          <button class="btn btn-primary" data-cancel-action="start-approve" data-req-id="${r.id}">Approve cancellation</button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="order-card" data-order-id="${order.id}">
+        <div class="order-card-main">
+          <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
+          <span>${order.siteName ? `${order.siteName} &middot; ` : ''}${order.quantity} &times; ${order.unit} &middot; ${formatPrice(order.totalPrice)}</span>
+          <span>Requested by ${r.requestedBy || 'Unknown'}</span>
+        </div>
+        <span class="status-badge status-${order.status}">${order.status === 'claimed' ? 'Driver assigned' : 'Purchased — awaiting driver'}</span>
+        <p class="hint small-hint">Reason: ${r.reason}</p>
+        ${actionHtml}
+      </div>
+    `;
+  }).join('');
+
+  cancellationRequestsList.querySelectorAll('[data-cancel-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleCancelRequestAction(btn.dataset.cancelAction, btn.dataset.reqId));
+  });
+  const reasonInput = cancellationRequestsList.querySelector('#cancel-decision-reason-input');
+  if (reasonInput) reasonInput.focus();
+}
+
+function handleCancelRequestAction(action, requestId) {
+  if (action === 'start-approve') {
+    decidingRequestId = requestId;
+    decidingAction = 'approved';
+    renderCancellationRequests();
+    return;
+  }
+  if (action === 'start-reject') {
+    decidingRequestId = requestId;
+    decidingAction = 'rejected';
+    renderCancellationRequests();
+    return;
+  }
+  if (action === 'never-mind') {
+    decidingRequestId = null;
+    decidingAction = null;
+    renderCancellationRequests();
+    return;
+  }
+  if (action === 'confirm') {
+    const reasonInput = document.getElementById('cancel-decision-reason-input');
+    const reason = reasonInput ? reasonInput.value.trim() : '';
+    const result = decideCancellationRequest(requestId, decidingAction, currentBuyerId(), currentBuyerName(), reason || null);
+    if (!result.ok) {
+      // Do not fake success — e.g. a Driver may have collected the order
+      // between the request and this decision, which the data layer refuses
+      // deterministically. Show exactly what it returned.
+      const statusEl = document.getElementById('cancel-decision-status');
+      if (statusEl) {
+        statusEl.textContent = result.error;
+        statusEl.className = 'form-status error';
+      }
+      return;
+    }
+    decidingRequestId = null;
+    decidingAction = null;
+    renderCancellationRequests();
+  }
+}
+
+// Mirrors main.js's highlightOrderIfPending, applied to this panel instead —
+// a notification pointing at a cancellation request lands on an order that
+// isn't in the main purchase queue, so refreshBuyerView's own detail-opening
+// path doesn't apply here; this is the equivalent for this panel.
+function highlightCancellationRequestForOrder(orderId) {
+  requestAnimationFrame(() => {
+    const el = cancellationRequestsList.querySelector(`[data-order-id="${orderId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('order-card-highlight');
+    setTimeout(() => el.classList.remove('order-card-highlight'), 2000);
+  });
 }
 
 function render() {
@@ -207,15 +337,22 @@ function releaseHoldIfAny() {
 
 export function refreshBuyerView(orderId = null) {
   releaseHoldIfAny();
+  decidingRequestId = null;
+  decidingAction = null;
   const target = orderId && latestOrders.find(o => o.id === orderId && o.status === 'pending_purchase');
   if (target && visibleToCurrentBuyer(target)) {
     showDetail(orderId);
   } else {
     showList();
+    if (orderId) highlightCancellationRequestForOrder(orderId);
   }
+  renderCancellationRequests();
 }
 
 subscribe(orders => {
   latestOrders = orders;
   render();
+  renderCancellationRequests();
 });
+
+subscribeCancellationRequests(renderCancellationRequests);

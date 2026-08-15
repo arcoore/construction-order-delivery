@@ -15,6 +15,9 @@ import { isOwner, isApprovedMember, getOwnerIds, getBuyerIds, approvedMembers } 
 import { getSite, canCreateOrderForSite, canPurchaseForSite } from './sites.js';
 import { notifyUsers } from './notifications.js';
 import { formatPrice } from './data.js';
+import {
+  getCancellationRequest, createCancellationRequest, updateCancellationRequestDecision,
+} from './cancellationRequests.js';
 
 const EVENTS_KEY = 'sitestock_order_events_v1';
 export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000;
@@ -78,15 +81,37 @@ function addOrderEvent({ orderId, communityId, type, actorId, actorName, fromSta
 // The state machine. Keys are the order's current status; values map an
 // action name to the status it leads to. Any (status, action) pair not
 // listed here is refused.
+//
+// Phase 7B additions: `edit`/`edit_and_reapprove` (Worker corrections) and
+// `cancel_order` (both Worker direct-cancel and Buyer-approved post-purchase
+// cancellation, which share one terminal `cancelled` status rather than
+// splitting into two — see editOrder/cancelOrderDirect/
+// decideCancellationRequest below for why each action name maps where it
+// does). `cancel_order` deliberately has no entry at `collected` or
+// `delivered` — that's what makes a Buyer's approval of an already-collected
+// order's cancellation request fail *at this table*, not just in a
+// hand-written status check, exactly the same "no edge = refused"
+// discipline every other transition here already relies on. `cancel_order`
+// at `purchased`/`claimed` is only ever reachable via
+// decideCancellationRequest (an approved Buyer decision) — cancelOrderDirect
+// refuses before ever calling applyTransition at those statuses, the same
+// way the existing `claimed.cancel` edge (a Driver dropping their own
+// claim — an unrelated, unmodified action) is only ever reachable via
+// cancelDelivery's own actor check, never exposed generally just because
+// the table allows it.
 const TRANSITIONS = {
-  pending_approval: { approve: 'pending_purchase', reject: 'rejected' },
+  pending_approval: { approve: 'pending_purchase', reject: 'rejected', edit: 'pending_approval', cancel_order: 'cancelled' },
   rejected: { revert: 'pending_approval' },
-  pending_purchase: { revert: 'pending_approval', start_purchase: 'purchase_in_progress' },
+  pending_purchase: {
+    revert: 'pending_approval', start_purchase: 'purchase_in_progress',
+    edit: 'pending_purchase', edit_and_reapprove: 'pending_approval', cancel_order: 'cancelled',
+  },
   purchase_in_progress: { abandon_purchase: 'pending_purchase', complete_purchase: 'purchased' },
-  purchased: { claim: 'claimed' },
-  claimed: { collect: 'collected', cancel: 'purchased' },
+  purchased: { claim: 'claimed', cancel_order: 'cancelled' },
+  claimed: { collect: 'collected', cancel: 'purchased', cancel_order: 'cancelled' },
   collected: { deliver: 'delivered' },
   delivered: {},
+  cancelled: {},
 };
 
 function getOrder(orderId) {
@@ -181,6 +206,17 @@ export function createOrder(fields, actorId, actorName, approvalRequired) {
     cancelledById: null,
     cancelledAt: null,
     cancellationReason: null,
+    // Distinct from cancelledBy/cancelledById/cancelledAt/cancellationReason
+    // above, which are specifically about a Driver dropping their own
+    // delivery claim (order stays alive, back in the pool). These are about
+    // the ORDER itself becoming genuinely, terminally cancelled — via a
+    // Worker's direct cancel or a Buyer-approved cancellation request.
+    // Reusing the driver's field names for a different meaning would
+    // quietly conflate two unrelated events.
+    orderCancelledBy: null,
+    orderCancelledById: null,
+    orderCancelledAt: null,
+    orderCancellationReason: null,
   };
   addOrder(order);
   addOrderEvent({
@@ -566,4 +602,362 @@ export function cancelDelivery(orderId, actorId, actorName, reason) {
     });
   }
   return result;
+}
+
+// --- Worker corrections & cancellation (Phase 7B) --------------------------
+//
+// Only ever legal on an order this actor themselves requested — rule #1 is
+// absolute here, with no Owner override in this phase (see the Phase 7A
+// architecture plan, section U.1). Every function below re-derives
+// authorization from a fresh read, exactly like every action above it.
+
+// Fields a Worker edit is ever allowed to touch. Deliberately excludes
+// requestedBy/requestedById (provenance, immutable), createdAt, and the
+// status/actor-decision fields every other action already owns. siteId is
+// handled separately below since changing it requires re-authorizing
+// against the *new* site and re-snapshotting its fields — never trusting
+// caller-supplied site text, the same discipline createOrder already uses.
+const EDITABLE_ORDER_FIELDS = [
+  'productId', 'productName', 'variant', 'quantity', 'unit',
+  'deliveryPostcode', 'deliveryLat', 'deliveryLon',
+  'stockistId', 'stockistName', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate',
+  'unitPrice', 'totalPrice',
+];
+
+// Applies a Worker's correction to their own order. Which action name gets
+// passed to applyTransition depends on more than just the current status —
+// it depends on whether a real Owner approval has actually happened
+// (order.approvedById), which the TRANSITIONS table alone can't express for
+// a single status admitting two different outcomes — so that decision is
+// made here, once, before ever touching the shared transition engine.
+export function editOrder(orderId, fields, actorId, actorName) {
+  const order = getOrder(orderId);
+  if (!order) return { ok: false, error: 'Order not found.' };
+  if (order.requestedById !== actorId) {
+    return { ok: false, error: 'Only the worker who requested this order can edit it.' };
+  }
+  if (!isApprovedMember(order.communityId, actorId)) {
+    return { ok: false, error: 'You are no longer an approved member of this community.' };
+  }
+
+  let action;
+  if (order.status === 'pending_approval') {
+    action = 'edit';
+  } else if (order.status === 'pending_purchase') {
+    action = order.approvedById ? 'edit_and_reapprove' : 'edit';
+  } else if (order.status === 'purchase_in_progress') {
+    return { ok: false, error: 'A buyer is currently confirming purchase on this order — try again in a moment.' };
+  } else {
+    return { ok: false, error: 'This order can no longer be edited directly.' };
+  }
+
+  const patch = {};
+  const changes = {};
+
+  for (const key of EDITABLE_ORDER_FIELDS) {
+    if (fields[key] !== undefined && fields[key] !== order[key]) {
+      changes[key] = { from: order[key], to: fields[key] };
+      patch[key] = fields[key];
+    }
+  }
+
+  if (fields.siteId !== undefined && fields.siteId !== order.siteId) {
+    const site = getSite(fields.siteId);
+    if (!site) return { ok: false, error: 'Site not found.' };
+    if (site.communityId !== order.communityId) {
+      return { ok: false, error: 'This site does not belong to the selected community.' };
+    }
+    if (!canCreateOrderForSite(fields.siteId, order.communityId, actorId)) {
+      return { ok: false, error: 'You are not authorized to create orders for this site.' };
+    }
+    if (site.status !== 'active') {
+      return { ok: false, error: 'This site is archived and cannot receive new orders.' };
+    }
+    changes.siteId = { from: order.siteId, to: site.id };
+    changes.siteName = { from: order.siteName, to: site.name };
+    changes.siteAddress = { from: order.siteAddress, to: site.address };
+    changes.sitePostcode = { from: order.sitePostcode, to: site.postcode };
+    changes.siteDeliveryInstructions = { from: order.siteDeliveryInstructions, to: site.deliveryInstructions };
+    patch.siteId = site.id;
+    patch.siteName = site.name;
+    patch.siteAddress = site.address;
+    patch.sitePostcode = site.postcode;
+    patch.siteDeliveryInstructions = site.deliveryInstructions;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    return { ok: false, error: 'No changes were made.' };
+  }
+
+  // Two events from one transition — the same multi-event shape
+  // cancelDelivery already uses (delivery_cancelled +
+  // delivery_returned_to_pool) — so the diff and the approval-invalidation
+  // read as two distinct, honest things in the timeline rather than being
+  // folded into one another. The original 'approved' event from when the
+  // Owner first signed off is never touched — events are append-only, this
+  // just adds to the record, it never overwrites it.
+  const events = [{ type: 'order_edited', actorId, actorName, meta: { changes } }];
+  if (action === 'edit_and_reapprove') {
+    patch.approvedBy = null;
+    patch.approvedById = null;
+    patch.approvedAt = null;
+    events.push({ type: 'approval_reverted', actorId, actorName });
+  }
+
+  const result = applyTransition(orderId, action, patch, () => events);
+
+  if (result.ok && action === 'edit_and_reapprove') {
+    // Reusing the exact notification the Owner already gets on original
+    // creation — from their point of view, "something new needs my
+    // attention in Awaiting Approval" is equally true either way. Unlike
+    // the Owner's own manual revert (which doesn't re-notify them, since
+    // they obviously already know), this is a Worker creating new work for
+    // the Owner, which does deserve a ping.
+    notifyUsers(getOwnerIds(result.order.communityId), {
+      type: 'order_awaiting_approval',
+      title: 'New order needs approval',
+      message: `${actorName || 'A worker'} edited ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — it needs approval again.`,
+      communityId: result.order.communityId,
+      orderId: result.order.id,
+      siteId: result.order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: result.order.communityId, role: 'owner', orderId: result.order.id, siteId: result.order.siteId },
+    });
+  }
+
+  return result;
+}
+
+// Direct, instant cancellation — only ever legal before any money has been
+// spent (rule #5), regardless of whether the order was ever approved.
+// purchase_in_progress fails safe: the hold resolves in seconds either way,
+// so the Worker just retries once it does. purchased/claimed/collected/
+// delivered/cancelled/rejected all fall outside the two statuses this
+// function explicitly allows, refused with a clear, specific message rather
+// than a generic "invalid transition."
+export function cancelOrderDirect(orderId, actorId, actorName, reason) {
+  const order = getOrder(orderId);
+  if (!order) return { ok: false, error: 'Order not found.' };
+  if (order.requestedById !== actorId) {
+    return { ok: false, error: 'Only the worker who requested this order can cancel it.' };
+  }
+  if (!isApprovedMember(order.communityId, actorId)) {
+    return { ok: false, error: 'You are no longer an approved member of this community.' };
+  }
+  if (order.status === 'purchase_in_progress') {
+    return { ok: false, error: 'A buyer is currently confirming purchase on this order — try again in a moment.' };
+  }
+  if (order.status !== 'pending_approval' && order.status !== 'pending_purchase') {
+    return { ok: false, error: 'This order can no longer be cancelled directly — once purchased, you can request a cancellation instead.' };
+  }
+
+  const trimmedReason = reason && reason.trim() ? reason.trim() : null;
+
+  return applyTransition(orderId, 'cancel_order', {
+    orderCancelledBy: actorName,
+    orderCancelledById: actorId,
+    orderCancelledAt: Date.now(),
+    orderCancellationReason: trimmedReason,
+  }, () => [
+    { type: 'order_cancelled', actorId, actorName, reason: trimmedReason, meta: { via: 'direct' } },
+  ]);
+}
+
+// --- Post-purchase cancellation requests ------------------------------
+
+// Submits a request rather than cancelling directly — once money's spent,
+// the Buyer decides (rule #8). Only legal at purchased/claimed; blocked
+// from collected onward, since the goods are then physically with the
+// driver and approving a cancellation would need a way to tell them to
+// stop/return it, which this phase deliberately doesn't build (see the
+// Phase 7A plan, section D). order.status is left completely untouched by
+// this call — a pending request must never block a Driver from claiming or
+// collecting normally.
+export function requestCancellation(orderId, actorId, actorName, reason) {
+  const order = getOrder(orderId);
+  if (!order) return { ok: false, error: 'Order not found.' };
+  if (order.requestedById !== actorId) {
+    return { ok: false, error: 'Only the worker who requested this order can request its cancellation.' };
+  }
+  if (!isApprovedMember(order.communityId, actorId)) {
+    return { ok: false, error: 'You are no longer an approved member of this community.' };
+  }
+  if (order.status !== 'purchased' && order.status !== 'claimed') {
+    return { ok: false, error: 'A cancellation request can only be submitted after purchase and before the order is collected.' };
+  }
+  if (!reason || !reason.trim()) {
+    return { ok: false, error: 'A reason is required to request a cancellation.' };
+  }
+
+  const trimmedReason = reason.trim();
+  const result = createCancellationRequest(orderId, order.communityId, order.siteId, actorId, actorName, trimmedReason);
+  if (!result.ok) return result;
+
+  addOrderEvent({
+    orderId: order.id,
+    communityId: order.communityId,
+    type: 'cancellation_requested',
+    actorId,
+    actorName,
+    fromStatus: order.status,
+    toStatus: order.status,
+    reason: trimmedReason,
+    meta: { requestId: result.request.id },
+  });
+
+  // Targets the specific buyer who actually purchased it — matching the
+  // existing precedent set by delivery_claimed/delivery_collected, which
+  // both notify [order.purchasedById] rather than broadcasting to every
+  // buyer, since (unlike pre-purchase) there's now a specific person with
+  // the most context to act.
+  if (order.purchasedById) {
+    notifyUsers([order.purchasedById], {
+      type: 'cancellation_requested',
+      title: 'Cancellation requested',
+      message: `${actorName || 'A worker'} requested to cancel ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+    });
+  }
+
+  return { ok: true, request: result.request, order };
+}
+
+// The Buyer's decision. Re-checks everything fresh rather than trusting
+// anything about the request or the order as they stood when the UI last
+// rendered them — including, for an approval, re-attempting the underlying
+// order transition and letting the TRANSITIONS table itself be the final
+// word on whether it's still legal (it has no cancel_order edge past
+// `claimed`, so an order a Driver has since collected refuses automatically,
+// no separate status check needed here to catch that race).
+export function decideCancellationRequest(requestId, decision, actorId, actorName, decisionReason) {
+  const request = getCancellationRequest(requestId);
+  if (!request) return { ok: false, error: 'Cancellation request not found.' };
+  if (request.status !== 'pending') {
+    return { ok: false, error: 'This cancellation request has already been decided.' };
+  }
+
+  const order = getOrder(request.orderId);
+  if (!order) return { ok: false, error: 'Order not found.' };
+  if (request.communityId !== order.communityId) {
+    return { ok: false, error: 'This request does not match the order\'s community.' };
+  }
+  if (!canPurchaseForSite(order.siteId, order.communityId, actorId)) {
+    return { ok: false, error: 'Only an approved buyer with access to this site can decide this request.' };
+  }
+
+  const trimmedDecisionReason = decisionReason && decisionReason.trim() ? decisionReason.trim() : null;
+
+  if (decision === 'rejected') {
+    updateCancellationRequestDecision(requestId, 'rejected', actorId, actorName, trimmedDecisionReason);
+    addOrderEvent({
+      orderId: order.id,
+      communityId: order.communityId,
+      type: 'cancellation_rejected',
+      actorId,
+      actorName,
+      fromStatus: order.status,
+      toStatus: order.status,
+      reason: trimmedDecisionReason,
+      meta: { requestId },
+    });
+    notifyUsers([request.requestedById], {
+      type: 'cancellation_rejected',
+      title: 'Cancellation request rejected',
+      message: `${actorName || 'The buyer'} rejected your cancellation request for ${orderLabel(order)} for ${order.siteName || 'the site'}${trimmedDecisionReason ? `: ${trimmedDecisionReason}` : '.'}`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
+    });
+    return { ok: true, request: getCancellationRequest(requestId), order };
+  }
+
+  if (decision === 'approved') {
+    const wasClaimed = order.status === 'claimed';
+    const previousDriverId = order.driverId;
+    const previousDriverName = order.driver;
+
+    const result = applyTransition(order.id, 'cancel_order', {
+      orderCancelledBy: actorName,
+      orderCancelledById: actorId,
+      orderCancelledAt: Date.now(),
+      orderCancellationReason: request.reason,
+      driver: null,
+      driverId: null,
+      claimedAt: null,
+    }, () => [
+      {
+        type: 'order_cancelled',
+        actorId,
+        actorName,
+        reason: request.reason,
+        meta: { via: 'cancellation_request', requestId, previousDriverId, previousDriverName },
+      },
+    ]);
+
+    if (!result.ok) {
+      // The order progressed past a decidable state (collected) before this
+      // decision landed. Close the request out deterministically rather
+      // than leaving it dangling as 'pending' forever — the Worker gets a
+      // truthful outcome instead of silence.
+      const autoReason = 'Automatically closed — the order was collected before a decision was made.';
+      updateCancellationRequestDecision(requestId, 'rejected', null, null, autoReason);
+      addOrderEvent({
+        orderId: order.id,
+        communityId: order.communityId,
+        type: 'cancellation_rejected',
+        actorId: null,
+        actorName: null,
+        fromStatus: order.status,
+        toStatus: order.status,
+        reason: autoReason,
+        meta: { requestId, autoClosed: true },
+      });
+      return { ok: false, error: 'This order has already been collected and can no longer be cancelled.' };
+    }
+
+    updateCancellationRequestDecision(requestId, 'approved', actorId, actorName, trimmedDecisionReason);
+
+    notifyUsers([request.requestedById], {
+      type: 'cancellation_approved',
+      title: 'Cancellation approved',
+      message: `${actorName || 'The buyer'} approved your cancellation request for ${orderLabel(result.order)} for ${result.order.siteName || 'the site'}.`,
+      communityId: result.order.communityId,
+      orderId: result.order.id,
+      siteId: result.order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
+    });
+
+    // The order stays alive from the Driver's point of view right up until
+    // this moment — they otherwise have no way to learn the thing they
+    // claimed is no longer needed. Same event, one more recipient, not a
+    // new notification type.
+    if (wasClaimed && previousDriverId) {
+      notifyUsers([previousDriverId], {
+        type: 'cancellation_approved',
+        title: 'Delivery cancelled',
+        message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} has been cancelled and no longer needs to be delivered.`,
+        communityId: result.order.communityId,
+        orderId: result.order.id,
+        siteId: result.order.siteId,
+        actorId,
+        actorName,
+        navigationTarget: { communityId: result.order.communityId, role: 'driver', orderId: result.order.id, siteId: result.order.siteId },
+      });
+    }
+
+    return { ok: true, request: getCancellationRequest(requestId), order: result.order };
+  }
+
+  return { ok: false, error: 'Invalid decision.' };
 }

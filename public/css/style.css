@@ -923,6 +923,12 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 .status-rejected { border-left-color: var(--red); }
 .status-rejected.status-badge { background: #fbe3e3; color: #a32828; }
 
+/* Distinct from rejected on purpose — Worker withdrew it (possibly after
+   money was spent), the Owner didn't say no. Same accountability distinction
+   the rest of Phase 7 preserves. */
+.status-cancelled { border-left-color: var(--text-muted); }
+.status-cancelled.status-badge { background: #e9ebee; color: #4a5568; }
+
 .community-list {
   display: flex;
   flex-direction: column;

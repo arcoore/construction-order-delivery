@@ -39,6 +39,13 @@ const NOTIFICATION_TYPES = {
   site_member_added: { category: 'roleUpdates', configurable: false },
   site_member_removed: { category: 'roleUpdates', configurable: false },
   site_archived: { category: 'roleUpdates', configurable: false },
+  // Phase 7B — Worker corrections & cancellation. All three are ordinary,
+  // configurable orderUpdates: unlike the role/permission-change types
+  // above, nothing here changes what the recipient is allowed to do, so
+  // there's no reason to force them on.
+  cancellation_requested: { category: 'orderUpdates', configurable: true },
+  cancellation_approved: { category: 'orderUpdates', configurable: true },
+  cancellation_rejected: { category: 'orderUpdates', configurable: true },
 };
 
 // Delivery updates deliberately has mixed defaults within one category

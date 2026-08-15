@@ -38,6 +38,11 @@ const TAB_GROUPS = {
   delivery: ['claimed', 'collected'],
   delivered: ['delivered'],
   rejected: ['rejected'],
+  // Kept separate from rejected on purpose (Phase 7C) — rejected means the
+  // Owner said no; cancelled means the Worker withdrew it, sometimes after
+  // money was spent. Same accountability distinction the rest of Phase 7
+  // preserves.
+  cancelled: ['cancelled'],
 };
 
 const DETAIL_STATUS_LABELS = {
@@ -49,6 +54,7 @@ const DETAIL_STATUS_LABELS = {
   claimed: 'Driver assigned',
   collected: 'Collected — in transit',
   delivered: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
 let activeTab = 'awaiting';
@@ -127,6 +133,38 @@ const EVENT_RENDER = {
   delivery_returned_to_pool: (e, label) => ({ icon: '🔁', text: `${label} is back in the driver pool` }),
   collected: (e, label) => ({ icon: '📦', text: `${e.actorName || 'Driver'} collected ${label}` }),
   delivered: (e, label) => ({ icon: '🏁', text: `${label} delivered to ${e.meta?.deliveryLocation || 'site'}` }),
+  // Phase 7B/7C — Worker corrections & cancellation.
+  order_edited: (e, label) => {
+    const changes = e.meta?.changes || {};
+    const fieldLabels = {
+      quantity: 'quantity', productName: 'material', variant: 'size', siteName: 'site',
+      deliveryPostcode: 'delivery postcode', stockistName: 'stockist',
+      unitPrice: 'unit price', totalPrice: 'total price',
+    };
+    // Only the human-readable half of a paired change is shown (e.g.
+    // siteName, not the siteId/address/postcode/instructions that changed
+    // alongside it) — full detail still exists in meta.changes itself, this
+    // is just the readable summary line.
+    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit']);
+    const parts = Object.entries(changes)
+      .filter(([field]) => !skip.has(field))
+      .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
+    return { icon: '✏️', text: `${e.actorName || 'The worker'} edited ${label}${parts.length ? ` — ${parts.join(', ')}` : ''}` };
+  },
+  order_cancelled: (e, label) => ({
+    icon: '❌',
+    text: `${e.actorName || 'Someone'} cancelled ${label}${e.reason ? ` — ${e.reason}` : ''}`,
+  }),
+  cancellation_requested: (e, label) => ({
+    icon: '🙋',
+    text: `${e.actorName || 'The worker'} requested to cancel ${label}${e.reason ? `: ${e.reason}` : ''}`,
+  }),
+  cancellation_rejected: (e, label) => {
+    if (e.meta?.autoClosed) {
+      return { icon: '⏱️', text: `The cancellation request for ${label} could no longer be decided${e.reason ? ` — ${e.reason}` : ''}` };
+    }
+    return { icon: '🚫', text: `${e.actorName || 'The buyer'} rejected the cancellation request for ${label}${e.reason ? `: ${e.reason}` : ''}` };
+  },
 };
 
 function renderDashboard(inCommunity, communityId) {
@@ -311,6 +349,7 @@ function renderOrderDetail(order) {
     order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${order.purchasedBy}</p>` : '',
     order.driver ? `<p class="hint"><strong>Driver</strong> ${order.driver}</p>` : '',
     order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${order.cancelledBy}${order.cancellationReason ? ` — ${order.cancellationReason}` : ''}</p>` : '',
+    order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${order.orderCancelledBy}${order.orderCancellationReason ? ` — ${order.orderCancellationReason}` : ''}</p>` : '',
   ].filter(Boolean).join('');
 
   orderDetailEl.innerHTML = `
@@ -448,6 +487,12 @@ function renderOrderCard(order) {
         </div>
       `;
     }
+  } else if (order.status === 'cancelled') {
+    // No revert path for a cancelled order this phase — renderRevertSection
+    // would otherwise show its generic "once purchased, orders can't be
+    // reverted" message here, which reads as if a purchase happened even
+    // when it didn't (e.g. cancelled while still pending_approval).
+    actionHtml = '';
   } else {
     actionHtml = renderRevertSection(order);
   }
@@ -481,6 +526,7 @@ function renderOrderCard(order) {
         </div>
       </div>
       ${order.status === 'rejected' ? `<p class="rejection-reason">Rejected by ${order.rejectedBy || 'owner'}${order.rejectionReason ? `: ${order.rejectionReason}` : ''}</p>` : ''}
+      ${order.status === 'cancelled' ? `<p class="rejection-reason">Cancelled by ${order.orderCancelledBy || 'the worker'}${order.orderCancellationReason ? `: ${order.orderCancellationReason}` : ''}</p>` : ''}
       ${order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected' || order.status === 'delivered'
         ? `<p class="hint small-hint">Purchased by ${order.purchasedBy || 'a buyer'}${order.driver ? ` &middot; driver: ${order.driver}` : ''}</p>` : ''}
       ${order.cancelledAt ? `<p class="rejection-reason">Cancelled by ${order.cancelledBy || 'a driver'}: ${order.cancellationReason || ''}</p>` : ''}
