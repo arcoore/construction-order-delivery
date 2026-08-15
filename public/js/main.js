@@ -475,6 +475,7 @@ window.addEventListener('sitestock:enter-community', () => {
 });
 
 window.addEventListener('sitestock:logged-in', () => {
+  setActiveRole(null);
   routeFromTop();
 });
 
