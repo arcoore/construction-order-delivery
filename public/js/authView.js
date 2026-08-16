@@ -1,11 +1,18 @@
-import { createAccount, login, skipLogin } from './auth.js';
+// Phase 8B: real Supabase accounts, email + password. "Skip for now" has
+// been removed entirely — see auth.js's header for why. Every submit is now
+// a real network call, so both forms disable their submit button for the
+// duration (prevents a double-submit firing two signUp/signIn calls before
+// the first one resolves) and show a simple loading/error/success status,
+// same .form-status element the rest of the app already uses.
+import { createAccount, login } from './auth.js';
 
 const authTabs = document.getElementById('auth-tabs');
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginStatus = document.getElementById('login-status');
 const registerStatus = document.getElementById('register-status');
-const skipBtn = document.getElementById('skip-login-btn');
+const loginSubmitBtn = document.getElementById('login-submit-btn');
+const registerSubmitBtn = document.getElementById('register-submit-btn');
 const registerRoleGroup = document.getElementById('register-role-group');
 
 let selectedRegisterRole = null;
@@ -32,48 +39,61 @@ function loggedIn() {
   window.dispatchEvent(new CustomEvent('sitestock:logged-in'));
 }
 
-loginForm.addEventListener('submit', e => {
+function setStatus(el, text, kind) {
+  el.textContent = text;
+  el.className = kind ? `form-status ${kind}` : 'form-status';
+}
+
+loginForm.addEventListener('submit', async e => {
   e.preventDefault();
-  const username = document.getElementById('login-username-input').value;
+  const email = document.getElementById('login-email-input').value;
   const password = document.getElementById('login-password-input').value;
-  const result = login(username, password);
-  if (result.error) {
-    loginStatus.textContent = result.error;
-    loginStatus.className = 'form-status error';
-    return;
+
+  loginSubmitBtn.disabled = true;
+  setStatus(loginStatus, 'Logging in…', '');
+  try {
+    const result = await login(email, password);
+    if (result.error) {
+      setStatus(loginStatus, result.error, 'error');
+      return;
+    }
+    loggedIn();
+  } catch (err) {
+    setStatus(loginStatus, 'Could not reach the server. Check your connection and try again.', 'error');
+  } finally {
+    loginSubmitBtn.disabled = false;
   }
-  loggedIn();
 });
 
-registerForm.addEventListener('submit', e => {
+registerForm.addEventListener('submit', async e => {
   e.preventDefault();
-  const username = document.getElementById('register-username-input').value;
+  const email = document.getElementById('register-email-input').value;
   const password = document.getElementById('register-password-input').value;
   const confirm = document.getElementById('register-confirm-input').value;
   const displayName = document.getElementById('register-displayname-input').value;
 
   if (password !== confirm) {
-    registerStatus.textContent = "Passwords don't match.";
-    registerStatus.className = 'form-status error';
+    setStatus(registerStatus, "Passwords don't match.", 'error');
     return;
   }
 
   if (!selectedRegisterRole) {
-    registerStatus.textContent = "Please choose whether you're a worker, driver, or owner.";
-    registerStatus.className = 'form-status error';
+    setStatus(registerStatus, "Please choose whether you're a worker, driver, buyer, or owner.", 'error');
     return;
   }
 
-  const result = createAccount(username, password, displayName, selectedRegisterRole);
-  if (result.error) {
-    registerStatus.textContent = result.error;
-    registerStatus.className = 'form-status error';
-    return;
+  registerSubmitBtn.disabled = true;
+  setStatus(registerStatus, 'Creating your account…', '');
+  try {
+    const result = await createAccount(email, password, displayName, selectedRegisterRole);
+    if (result.error) {
+      setStatus(registerStatus, result.error, 'error');
+      return;
+    }
+    loggedIn();
+  } catch (err) {
+    setStatus(registerStatus, 'Could not reach the server. Check your connection and try again.', 'error');
+  } finally {
+    registerSubmitBtn.disabled = false;
   }
-  loggedIn();
-});
-
-skipBtn.addEventListener('click', () => {
-  skipLogin();
-  window.dispatchEvent(new CustomEvent('sitestock:logged-in', { detail: { skipped: true } }));
 });

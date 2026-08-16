@@ -55,26 +55,33 @@ tabsEl.addEventListener('click', e => {
   render();
 });
 
-createBtn.addEventListener('click', () => {
+createBtn.addEventListener('click', async () => {
   const communityId = getActiveCommunityId();
-  const result = createSite(communityId, {
-    name: createNameInput.value,
-    address: createAddressInput.value,
-    postcode: createPostcodeInput.value,
-    deliveryInstructions: createInstructionsInput.value,
-  }, currentActorId());
+  createBtn.disabled = true;
+  createStatusEl.textContent = 'Creating…';
+  createStatusEl.className = 'form-status';
+  try {
+    const result = await createSite(communityId, {
+      name: createNameInput.value,
+      address: createAddressInput.value,
+      postcode: createPostcodeInput.value,
+      deliveryInstructions: createInstructionsInput.value,
+    }, currentActorId());
 
-  if (!result.ok) {
-    createStatusEl.textContent = result.error;
-    createStatusEl.className = 'form-status error';
-    return;
+    if (!result.ok) {
+      createStatusEl.textContent = result.error;
+      createStatusEl.className = 'form-status error';
+      return;
+    }
+    createNameInput.value = '';
+    createAddressInput.value = '';
+    createPostcodeInput.value = '';
+    createInstructionsInput.value = '';
+    createStatusEl.textContent = `"${result.site.name}" created.`;
+    createStatusEl.className = 'form-status success';
+  } finally {
+    createBtn.disabled = false;
   }
-  createNameInput.value = '';
-  createAddressInput.value = '';
-  createPostcodeInput.value = '';
-  createInstructionsInput.value = '';
-  createStatusEl.textContent = `"${result.site.name}" created.`;
-  createStatusEl.className = 'form-status success';
 });
 
 function render() {
@@ -168,7 +175,7 @@ function renderSiteInfo(site) {
       <span class="profile-value">${site.deliveryInstructions || '—'}</span>
     </div>
     ${site.status === 'archived'
-      ? `<p class="hint small-hint">Archived ${timeAgo(site.archivedAt)} by ${site.archivedBy || 'the owner'}.</p>`
+      ? `<p class="hint small-hint">Archived ${timeAgo(site.archivedAt)} by ${site.archivedById ? resolveDisplayName(site.archivedById) : 'the owner'}.</p>`
       : ''}
     <div class="owner-actions">
       <button class="btn btn-secondary" id="site-edit-btn">Edit</button>
@@ -259,19 +266,29 @@ function wireDetailActions(site) {
 
   const archiveBtn = document.getElementById('site-archive-btn');
   if (archiveBtn) {
-    archiveBtn.addEventListener('click', () => {
-      const result = archiveSite(site.id, currentActorId());
-      if (!result.ok) alert(result.error);
-      else render();
+    archiveBtn.addEventListener('click', async () => {
+      archiveBtn.disabled = true;
+      const result = await archiveSite(site.id, currentActorId());
+      if (!result.ok) {
+        archiveBtn.disabled = false;
+        alert(result.error);
+      } else {
+        render();
+      }
     });
   }
 
   const restoreBtn = document.getElementById('site-restore-btn');
   if (restoreBtn) {
-    restoreBtn.addEventListener('click', () => {
-      const result = restoreSite(site.id, currentActorId());
-      if (!result.ok) alert(result.error);
-      else render();
+    restoreBtn.addEventListener('click', async () => {
+      restoreBtn.disabled = true;
+      const result = await restoreSite(site.id, currentActorId());
+      if (!result.ok) {
+        restoreBtn.disabled = false;
+        alert(result.error);
+      } else {
+        render();
+      }
     });
   }
 
@@ -285,14 +302,16 @@ function wireDetailActions(site) {
 
   const saveBtn = document.getElementById('site-edit-save-btn');
   if (saveBtn) {
-    saveBtn.addEventListener('click', () => {
-      const result = updateSite(site.id, {
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      const result = await updateSite(site.id, {
         name: document.getElementById('site-edit-name-input').value,
         address: document.getElementById('site-edit-address-input').value,
         postcode: document.getElementById('site-edit-postcode-input').value,
         deliveryInstructions: document.getElementById('site-edit-instructions-input').value,
       }, currentActorId());
       if (!result.ok) {
+        saveBtn.disabled = false;
         const statusEl = document.getElementById('site-edit-status');
         statusEl.textContent = result.error;
         statusEl.className = 'form-status error';
@@ -304,13 +323,18 @@ function wireDetailActions(site) {
   }
 
   detailEl.querySelectorAll('[data-member-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
       const userId = btn.dataset.memberId;
       const result = btn.dataset.memberAction === 'add'
-        ? addSiteMember(site.id, userId, currentActorId())
-        : removeSiteMember(site.id, userId, currentActorId());
-      if (!result.ok) alert(result.error);
-      else render();
+        ? await addSiteMember(site.id, userId, currentActorId())
+        : await removeSiteMember(site.id, userId, currentActorId());
+      if (!result.ok) {
+        btn.disabled = false;
+        alert(result.error);
+      } else {
+        render();
+      }
     });
   });
 }

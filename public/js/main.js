@@ -5,22 +5,40 @@ import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
-import { getCurrentUserId, getCurrentDisplayName, isGuest, newGuestIdentity, subscribeIdentity } from './identity.js';
+import { getCurrentUserId, getCurrentDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
   getActiveCommunityId, getActiveCommunity,
   isApprovedMember, isOwner, setActiveCommunityId, membershipStatus, myCommunities,
   getActiveRole, setActiveRole, eligibleRoles, resolveEntryRole, subscribeCommunities,
   getCommunities, findUnseenGrantFor, markGrantSeen,
-  buyerRequestStatus, requestBuyerRole,
+  buyerRequestStatus, requestBuyerRole, refreshCommunityCache,
 } from './community.js';
 import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
   markRead, markUnread, markAllRead, getPreferences, savePreferences,
 } from './notifications.js';
-import { canAccessSite } from './sites.js';
+import { canAccessSite, refreshSitesCache } from './sites.js';
 
+// Phase 8B: identity/company/site data is now Supabase-backed and shared
+// across devices, but there's no Realtime subscription yet (deliberately
+// deferred — see CLAUDE.md's Phase 8B section) — freshness comes from
+// explicit refetch-on-write (community.js/sites.js's own writers),
+// refetch-on-view-entry (this helper, called from the routing functions
+// below that actually render community/site-dependent content), and
+// refetch-on-window-focus (wired at the bottom of this file). None of this
+// is the security boundary — RLS is — so a failed/slow refresh here degrades
+// to "briefly stale UI," never to a false permission grant.
+async function refreshDataCaches() {
+  try {
+    await Promise.all([refreshCommunityCache(), refreshSitesCache()]);
+  } catch (err) {
+    console.error('SiteStock: failed to refresh community/site data', err);
+  }
+}
+
+const bootstrapLoadingView = document.getElementById('bootstrap-loading');
 const authView = document.getElementById('auth-view');
 const communityView = document.getElementById('community-view');
 const communitiesView = document.getElementById('communities-view');
@@ -139,11 +157,12 @@ function showCommunityPicker() {
   updateTopRightPills();
 }
 
-function showCommunitiesView() {
+async function showCommunitiesView() {
   showOnly(communitiesView);
   sessionBar.hidden = true;
   communityIndicator.textContent = 'Orders & Deliveries';
   updateTopRightPills();
+  await refreshDataCaches();
   refreshCommunitiesView();
 }
 
@@ -157,7 +176,9 @@ function renderBuyerBadge(membership) {
   return `<button type="button" class="link-btn" data-request-buyer="${membership.id}">Request buyer access</button>`;
 }
 
-function showProfile() {
+async function showProfile() {
+  await refreshDataCaches();
+
   const account = getLoggedInAccount();
   const userId = getCurrentUserId();
   const displayName = getCurrentDisplayName();
@@ -176,8 +197,8 @@ function showProfile() {
     </div>
     ${account ? `
       <div class="profile-field">
-        <span class="profile-label">Username</span>
-        <span class="profile-value">${account.username}</span>
+        <span class="profile-label">Email</span>
+        <span class="profile-value">${account.email}</span>
       </div>
       <div class="profile-field">
         <span class="profile-label">Account created</span>
@@ -206,8 +227,9 @@ function showProfile() {
   });
 
   profileDetails.querySelectorAll('[data-request-buyer]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      requestBuyerRole(btn.dataset.requestBuyer, userId);
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      await requestBuyerRole(btn.dataset.requestBuyer, userId);
       showProfile();
     });
   });
@@ -217,7 +239,9 @@ function showProfile() {
   updateTopRightPills();
 }
 
-function showRoleSelect() {
+async function showRoleSelect() {
+  await refreshDataCaches();
+
   const community = getActiveCommunity();
   const userId = getCurrentUserId();
   const displayName = getCurrentDisplayName();
@@ -261,7 +285,9 @@ function showRoleSelect() {
   updateTopRightPills();
 }
 
-function showRoleView() {
+async function showRoleView() {
+  await refreshDataCaches();
+
   const community = getActiveCommunity();
   const userId = getCurrentUserId();
   const displayName = getCurrentDisplayName();
@@ -312,9 +338,10 @@ function showRoleView() {
 // this deliberately doesn't re-derive community/role chrome the way
 // showRoleView does — it just swaps which section is visible and keeps the
 // existing session bar.
-function showSitesView() {
+async function showSitesView() {
   showOnly(sitesView);
   updateTopRightPills();
+  await refreshDataCaches();
   refreshSitesView();
 }
 
@@ -343,7 +370,9 @@ function highlightOrderIfPending() {
 // go straight there (owner only ever applies if they actually are one).
 // Falls back to the manual picker for skipped sessions / accounts made
 // before this existed.
-function enterCommunityFlow() {
+async function enterCommunityFlow() {
+  await refreshDataCaches();
+
   const community = getActiveCommunity();
   const userId = getCurrentUserId();
   if (!community || !isApprovedMember(community.id, userId)) {
@@ -479,16 +508,14 @@ window.addEventListener('sitestock:logged-in', () => {
   routeFromTop();
 });
 
-window.addEventListener('sitestock:logout', () => {
-  // Only rotate the guest id if a guest was the one logging out — logging
-  // out of a real account shouldn't blow away an unrelated dormant guest
-  // identity that was never itself compromised or signed out of.
-  const wasGuest = isGuest();
+window.addEventListener('sitestock:logout', async () => {
   setActiveCommunityId(null);
-  authLogout();
-  if (wasGuest) newGuestIdentity();
   notifPanel.hidden = true;
   notifPrefsModal.hidden = true;
+  // Awaited so the Supabase session is actually cleared (and the reactive
+  // community/site cache refresh they trigger has fired) before routing —
+  // avoids a flash of the previous account's data on the auth screen.
+  await authLogout();
   showAuth();
 });
 
@@ -659,4 +686,30 @@ notifPrefsCancelBtn.addEventListener('click', () => {
   notifPrefsModal.hidden = true;
 });
 
-routeFromTop();
+// --- Phase 8B bootstrap ------------------------------------------------
+// Explicit async gate: nothing routes until the real Supabase session has
+// been restored AND the community/site caches have loaded at least once —
+// see this file's refreshDataCaches() header and CLAUDE.md's Phase 8B
+// section. #bootstrap-loading (active by default in index.html) covers the
+// screen the whole time so nothing ever renders a role view off an empty
+// cache, and no stale pre-login screen flashes before the real route is
+// known.
+async function bootstrap() {
+  await authReady;
+  await Promise.all([loadAllProfiles(), refreshDataCaches()]);
+  bootstrapLoadingView.classList.remove('active');
+  routeFromTop();
+}
+
+// Lightweight freshness mechanism (Phase 8B — no Realtime yet, see
+// CLAUDE.md): re-pulls community/site data whenever the tab regains focus,
+// so switching back after changes happened elsewhere (another tab, another
+// device) doesn't leave a badly stale cache sitting around indefinitely.
+// This does not itself force a re-render of every open view — see
+// refreshDataCaches()'s header for why that's an accepted, documented
+// limitation for owner/buyer/driver/site.js specifically.
+window.addEventListener('focus', () => {
+  if (isAuthenticated()) refreshDataCaches();
+});
+
+bootstrap();

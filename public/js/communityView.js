@@ -6,13 +6,12 @@ import {
 import { getLoggedInAccount, subscribeAuth } from './auth.js';
 import { timeAgo } from './data.js';
 import {
-  getCurrentUserId, getCurrentDisplayName, isGuest, getGuestName, setGuestName,
+  getCurrentUserId, getCurrentDisplayName,
   resolveDisplayName, subscribeIdentity,
 } from './identity.js';
 
 const accountStatusBtn = document.getElementById('account-status-btn');
 const identityInput = document.getElementById('identity-name-input');
-const identityHint = document.getElementById('identity-name-hint');
 const myCommunitiesPanel = document.getElementById('my-communities-panel');
 const myCommunitiesList = document.getElementById('my-communities-list');
 const pendingRequestsPanel = document.getElementById('pending-requests-panel');
@@ -31,79 +30,71 @@ const browseSearchInput = document.getElementById('browse-communities-search');
 
 browseSearchInput.addEventListener('input', render);
 
+// The identity field is always read-only now — Phase 8B removed guest mode,
+// so display name always comes from the real Supabase account and can only
+// be set at signup (no editing UI exists for it yet).
 function syncIdentityField() {
-  if (isGuest()) {
-    identityInput.value = getGuestName();
-    identityInput.readOnly = false;
-    identityHint.hidden = true;
-  } else {
-    identityInput.value = getCurrentDisplayName();
-    identityInput.readOnly = true;
-    identityHint.hidden = false;
-  }
+  identityInput.value = getCurrentDisplayName();
 }
 syncIdentityField();
 
-identityInput.addEventListener('input', () => {
-  if (!isGuest()) return; // read-only for logged-in accounts, guarded here too
-  setGuestName(identityInput.value);
-  render();
-});
+function setStatus(el, text, kind) {
+  el.textContent = text;
+  el.className = kind ? `form-status ${kind}` : 'form-status';
+}
 
-createBtn.addEventListener('click', () => {
+createBtn.addEventListener('click', async () => {
   const userId = getCurrentUserId();
-  const displayName = getCurrentDisplayName();
   const communityName = createInput.value.trim();
-  if (!displayName) {
-    createStatus.textContent = 'Enter your name above first.';
-    createStatus.className = 'form-status error';
-    return;
-  }
   if (!communityName) {
-    createStatus.textContent = 'Enter a community name.';
-    createStatus.className = 'form-status error';
+    setStatus(createStatus, 'Enter a community name.', 'error');
     return;
   }
-  const community = createCommunity(communityName, userId);
-  createInput.value = '';
-  createStatus.textContent = '';
-  enterCommunity(community.id);
+  createBtn.disabled = true;
+  setStatus(createStatus, 'Creating…', '');
+  try {
+    const result = await createCommunity(communityName, userId);
+    if (result.error) {
+      setStatus(createStatus, result.error, 'error');
+      return;
+    }
+    createInput.value = '';
+    setStatus(createStatus, '', '');
+    enterCommunity(result.community.id);
+  } finally {
+    createBtn.disabled = false;
+  }
 });
 
-joinCodeBtn.addEventListener('click', () => {
+joinCodeBtn.addEventListener('click', async () => {
   const userId = getCurrentUserId();
-  const displayName = getCurrentDisplayName();
   const code = joinCodeInput.value.trim();
-  if (!displayName) {
-    joinCodeStatus.textContent = 'Enter your name above first.';
-    joinCodeStatus.className = 'form-status error';
-    return;
-  }
   if (!code) {
-    joinCodeStatus.textContent = 'Enter an invite code.';
-    joinCodeStatus.className = 'form-status error';
+    setStatus(joinCodeStatus, 'Enter an invite code.', 'error');
     return;
   }
-  const result = requestToJoinByCode(code, userId);
-  if (result.error) {
-    joinCodeStatus.textContent = result.error;
-    joinCodeStatus.className = 'form-status error';
-    return;
+  joinCodeBtn.disabled = true;
+  setStatus(joinCodeStatus, 'Checking…', '');
+  try {
+    const result = await requestToJoinByCode(code, userId);
+    if (result.error) {
+      setStatus(joinCodeStatus, result.error, 'error');
+      return;
+    }
+    if (result.alreadyMember) {
+      setStatus(joinCodeStatus, `You're already in "${result.community.name}".`, 'success');
+      enterCommunity(result.community.id);
+      return;
+    }
+    if (result.alreadyPending) {
+      setStatus(joinCodeStatus, `Already requested to join "${result.community.name}" — waiting for approval.`, '');
+      return;
+    }
+    joinCodeInput.value = '';
+    setStatus(joinCodeStatus, `Request sent to "${result.community.name}" — waiting for the owner to approve it.`, 'success');
+  } finally {
+    joinCodeBtn.disabled = false;
   }
-  if (result.alreadyMember) {
-    joinCodeStatus.textContent = `You're already in "${result.community.name}".`;
-    joinCodeStatus.className = 'form-status success';
-    enterCommunity(result.community.id);
-    return;
-  }
-  if (result.alreadyPending) {
-    joinCodeStatus.textContent = `Already requested to join "${result.community.name}" — waiting for approval.`;
-    joinCodeStatus.className = 'form-status';
-    return;
-  }
-  joinCodeInput.value = '';
-  joinCodeStatus.textContent = `Request sent to "${result.community.name}" — waiting for the owner to approve it.`;
-  joinCodeStatus.className = 'form-status success';
 });
 
 function enterCommunity(id) {
@@ -168,7 +159,7 @@ function render() {
 
   let emptyMessage = null;
   if (all.length === 0) {
-    emptyMessage = 'No communities exist in this browser yet — create the first one above.';
+    emptyMessage = 'No communities exist yet — create the first one above.';
   } else if (visible.length === 0) {
     emptyMessage = `No communities match "${browseSearchInput.value.trim()}".`;
   }
@@ -200,12 +191,16 @@ function render() {
     btn.addEventListener('click', () => enterCommunity(btn.dataset.enter));
   });
   browseList.querySelectorAll('[data-request]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!getCurrentDisplayName()) {
-        identityInput.focus();
-        return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Requesting…';
+      const result = await requestToJoin(btn.dataset.request, getCurrentUserId());
+      if (result && result.error) {
+        alert(result.error);
       }
-      requestToJoin(btn.dataset.request, getCurrentUserId());
+      // On success the community.js write already fired notify(), which
+      // re-runs render() and replaces this button with the "Requested"
+      // pending state — no manual re-enable needed on the happy path.
     });
   });
 }
@@ -219,9 +214,7 @@ subscribeIdentity(render);
 // messages are meant as one-time feedback for the action that produced
 // them, not a persistent label.
 export function refreshCommunitiesView() {
-  createStatus.textContent = '';
-  createStatus.className = 'form-status';
-  joinCodeStatus.textContent = '';
-  joinCodeStatus.className = 'form-status';
+  setStatus(createStatus, '', '');
+  setStatus(joinCodeStatus, '', '');
   render();
 }

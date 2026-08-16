@@ -1,23 +1,18 @@
-// Local, browser-only accounts. There is no backend — this is stored in
-// localStorage on this device only, so it's a stand-in for real
-// authentication, not a secure system. Don't reuse a real password here.
-const ACCOUNTS_KEY = 'sitestock_accounts_v1';
-const SESSION_KEY = 'sitestock_logged_in_username';
-const SKIPPED_KEY = 'sitestock_auth_skipped';
+// Real Supabase Auth accounts (Phase 8B) — replaces the old plaintext
+// localStorage account system entirely. "Skip for now" / guest mode has
+// been removed: an account is now required to use SiteStock at all (see
+// PROGRESS.md's Phase 8B section for why — anonymous Supabase auth is a
+// deliberately separate, not-yet-taken step).
+//
+// This module owns Supabase session state ONLY — no profile data lives
+// here. display_name/default_role are read straight off the session's own
+// user_metadata (set once at signUp, never queried from another table),
+// since they're the current user's own account facts, never looked up for
+// anyone else. Looking up *other* users' display names is identity.js's
+// job (profiles table), not this module's.
+import { supabase } from './supabaseClient.js';
 
-function readAccounts() {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeAccounts(list) {
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list));
-  notify();
-}
+let currentSession = null;
 
 const listeners = new Set();
 function notify() {
@@ -30,85 +25,90 @@ export function subscribeAuth(fn) {
   return () => listeners.delete(fn);
 }
 
-window.addEventListener('storage', e => {
-  if (e.key === ACCOUNTS_KEY || e.key === SESSION_KEY || e.key === SKIPPED_KEY) notify();
+// main.js's bootstrap awaits this before the first route happens — nothing
+// ever renders a role view off an unknown/uninitialized auth state.
+export const authReady = supabase.auth.getSession().then(({ data }) => {
+  currentSession = data.session;
+  notify();
 });
 
-function newId() {
-  return crypto.randomUUID ? crypto.randomUUID() : `acct-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-export function findAccount(username) {
-  const clean = (username || '').trim().toLowerCase();
-  if (!clean) return null;
-  return readAccounts().find(a => a.username.toLowerCase() === clean) || null;
-}
-
-export function findAccountById(id) {
-  if (!id) return null;
-  return readAccounts().find(a => a.id === id) || null;
-}
+// Fires on every sign-in/sign-out/token-refresh, including the initial
+// resolution above and a cross-tab session change — this is the one place
+// currentSession is ever written after bootstrap.
+supabase.auth.onAuthStateChange((_event, session) => {
+  currentSession = session;
+  notify();
+});
 
 const VALID_ROLES = ['worker', 'driver', 'buyer', 'owner'];
 
-export function createAccount(username, password, displayName, defaultRole) {
-  username = (username || '').trim();
+function accountFromSession(session) {
+  if (!session || !session.user) return null;
+  const u = session.user;
+  return {
+    id: u.id,
+    email: u.email,
+    displayName: u.user_metadata?.display_name || '',
+    defaultRole: u.user_metadata?.default_role || null,
+    createdAt: u.created_at ? new Date(u.created_at).getTime() : Date.now(),
+  };
+}
+
+export function getLoggedInAccount() {
+  return accountFromSession(currentSession);
+}
+
+export function isAuthenticated() {
+  return !!getLoggedInAccount();
+}
+
+function friendlyAuthError(error) {
+  const msg = (error && error.message) || 'Something went wrong.';
+  if (/already registered|already exists/i.test(msg)) return 'That email is already registered.';
+  if (/invalid login credentials/i.test(msg)) return 'Incorrect email or password.';
+  if (/password.*(least|short)/i.test(msg)) return msg;
+  return msg;
+}
+
+export async function createAccount(email, password, displayName, defaultRole) {
+  email = (email || '').trim();
   displayName = (displayName || '').trim();
-  if (!username || !password || !displayName) {
+  if (!email || !password || !displayName) {
     return { error: 'Please fill in every field.' };
   }
   if (!VALID_ROLES.includes(defaultRole)) {
     return { error: 'Please choose your role.' };
   }
-  if (findAccount(username)) {
-    return { error: 'That username is already taken.' };
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName, default_role: defaultRole } },
+  });
+  if (error) return { error: friendlyAuthError(error) };
+  // Local dev has email confirmations disabled, so signUp returns a real
+  // session immediately — if a real cloud project later requires
+  // confirmation, `data.session` comes back null here and this would need
+  // a "check your email" state. Not built yet; not needed locally.
+  if (!data.session) {
+    return { error: 'Account created — check your email to confirm before logging in.' };
   }
-  const account = { id: newId(), username, password, displayName, defaultRole, createdAt: Date.now() };
-  const accounts = readAccounts();
-  accounts.push(account);
-  writeAccounts(accounts);
-  setSession(username);
-  return { account };
-}
-
-export function login(username, password) {
-  const account = findAccount(username);
-  if (!account) {
-    return { error: 'No account found with that username.' };
-  }
-  if (account.password !== password) {
-    return { error: 'Incorrect password.' };
-  }
-  setSession(account.username);
-  return { account };
-}
-
-function setSession(username) {
-  localStorage.setItem(SESSION_KEY, username);
-  localStorage.removeItem(SKIPPED_KEY);
+  currentSession = data.session;
   notify();
+  return { account: accountFromSession(data.session) };
 }
 
-export function skipLogin() {
-  localStorage.setItem(SKIPPED_KEY, '1');
+export async function login(email, password) {
+  email = (email || '').trim();
+  if (!email || !password) return { error: 'Please fill in every field.' };
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return { error: friendlyAuthError(error) };
+  currentSession = data.session;
   notify();
+  return { account: accountFromSession(data.session) };
 }
 
-export function isSkipped() {
-  return localStorage.getItem(SKIPPED_KEY) === '1';
-}
-
-export function logout() {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(SKIPPED_KEY);
+export async function logout() {
+  await supabase.auth.signOut();
+  currentSession = null;
   notify();
-}
-
-export function getLoggedInAccount() {
-  const username = localStorage.getItem(SESSION_KEY);
-  return username ? findAccount(username) : null;
-}
-
-export function isAuthenticated() {
-  return !!getLoggedInAccount() || isSkipped();
 }

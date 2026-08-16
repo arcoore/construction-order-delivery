@@ -51,10 +51,20 @@
 <main id="app">
 
   <!-- ============ AUTH VIEW ============ -->
-  <section id="auth-view" class="view active">
+  <!-- Shown only during the Phase 8B async bootstrap (session restore +
+       initial Supabase cache load) — never a role view, never stale data,
+       just a neutral holding state until routing can happen safely. -->
+  <section id="bootstrap-loading" class="view active">
+    <div class="panel">
+      <h1>SiteStock</h1>
+      <p class="hint">Loading…</p>
+    </div>
+  </section>
+
+  <section id="auth-view" class="view">
     <div class="panel">
       <h1>Log in to SiteStock</h1>
-      <p class="hint">This is still a prototype &mdash; accounts are stored only in this browser, so don't reuse a real password here. You can also skip this for now and come back to it later.</p>
+      <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) &mdash; the same login works from any browser or device. An account is required to continue.</p>
 
       <div class="driver-tabs" id="auth-tabs">
         <button class="tab-btn active" data-auth-tab="login">Log in</button>
@@ -62,19 +72,19 @@
       </div>
 
       <form id="login-form" class="auth-form">
-        <label class="field-label" for="login-username-input">Username</label>
-        <input type="text" id="login-username-input" class="text-input" autocomplete="username" />
+        <label class="field-label" for="login-email-input">Email</label>
+        <input type="email" id="login-email-input" class="text-input" autocomplete="email" />
 
         <label class="field-label" for="login-password-input">Password</label>
         <input type="password" id="login-password-input" class="text-input" autocomplete="current-password" />
 
-        <button type="submit" class="btn btn-primary btn-block">Log in</button>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">Log in</button>
         <p id="login-status" class="form-status"></p>
       </form>
 
       <form id="register-form" class="auth-form" hidden>
-        <label class="field-label" for="register-username-input">Username</label>
-        <input type="text" id="register-username-input" class="text-input" autocomplete="username" />
+        <label class="field-label" for="register-email-input">Email</label>
+        <input type="email" id="register-email-input" class="text-input" autocomplete="email" />
 
         <label class="field-label" for="register-password-input">Password</label>
         <input type="password" id="register-password-input" class="text-input" autocomplete="new-password" />
@@ -84,7 +94,7 @@
 
         <label class="field-label" for="register-displayname-input">Display name</label>
         <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
-        <p class="hint small-hint">This is the name others in your community will see &mdash; it can be different from your username.</p>
+        <p class="hint small-hint">This is the name others in your community will see &mdash; it can be different from your email.</p>
 
         <label class="field-label">Are you a worker, driver, buyer, or owner?</label>
         <div class="role-toggle-group" id="register-role-group">
@@ -95,11 +105,9 @@
         </div>
         <p class="hint small-hint">You'll go straight to this screen when you enter a community. If you create your own community you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
 
-        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+        <button type="submit" class="btn btn-primary btn-block" id="register-submit-btn">Create account</button>
         <p id="register-status" class="form-status"></p>
       </form>
-
-      <button type="button" class="link-btn" id="skip-login-btn">Skip for now &rarr;</button>
     </div>
   </section>
 
@@ -107,11 +115,11 @@
   <section id="community-view" class="view">
     <div class="panel">
       <h1>Welcome to SiteStock</h1>
-      <p class="hint">Communities work like servers &mdash; an owner creates one, workers and drivers join it. Enter your name, then head to Communities to create or join one.</p>
-      <button type="button" class="btn btn-secondary" id="account-status-btn">Log in</button>
+      <p class="hint">Communities work like servers &mdash; an owner creates one, workers and drivers join it. Head to Communities to create or join one.</p>
+      <button type="button" class="btn btn-secondary" id="account-status-btn">Show profile</button>
       <label class="field-label" for="identity-name-input">Your name</label>
-      <input type="text" id="identity-name-input" class="text-input" placeholder="e.g. Dave" />
-      <p class="hint small-hint" id="identity-name-hint" hidden>This is your account's display name and can't be edited here.</p>
+      <input type="text" id="identity-name-input" class="text-input" readonly />
+      <p class="hint small-hint" id="identity-name-hint">This is your account's display name and can't be edited here.</p>
       <button type="button" class="btn btn-primary btn-block" id="go-to-communities-btn">Go to Communities &rarr;</button>
     </div>
   </section>

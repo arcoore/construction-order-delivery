@@ -1,42 +1,54 @@
-// Communities are the "Discord server" layer: an owner creates one, workers
-// and drivers join it (by code or by browsing + requesting), and every order
-// is scoped to a single community. Everything still lives in this browser's
-// localStorage — there's no backend yet, so "inviting" only works within the
-// same browser for now.
+// Communities ("Companies" to the user) are now Supabase-backed (Phase 8B)
+// — shared across devices/browsers for the first time, enforced server-side
+// by RLS (see supabase/migrations/0009_rls_policies.sql). Ownership/
+// membership is still keyed by user id, never display name (see
+// identity.js), same as before.
 //
-// Membership/ownership here is keyed by user id (see identity.js), never by
-// display name — see CLAUDE.md's "Owner permission model" and identity.js's
-// header comment for why.
+// CACHE LIFECYCLE (read this before touching this file):
+// Every read function below (isOwner, isApprovedMember, isBuyer,
+// eligibleRoles, getCommunities, getOwnerIds, getBuyerIds, approvedMembers,
+// etc.) is SYNCHRONOUS on purpose — orderLifecycle.js and the owner/buyer/
+// driver/site UI modules call them inline inside synchronous render code,
+// and none of those are being converted to async this phase (see
+// CLAUDE.md's Phase 8B section). They read an in-memory cache
+// (communities/memberships/owner_grants/buyer_grants/buyer_requests) kept
+// fresh by real Supabase traffic, not by pretending a network call is
+// instant.
 //
-// resolveDisplayName/notifyUsers are used only for notification content
-// generation (role-grant/request actions below) — never for any permission
-// or routing decision, which stays 100% id-based throughout this file.
-import { resolveDisplayName } from './identity.js';
+// The cache is NEVER the authorization boundary — RLS is (see
+// supabase/migrations/0009_rls_policies.sql). A stale cache can at worst
+// show a UI affordance a user is no longer entitled to use; the moment they
+// click it, the real Supabase write is independently checked server-side
+// and refused if it should be. Every mutating function below refetches (or
+// applies the server's own returned row) before resolving, so a caller that
+// awaits a write always sees post-write truth, never an optimistic guess.
+//
+// Refresh triggers, all wired below or in main.js's bootstrap:
+//   - on login/logout (via subscribeAuth)
+//   - after every successful mutating call in this file (uses the server's
+//     own response row, not a blind re-fetch, so it's never stale)
+//   - explicit full refetch exposed as refreshCommunityCache(), called by
+//     main.js on view entry into a role/community screen and on window
+//     focus (see main.js's Phase 8B bootstrap section)
+import { getCurrentUserId, primeProfiles, resolveDisplayName } from './identity.js';
+import { subscribeAuth } from './auth.js';
 import { notifyUsers } from './notifications.js';
+import { supabase } from './supabaseClient.js';
 
-const COMMUNITIES_KEY = 'sitestock_communities_v2';
-const REQUESTS_KEY = 'sitestock_join_requests_v2';
+// --- UI-only local state (NOT retired to Supabase — see CLAUDE.md's
+// "localStorage retirement" note: active community/role are browser session
+// pointers, not security, and stay exactly as they were). --------------
 const ACTIVE_COMMUNITY_KEY = 'sitestock_active_community_id';
 const ACTIVE_ROLE_KEY = 'sitestock_active_role';
-const OWNER_GRANTS_KEY = 'sitestock_owner_grants_v2';
-const SEEN_GRANTS_KEY = 'sitestock_seen_grants_v1';
-const BUYER_GRANTS_KEY = 'sitestock_buyer_grants_v1';
-const BUYER_REQUESTS_KEY = 'sitestock_buyer_requests_v1';
+const SEEN_GRANTS_KEY = 'sitestock_seen_grants_v1'; // "have I shown this owner-upgrade popup" — UI state, not data
 
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
-
-function readList(key) {
+function readLocalList(key) {
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
-}
-
-function writeList(key, list) {
-  localStorage.setItem(key, JSON.stringify(list));
-  notify();
 }
 
 const listeners = new Set();
@@ -51,20 +63,8 @@ export function subscribeCommunities(fn) {
 }
 
 window.addEventListener('storage', e => {
-  if (
-    e.key === COMMUNITIES_KEY || e.key === REQUESTS_KEY || e.key === ACTIVE_COMMUNITY_KEY ||
-    e.key === ACTIVE_ROLE_KEY || e.key === OWNER_GRANTS_KEY || e.key === BUYER_GRANTS_KEY ||
-    e.key === BUYER_REQUESTS_KEY
-  ) notify();
+  if (e.key === ACTIVE_COMMUNITY_KEY || e.key === ACTIVE_ROLE_KEY) notify();
 });
-
-export function getCommunities() {
-  return readList(COMMUNITIES_KEY);
-}
-
-export function getJoinRequests() {
-  return readList(REQUESTS_KEY);
-}
 
 export function getActiveCommunityId() {
   return localStorage.getItem(ACTIVE_COMMUNITY_KEY) || null;
@@ -99,6 +99,116 @@ export function setActiveRole(role) {
   notify();
 }
 
+// --- Cache ----------------------------------------------------------
+let cache = { communities: [], memberships: [], ownerGrants: [], buyerGrants: [], buyerRequests: [] };
+export let communityCacheReady = false;
+
+function mapCommunity(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    code: r.invite_code,
+    ownerId: r.owner_id,
+    requireOwnerApproval: r.require_owner_approval,
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+function mapMembership(r) {
+  return {
+    id: r.id,
+    communityId: r.community_id,
+    userId: r.user_id,
+    status: r.status,
+    requestedAt: new Date(r.requested_at).getTime(),
+    decidedAt: r.decided_at ? new Date(r.decided_at).getTime() : null,
+    decidedById: r.decided_by_id,
+  };
+}
+function mapGrant(r) {
+  return {
+    id: r.id,
+    communityId: r.community_id,
+    userId: r.user_id,
+    grantedById: r.granted_by_id,
+    grantedAt: new Date(r.granted_at).getTime(),
+  };
+}
+function mapBuyerRequest(r) {
+  return {
+    id: r.id,
+    communityId: r.community_id,
+    userId: r.user_id,
+    status: r.status,
+    requestedAt: new Date(r.requested_at).getTime(),
+    decidedAt: r.decided_at ? new Date(r.decided_at).getTime() : null,
+    decidedById: r.decided_by_id,
+  };
+}
+
+// Full refetch of every table this module owns. Safe to call any time —
+// called reactively on every auth transition below, and explicitly by
+// main.js on relevant view entry / window focus (Phase 8B "no Realtime yet"
+// freshness strategy — see CLAUDE.md). RLS scopes what actually comes back
+// (e.g. community_memberships only returns rows the caller owns or owns the
+// community for) so no client-side filtering by userId is needed here.
+export async function refreshCommunityCache() {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    cache = { communities: [], memberships: [], ownerGrants: [], buyerGrants: [], buyerRequests: [] };
+    communityCacheReady = true;
+    notify();
+    return;
+  }
+  const [communitiesRes, membershipsRes, ownerGrantsRes, buyerGrantsRes, buyerRequestsRes] = await Promise.all([
+    supabase.from('communities').select('*'),
+    supabase.from('community_memberships').select('*'),
+    supabase.from('owner_grants').select('*'),
+    supabase.from('buyer_grants').select('*'),
+    supabase.from('buyer_requests').select('*'),
+  ]);
+  cache = {
+    communities: (communitiesRes.data || []).map(mapCommunity),
+    memberships: (membershipsRes.data || []).map(mapMembership),
+    ownerGrants: (ownerGrantsRes.data || []).map(mapGrant),
+    buyerGrants: (buyerGrantsRes.data || []).map(mapGrant),
+    buyerRequests: (buyerRequestsRes.data || []).map(mapBuyerRequest),
+  };
+  communityCacheReady = true;
+
+  // Proactively prime display names for every user id this cache load just
+  // surfaced (owners, requesters, grant holders) — avoids a flash of
+  // "Unknown" the first time each render calls resolveDisplayName for
+  // someone the profile cache hasn't seen yet.
+  const ids = new Set();
+  cache.communities.forEach(c => ids.add(c.ownerId));
+  cache.memberships.forEach(m => ids.add(m.userId));
+  cache.ownerGrants.forEach(g => { ids.add(g.userId); ids.add(g.grantedById); });
+  cache.buyerGrants.forEach(g => { ids.add(g.userId); ids.add(g.grantedById); });
+  cache.buyerRequests.forEach(r => ids.add(r.userId));
+  if (ids.size > 0) {
+    const { data } = await supabase.from('profiles').select('id, display_name').in('id', Array.from(ids));
+    if (data) primeProfiles(data);
+  }
+
+  notify();
+}
+
+// Refetches on every auth transition (login, logout, account switch) —
+// clears to empty immediately on logout (see the userId-null branch above),
+// loads fresh on login. This is in addition to main.js's explicit bootstrap
+// await, which exists so the FIRST load is guaranteed complete before any
+// routing happens (see main.js) — this subscription handles every
+// subsequent transition during the session.
+subscribeAuth(() => { refreshCommunityCache(); });
+
+export function getCommunities() {
+  return cache.communities;
+}
+
+export function getJoinRequests() {
+  return cache.memberships;
+}
+
 export function eligibleRoles(communityId, userId) {
   const roles = [];
   if (isOwner(communityId, userId)) roles.push('owner');
@@ -110,12 +220,6 @@ export function eligibleRoles(communityId, userId) {
   return roles;
 }
 
-// Resolves which screen someone should land on in a given community, with no
-// prompt needed: owner access always wins if they actually have it (creator
-// or granted) — regardless of what they picked at signup — since owning a
-// community is a real permission, not a preference. Otherwise falls back to
-// their account's chosen role (worker/driver/buyer), or worker if that
-// doesn't apply here either.
 export function resolveEntryRole(communityId, userId, preferredRole) {
   if (isOwner(communityId, userId)) return 'owner';
   if (preferredRole === 'buyer' && isBuyer(communityId, userId)) return 'buyer';
@@ -126,8 +230,10 @@ export function resolveEntryRole(communityId, userId, preferredRole) {
   return null;
 }
 
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+
 function generateInviteCode() {
-  const existing = new Set(getCommunities().map(c => c.code));
+  const existing = new Set(cache.communities.map(c => c.code));
   let code;
   do {
     code = Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -135,38 +241,32 @@ function generateInviteCode() {
   return code;
 }
 
-function newId(prefix) {
-  const rand = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return `${prefix}-${rand}`;
-}
-
-export function createCommunity(name, ownerId) {
-  const community = {
-    id: newId('c'),
+export async function createCommunity(name, ownerId) {
+  const { data, error } = await supabase.from('communities').insert({
     name: name.trim(),
-    code: generateInviteCode(),
-    ownerId,
-    createdAt: Date.now(),
-  };
-  const communities = getCommunities();
-  communities.push(community);
-  writeList(COMMUNITIES_KEY, communities);
+    invite_code: generateInviteCode(),
+    owner_id: ownerId,
+  }).select().single();
+  if (error) return { error: error.message };
+  const community = mapCommunity(data);
+  cache.communities.push(community);
+  notify();
   setActiveCommunityId(community.id);
-  return community;
+  return { community };
 }
 
 // The creator is fixed at community creation and can never be changed here.
 export function isCreator(communityId, userId) {
-  const community = getCommunities().find(c => c.id === communityId);
+  const community = cache.communities.find(c => c.id === communityId);
   return !!community && !!userId && community.ownerId === userId;
 }
 
 export function getOwnerGrants() {
-  return readList(OWNER_GRANTS_KEY);
+  return cache.ownerGrants;
 }
 
 export function hasOwnerGrant(communityId, userId) {
-  return getOwnerGrants().some(g => g.communityId === communityId && g.userId === userId);
+  return cache.ownerGrants.some(g => g.communityId === communityId && g.userId === userId);
 }
 
 // Owner-level access: the creator, or anyone the creator has granted access to.
@@ -176,54 +276,57 @@ export function isOwner(communityId, userId) {
 
 // Every user id currently holding owner access in this community (creator +
 // all owner grants) — used to fan out notifications to "the owner(s)"
-// rather than a single assumed owner.
+// rather than a single assumed owner. Called synchronously from
+// orderLifecycle.js — must stay sync, cache-backed.
 export function getOwnerIds(communityId) {
-  const community = getCommunities().find(c => c.id === communityId);
+  const community = cache.communities.find(c => c.id === communityId);
   const ids = new Set();
   if (community) ids.add(community.ownerId);
-  getOwnerGrants().filter(g => g.communityId === communityId).forEach(g => ids.add(g.userId));
+  cache.ownerGrants.filter(g => g.communityId === communityId).forEach(g => ids.add(g.userId));
   return Array.from(ids);
 }
 
-export function grantOwnerAccess(communityId, userId, grantedById) {
-  const grants = getOwnerGrants();
-  if (grants.some(g => g.communityId === communityId && g.userId === userId)) {
-    return;
+export async function grantOwnerAccess(communityId, userId, grantedById) {
+  if (cache.ownerGrants.some(g => g.communityId === communityId && g.userId === userId)) {
+    return { ok: true, alreadyGranted: true };
   }
-  grants.push({
-    id: newId('og'),
-    communityId,
-    userId,
-    grantedById,
-    grantedAt: Date.now(),
-  });
-  writeList(OWNER_GRANTS_KEY, grants);
+  const { data, error } = await supabase.from('owner_grants').insert({
+    community_id: communityId, user_id: userId, granted_by_id: grantedById,
+  }).select().single();
+  if (error) return { ok: false, error: error.message };
+  cache.ownerGrants.push(mapGrant(data));
+  notify();
+  return { ok: true };
 }
 
-export function revokeOwnerAccess(communityId, userId) {
-  const grants = getOwnerGrants().filter(
-    g => !(g.communityId === communityId && g.userId === userId)
-  );
-  writeList(OWNER_GRANTS_KEY, grants);
+export async function revokeOwnerAccess(communityId, userId) {
+  const { error } = await supabase.from('owner_grants').delete()
+    .eq('community_id', communityId).eq('user_id', userId);
+  if (error) return { ok: false, error: error.message };
+  cache.ownerGrants = cache.ownerGrants.filter(g => !(g.communityId === communityId && g.userId === userId));
+  notify();
+  return { ok: true };
 }
 
 export function approvedMembers(communityId) {
-  const ids = getJoinRequests()
+  const ids = cache.memberships
     .filter(r => r.communityId === communityId && r.status === 'approved')
     .map(r => r.userId);
   return Array.from(new Set(ids));
 }
 
 // Finds a grant made to this user that they haven't been shown the
-// "upgraded to owner" popup for yet.
+// "upgraded to owner" popup for yet. Seen-state stays local/per-device on
+// purpose (a UI "have I shown this" flag, not real data — same category as
+// active community/role).
 export function findUnseenGrantFor(userId) {
   if (!userId) return null;
-  const seen = new Set(readList(SEEN_GRANTS_KEY));
-  return getOwnerGrants().find(g => g.userId === userId && !seen.has(g.id)) || null;
+  const seen = new Set(readLocalList(SEEN_GRANTS_KEY));
+  return cache.ownerGrants.find(g => g.userId === userId && !seen.has(g.id)) || null;
 }
 
 export function markGrantSeen(grantId) {
-  const seen = readList(SEEN_GRANTS_KEY);
+  const seen = readLocalList(SEEN_GRANTS_KEY);
   if (!seen.includes(grantId)) {
     seen.push(grantId);
     localStorage.setItem(SEEN_GRANTS_KEY, JSON.stringify(seen));
@@ -232,9 +335,7 @@ export function markGrantSeen(grantId) {
 
 export function membershipStatus(communityId, userId) {
   if (isOwner(communityId, userId)) return 'owner';
-  const req = getJoinRequests().find(
-    r => r.communityId === communityId && r.userId === userId
-  );
+  const req = cache.memberships.find(r => r.communityId === communityId && r.userId === userId);
   return req ? req.status : 'none';
 }
 
@@ -243,115 +344,105 @@ export function isApprovedMember(communityId, userId) {
   return status === 'owner' || status === 'approved';
 }
 
-export function requestToJoin(communityId, userId) {
-  const existing = getJoinRequests();
-  const already = existing.find(r => r.communityId === communityId && r.userId === userId);
-  if (already) return already;
-  const request = {
-    id: newId('r'),
-    communityId,
-    userId,
-    status: 'pending',
-    requestedAt: Date.now(),
-    decidedAt: null,
-    decidedById: null,
-  };
-  existing.push(request);
-  writeList(REQUESTS_KEY, existing);
+export async function requestToJoin(communityId, userId) {
+  const existing = cache.memberships.find(r => r.communityId === communityId && r.userId === userId);
+  if (existing) return existing;
+  const { data, error } = await supabase.from('community_memberships').insert({
+    community_id: communityId, user_id: userId, status: 'pending',
+  }).select().single();
+  if (error) return { error: error.message };
+  const request = mapMembership(data);
+  cache.memberships.push(request);
+  notify();
   return request;
 }
 
-export function requestToJoinByCode(code, userId) {
-  const community = getCommunities().find(c => c.code.toUpperCase() === code.trim().toUpperCase());
+export async function requestToJoinByCode(code, userId) {
+  const community = cache.communities.find(c => c.code.toUpperCase() === code.trim().toUpperCase());
   if (!community) return { error: 'No community found with that invite code.' };
   const status = membershipStatus(community.id, userId);
   if (status === 'owner') return { error: `You're already the owner of "${community.name}".` };
   if (status === 'approved') return { community, alreadyMember: true };
   if (status === 'pending') return { community, alreadyPending: true };
-  requestToJoin(community.id, userId);
+  const result = await requestToJoin(community.id, userId);
+  if (result.error) return { error: result.error };
   return { community, requested: true };
 }
 
-export function decideJoinRequest(requestId, decision, decidedById) {
-  const requests = getJoinRequests();
-  const idx = requests.findIndex(r => r.id === requestId);
-  if (idx === -1) return;
-  requests[idx] = {
-    ...requests[idx],
-    status: decision,
-    decidedAt: Date.now(),
-    decidedById,
-  };
-  writeList(REQUESTS_KEY, requests);
+export async function decideJoinRequest(requestId, decision, decidedById) {
+  const { data, error } = await supabase.from('community_memberships')
+    .update({ status: decision, decided_at: new Date().toISOString(), decided_by_id: decidedById })
+    .eq('id', requestId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const mapped = mapMembership(data);
+  const idx = cache.memberships.findIndex(r => r.id === requestId);
+  if (idx === -1) cache.memberships.push(mapped); else cache.memberships[idx] = mapped;
+  notify();
+  return { ok: true };
 }
 
 export function approvedMemberCount(communityId) {
-  const approved = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'approved').length;
-  return approved + 1; // +1 for the owner, who isn't a join request
+  const approved = cache.memberships.filter(r => r.communityId === communityId && r.status === 'approved').length;
+  return approved + 1; // +1 for the owner, who isn't a membership row
 }
 
 export function myCommunities(userId) {
   if (!userId) return [];
-  return getCommunities().filter(c => isApprovedMember(c.id, userId));
+  return cache.communities.filter(c => isApprovedMember(c.id, userId));
 }
 
 export function myPendingRequests(userId) {
   if (!userId) return [];
-  return getJoinRequests().filter(r => r.status === 'pending' && r.userId === userId);
+  return cache.memberships.filter(r => r.status === 'pending' && r.userId === userId);
 }
 
-// Whether new orders in this community need owner approval before moving to
-// purchase. Defaults true for communities created before this setting
-// existed (additive field, no version bump needed).
 export function isApprovalRequired(communityId) {
-  const community = getCommunities().find(c => c.id === communityId);
+  const community = cache.communities.find(c => c.id === communityId);
   return !community || community.requireOwnerApproval !== false;
 }
 
-export function setApprovalRequired(communityId, required) {
-  const communities = getCommunities();
-  const idx = communities.findIndex(c => c.id === communityId);
-  if (idx === -1) return;
-  communities[idx] = { ...communities[idx], requireOwnerApproval: !!required };
-  writeList(COMMUNITIES_KEY, communities);
+export async function setApprovalRequired(communityId, required) {
+  const { data, error } = await supabase.from('communities')
+    .update({ require_owner_approval: !!required })
+    .eq('id', communityId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const idx = cache.communities.findIndex(c => c.id === communityId);
+  if (idx !== -1) cache.communities[idx] = mapCommunity(data);
+  notify();
+  return { ok: true };
 }
 
-// Buyer access is owner-granted only — never automatic for approved members
-// (unlike worker/driver) — since it carries real purchasing/financial
-// responsibility. Mirrors the owner-grant shape in community.js exactly.
 export function getBuyerGrants() {
-  return readList(BUYER_GRANTS_KEY);
+  return cache.buyerGrants;
 }
 
 export function hasBuyerGrant(communityId, userId) {
-  return getBuyerGrants().some(g => g.communityId === communityId && g.userId === userId);
+  return cache.buyerGrants.some(g => g.communityId === communityId && g.userId === userId);
 }
 
 export function isBuyer(communityId, userId) {
   return hasBuyerGrant(communityId, userId);
 }
 
-// Every user id currently holding buyer access in this community.
+// Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
 export function getBuyerIds(communityId) {
-  return Array.from(new Set(getBuyerGrants().filter(g => g.communityId === communityId).map(g => g.userId)));
+  return Array.from(new Set(cache.buyerGrants.filter(g => g.communityId === communityId).map(g => g.userId)));
 }
 
-// Fires the same buyer_access_granted notification whether access came from
-// a direct grant (Team panel) or an approved request (decideBuyerRequest
-// below calls this too) — one place, so the two paths can never drift.
-export function grantBuyerAccess(communityId, userId, grantedById) {
-  const grants = getBuyerGrants();
-  if (grants.some(g => g.communityId === communityId && g.userId === userId)) {
-    return;
+export async function grantBuyerAccess(communityId, userId, grantedById) {
+  if (cache.buyerGrants.some(g => g.communityId === communityId && g.userId === userId)) {
+    return { ok: true, alreadyGranted: true };
   }
-  grants.push({
-    id: newId('bg'),
-    communityId,
-    userId,
-    grantedById,
-    grantedAt: Date.now(),
-  });
-  writeList(BUYER_GRANTS_KEY, grants);
+  const { data, error } = await supabase.from('buyer_grants').insert({
+    community_id: communityId, user_id: userId, granted_by_id: grantedById,
+  }).select().single();
+  if (error) return { ok: false, error: error.message };
+  cache.buyerGrants.push(mapGrant(data));
+  notify();
 
   const granterName = resolveDisplayName(grantedById);
   notifyUsers([userId], {
@@ -363,13 +454,15 @@ export function grantBuyerAccess(communityId, userId, grantedById) {
     actorName: granterName,
     navigationTarget: { communityId, role: 'buyer' },
   });
+  return { ok: true };
 }
 
-export function revokeBuyerAccess(communityId, userId, revokedById) {
-  const grants = getBuyerGrants().filter(
-    g => !(g.communityId === communityId && g.userId === userId)
-  );
-  writeList(BUYER_GRANTS_KEY, grants);
+export async function revokeBuyerAccess(communityId, userId, revokedById) {
+  const { error } = await supabase.from('buyer_grants').delete()
+    .eq('community_id', communityId).eq('user_id', userId);
+  if (error) return { ok: false, error: error.message };
+  cache.buyerGrants = cache.buyerGrants.filter(g => !(g.communityId === communityId && g.userId === userId));
+  notify();
 
   const revokerName = resolveDisplayName(revokedById);
   notifyUsers([userId], {
@@ -381,33 +474,29 @@ export function revokeBuyerAccess(communityId, userId, revokedById) {
     actorName: revokerName,
     navigationTarget: { communityId },
   });
+  return { ok: true };
 }
 
 export function getBuyerRequests() {
-  return readList(BUYER_REQUESTS_KEY);
+  return cache.buyerRequests;
 }
 
 export function buyerRequestStatus(communityId, userId) {
   if (hasBuyerGrant(communityId, userId)) return 'granted';
-  const req = getBuyerRequests().find(r => r.communityId === communityId && r.userId === userId);
+  const req = cache.buyerRequests.find(r => r.communityId === communityId && r.userId === userId);
   return req ? req.status : 'none';
 }
 
-export function requestBuyerRole(communityId, userId) {
-  const existing = getBuyerRequests();
-  const already = existing.find(r => r.communityId === communityId && r.userId === userId);
-  if (already) return already;
-  const request = {
-    id: newId('br'),
-    communityId,
-    userId,
-    status: 'pending',
-    requestedAt: Date.now(),
-    decidedAt: null,
-    decidedById: null,
-  };
-  existing.push(request);
-  writeList(BUYER_REQUESTS_KEY, existing);
+export async function requestBuyerRole(communityId, userId) {
+  const existing = cache.buyerRequests.find(r => r.communityId === communityId && r.userId === userId);
+  if (existing) return existing;
+  const { data, error } = await supabase.from('buyer_requests').insert({
+    community_id: communityId, user_id: userId, status: 'pending',
+  }).select().single();
+  if (error) return { error: error.message };
+  const request = mapBuyerRequest(data);
+  cache.buyerRequests.push(request);
+  notify();
 
   const requesterName = resolveDisplayName(userId);
   notifyUsers(getOwnerIds(communityId), {
@@ -424,30 +513,37 @@ export function requestBuyerRole(communityId, userId) {
   return request;
 }
 
-// Approving a buyer request also grants access in one step — a separate
-// "approve, then also remember to grant" motion would be an easy way for
-// the two to drift out of sync. grantBuyerAccess fires its own notification,
-// so the approved path is covered without duplicating it here.
-export function decideBuyerRequest(requestId, decision, decidedById) {
-  const requests = getBuyerRequests();
-  const idx = requests.findIndex(r => r.id === requestId);
-  if (idx === -1) return;
-  const request = requests[idx];
-  requests[idx] = { ...request, status: decision, decidedAt: Date.now(), decidedById };
-  writeList(BUYER_REQUESTS_KEY, requests);
+// Approving a buyer request also grants access in one step — grantBuyerAccess
+// fires its own notification, so the approved path is covered without
+// duplicating it here.
+export async function decideBuyerRequest(requestId, decision, decidedById) {
+  const request = cache.buyerRequests.find(r => r.id === requestId);
+  if (!request) return { ok: false, error: 'Request not found.' };
+  const { data, error } = await supabase.from('buyer_requests')
+    .update({ status: decision, decided_at: new Date().toISOString(), decided_by_id: decidedById })
+    .eq('id', requestId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const mapped = mapBuyerRequest(data);
+  const idx = cache.buyerRequests.findIndex(r => r.id === requestId);
+  if (idx !== -1) cache.buyerRequests[idx] = mapped;
+  notify();
+
   if (decision === 'approved') {
-    grantBuyerAccess(request.communityId, request.userId, decidedById);
+    await grantBuyerAccess(mapped.communityId, mapped.userId, decidedById);
   } else {
     const deciderName = resolveDisplayName(decidedById);
-    notifyUsers([request.userId], {
+    notifyUsers([mapped.userId], {
       type: 'buyer_access_rejected',
       title: 'Buyer access request declined',
       message: `${deciderName} declined your buyer access request.`,
-      communityId: request.communityId,
-      requestId: request.id,
+      communityId: mapped.communityId,
+      requestId: mapped.id,
       actorId: decidedById,
       actorName: deciderName,
-      navigationTarget: { communityId: request.communityId, view: 'profile' },
+      navigationTarget: { communityId: mapped.communityId, view: 'profile' },
     });
   }
+  return { ok: true };
 }
