@@ -9,6 +9,11 @@ import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './i
 import {
   subscribe, approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
 } from './orderLifecycle.js';
+// Phase 8E — read-only reuse of sites.js's existing data functions for the
+// dashboard's Sites summary card. No site CRUD/permission logic lives here;
+// creating/editing/archiving/assigning all still happens exclusively in
+// sitesView.js, reached via the sitestock:show-sites event below.
+import { subscribeSites, getActiveSites, getSiteMembers } from './sites.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -25,6 +30,9 @@ const teamList = document.getElementById('owner-team-list');
 const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
 const approvalToggle = document.getElementById('approval-required-toggle');
+const sitesSummaryListEl = document.getElementById('owner-sites-summary-list');
+const newSiteBtn = document.getElementById('owner-new-site-btn');
+const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
 
 // Groups the existing order.status values into the tabs an owner actually
 // needs to scan for "what needs attention" — no new statuses, this is a
@@ -209,6 +217,48 @@ function renderDashboard(inCommunity, communityId) {
     }).join('');
 }
 
+// Phase 8E — "enter a Community, immediately see its Sites" (see
+// CLAUDE.md's Site model / PROGRESS.md Phase 8E entry): a compact,
+// read-only summary of the community's active sites, right on the
+// dashboard. All CRUD/detail/member-assignment stays in sitesView.js —
+// clicking a row or "+ New site"/"Manage all Sites" just navigates there
+// (optionally deep-linked to one site), it never duplicates that logic here.
+function renderSitesSummary(communityId, inCommunity) {
+  const sites = getActiveSites(communityId).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (sites.length === 0) {
+    sitesSummaryListEl.innerHTML = '<p class="empty-hint">No sites yet — create the first one below.</p>';
+    return;
+  }
+
+  sitesSummaryListEl.innerHTML = sites.slice(0, 5).map(s => {
+    const memberCount = getSiteMembers(s.id).length;
+    const openCount = inCommunity.filter(o =>
+      o.siteId === s.id && !['delivered', 'rejected', 'cancelled'].includes(o.status)
+    ).length;
+    return `
+      <button type="button" class="result-card" data-summary-site-id="${s.id}">
+        <span class="result-name">${s.name}</span>
+        <span class="result-meta">${memberCount} ${memberCount === 1 ? 'employee' : 'employees'} &middot; ${openCount} open order${openCount === 1 ? '' : 's'}</span>
+      </button>
+    `;
+  }).join('');
+
+  sitesSummaryListEl.querySelectorAll('[data-summary-site-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('sitestock:show-sites', { detail: { siteId: btn.dataset.summarySiteId } }));
+    });
+  });
+}
+
+newSiteBtn.addEventListener('click', () => {
+  window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+});
+
+manageSitesBtn.addEventListener('click', () => {
+  window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+});
+
 function renderApprovalSetting(communityId) {
   approvalToggle.checked = isApprovalRequired(communityId);
 }
@@ -280,6 +330,7 @@ function render() {
   const inCommunity = latestOrders.filter(o => o.communityId === communityId);
 
   renderDashboard(inCommunity, communityId);
+  renderSitesSummary(communityId, inCommunity);
   renderTeam(communityId);
 
   if (selectedOrderId) {
@@ -604,6 +655,7 @@ subscribe(orders => {
 
 subscribeCommunities(render);
 subscribeOrderEvents(render);
+subscribeSites(render);
 
 // Keep the revert countdowns ticking even when nothing else changes — only
 // the tabs whose orders can actually show a live countdown (pending_purchase

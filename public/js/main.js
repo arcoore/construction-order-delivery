@@ -307,11 +307,14 @@ async function showRoleView() {
     return;
   }
 
-  const account = getLoggedInAccount();
-
   communityIndicator.textContent = `${community.name} — ${displayName}`;
   sessionBar.hidden = false;
-  menuSwitchRoleBtn.hidden = !!(account && account.defaultRole);
+  // Phase 8E fix: this used to hide "Switch role" whenever the account had
+  // a defaultRole — since every real account now has one (guest mode is
+  // gone), that hid it for 100% of accounts, regardless of whether they
+  // actually had more than one legitimate role to switch to. The correct
+  // condition is simply "is there anything else to switch to."
+  menuSwitchRoleBtn.hidden = roles.length <= 1;
   sessionLabel.textContent = `Logged in as ${ROLE_META[role].label}`;
   communityCircleBtn.textContent = getInitials(community.name);
   updateTopRightPills();
@@ -344,11 +347,11 @@ async function showRoleView() {
 // this deliberately doesn't re-derive community/role chrome the way
 // showRoleView does — it just swaps which section is visible and keeps the
 // existing session bar.
-async function showSitesView() {
+async function showSitesView(siteId = null) {
   showOnly(sitesView);
   updateTopRightPills();
   await refreshDataCaches();
-  refreshSitesView();
+  refreshSitesView(siteId);
 }
 
 // Set right before routing into a role-view from a notification click, so
@@ -387,9 +390,14 @@ async function enterCommunityFlow() {
     return;
   }
 
+  // resolveEntryRole itself now handles a missing/non-matching preferred
+  // role safely (returns null), so there's no separate "no defaultRole"
+  // branch needed here — every real account has one anyway (guest mode is
+  // gone), and the defensive fallback for the rare account that somehow
+  // doesn't is exactly the same "null -> show the picker" path.
   const account = getLoggedInAccount();
-  if (account && account.defaultRole) {
-    const role = resolveEntryRole(community.id, userId, account.defaultRole);
+  const role = resolveEntryRole(community.id, userId, account && account.defaultRole);
+  if (role) {
     setActiveRole(role);
     showRoleView();
   } else {
@@ -460,6 +468,14 @@ communitiesPillBtn.addEventListener('click', () => {
 
 sitesPillBtn.addEventListener('click', () => {
   showSitesView();
+});
+
+// Phase 8E — the owner dashboard's Sites summary card dispatches this
+// (rather than importing showSitesView directly) to avoid owner.js needing
+// to import main.js, matching the existing cross-module navigation pattern
+// already used for sitestock:show-profile / sitestock:go-to-auth.
+window.addEventListener('sitestock:show-sites', e => {
+  showSitesView(e.detail && e.detail.siteId ? e.detail.siteId : null);
 });
 
 sitesBackBtn.addEventListener('click', () => {

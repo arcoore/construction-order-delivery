@@ -190,7 +190,7 @@
   <section id="worker-view" class="view">
     <div class="panel" id="site-select-panel">
       <h1>Which site is this for?</h1>
-      <p class="hint">Pick the site you're ordering for &mdash; ask your owner to assign you to one if you don't see it here.</p>
+      <p class="hint">These are the sites in this community you've been assigned to &mdash; your owner manages site assignments, so ask them to add you to another one if you don't see it here.</p>
       <div id="worker-sites-list" class="community-list"></div>
     </div>
 
@@ -218,6 +218,16 @@
     <div class="panel">
       <h1 id="dashboard-title">Dashboard</h1>
       <div class="dashboard-stats" id="dashboard-stats"></div>
+    </div>
+
+    <div class="panel" id="owner-sites-summary-panel">
+      <h2>Sites</h2>
+      <p class="hint">The sites/projects in this community — create one, assign employees, and see each site's orders.</p>
+      <div id="owner-sites-summary-list" class="community-list"></div>
+      <div class="owner-actions">
+        <button type="button" class="btn btn-secondary" id="owner-new-site-btn">+ New site</button>
+        <button type="button" class="link-btn" id="owner-manage-sites-btn">Manage all Sites &rarr;</button>
+      </div>
     </div>
 
     <div class="panel">

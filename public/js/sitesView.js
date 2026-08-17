@@ -339,10 +339,22 @@ function wireDetailActions(site) {
   });
 }
 
-export function refreshSitesView() {
+// Phase 8E: an optional siteId (from the owner dashboard's Sites summary,
+// see main.js's sitestock:show-sites handler) opens straight into that
+// site's existing detail view instead of the default list — same
+// deep-link-on-entry pattern owner.js/buyer.js already use for orders. A
+// stale/foreign id (getSite returns nothing, or it belongs to a different
+// community) just falls through to the normal list, never a broken screen.
+export function refreshSitesView(siteId = null) {
   activeTab = 'active';
   tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.sitesTab === 'active'));
-  showList();
+  const communityId = getActiveCommunityId();
+  const target = siteId && getSite(siteId);
+  if (target && target.communityId === communityId) {
+    showDetail(siteId);
+  } else {
+    showList();
+  }
 }
 
 subscribe(orders => {

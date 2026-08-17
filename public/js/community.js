@@ -220,13 +220,21 @@ export function eligibleRoles(communityId, userId) {
   return roles;
 }
 
+// Phase 8E — rewritten to make each rule explicit rather than incidental,
+// per the approved routing checklist: exactly-one-role auto-enters, a valid
+// preference is honoured, worker+driver-only ambiguity defaults to worker
+// (unchanged precedent), and genuine multi-role ambiguity with no matching
+// preference returns null so the caller shows the picker instead of
+// guessing. Owner keeps its unconditional top priority — CLAUDE.md's
+// documented rule ("no matter what they picked at signup") is unchanged.
 export function resolveEntryRole(communityId, userId, preferredRole) {
   if (isOwner(communityId, userId)) return 'owner';
-  if (preferredRole === 'buyer' && isBuyer(communityId, userId)) return 'buyer';
-  if ((preferredRole === 'worker' || preferredRole === 'driver') && isApprovedMember(communityId, userId)) {
-    return preferredRole;
-  }
-  if (isApprovedMember(communityId, userId)) return 'worker';
+
+  const roles = eligibleRoles(communityId, userId); // never contains 'owner' here — isOwner already false
+  if (roles.length === 0) return null;
+  if (roles.length === 1) return roles[0];
+  if (preferredRole && roles.includes(preferredRole)) return preferredRole;
+  if (roles.length === 2 && roles.includes('worker') && roles.includes('driver')) return 'worker';
   return null;
 }
 
