@@ -1,10 +1,10 @@
-# SiteStock backend foundation (Phase 8A / 8B / 8C)
+# SiteStock backend foundation (Phase 8A / 8B / 8C / 8D.1)
 
-**Status: identity, companies (communities), sites, orders, order events, and cancellation requests are all now Supabase-backed and locally verified end-to-end through the real frontend (Phase 8B + Phase 8C). Only in-app notifications and notification preferences are still `localStorage`-only — see "Phase 8C — order lifecycle migration" below for exactly what moved this phase and what's still local. No cloud/production Supabase project exists yet — everything below runs against the local Supabase CLI dev stack only.**
+**Status: identity, companies (communities), sites, orders, order events, cancellation requests, notifications, and notification preferences are all now Supabase-backed and verified end-to-end through the real frontend (Phase 8B + 8C + 8D.1) — there is no localStorage-only data slice left in this app. See "Phase 8D.1 — server-backed notifications" and "Phase 8D.1 hardening" below for exactly what moved that phase and what a pre-commit audit tightened afterward.** A real hosted cloud project (`sitestock-dev`) exists too (see Phase 8C.5 note in the frontend's own CLAUDE.md) — migrations `0014` and `0015` have both been applied there as well as locally.
 
 ## What this is
 
-This directory is the Postgres/Supabase backend designed in the Phase 8 architecture document and built in Phase 8A, then wired to `public/` in two stages: Phase 8B (identity/companies/sites) and Phase 8C (orders/order events/cancellation requests). `public/` is **not** fully migrated — notifications remain local — see the Phase 8C section below for the exact remaining hybrid boundary.
+This directory is the Postgres/Supabase backend designed in the Phase 8 architecture document and built in Phase 8A, then wired to `public/` in three stages: Phase 8B (identity/companies/sites), Phase 8C (orders/order events/cancellation requests), and Phase 8D.1 (notifications/notification preferences). `public/` is now fully migrated off localStorage for data — the only `localStorage` keys left are two UI-only session pointers (active community id, active role), which were never meant to be shared data in the first place.
 
 ## Layout
 
@@ -18,18 +18,24 @@ supabase/
     0004_sites.sql                     — sites, site_memberships (composite FK cross-community guard)
     0005_orders_and_events.sql         — orders, order_events
     0006_cancellation_requests.sql     — cancellation_requests (partial-unique "one pending" constraint)
-    0007_notifications.sql             — notifications, notification_preferences (schema only, unwired)
+    0007_notifications.sql             — notifications, notification_preferences (schema only until Phase 8D.1)
     0008_permission_functions.sql      — is_owner / is_approved_member / can_access_site / etc.
     0009_rls_policies.sql              — every table's RLS policies, explicit per action
     0010_order_lifecycle_functions.sql — every order-lifecycle RPC function
     0011_grants.sql                     — explicit authenticated GRANTs (table + RPC EXECUTE)
     0012_widen_edit_order.sql          — Phase 8C: widened edit_order RPC (full field set, server-computed total_price)
+    0013_harden_rpc_auth_and_grants.sql — security hotfix: closed a hosted-only anon-execute gap on edit_order
+    0014_notifications_backend.sql     — Phase 8D.1: notification creation embedded in lifecycle RPCs + 7 new notify_* RPCs
+    0015_revoke_remove_notification_integrity.sql — Phase 8D.1 hardening: authoritative revoke_buyer_access/remove_site_member RPCs
   tests/                                — pgTAP tests, one concern per file
     00_helpers.sql                     — tests.create_user() / tests.authenticate_as()
     01_isolation_and_permissions.sql   — cross-company isolation, site/buyer permissions
     02_order_lifecycle_and_races.sql   — unauthorized actions, claim/purchase races, cancellation race
-    03_notification_isolation.sql      — notification recipient isolation
+    03_notification_isolation.sql      — notification recipient isolation (RLS only, pre-Phase-8D.1 fixture)
     04_edit_order_and_widening.sql     — Phase 8C: edit_order authorization, pricing, reapproval, stale-version conflict
+    05_rpc_auth_hardening.sql          — security hotfix regression coverage (anon-execute grants, null-safe identity checks)
+    06_notification_backend.sql        — Phase 8D.1: creation security, forgery prevention, preference filtering, identity isolation
+    07_notification_matrix.sql         — Phase 8D.1 hardening: full non-order success/forgery matrix + 12-type order-lifecycle progression
 ```
 
 ## How to actually run this
@@ -146,6 +152,79 @@ Same reasoning Phase 8B already established for `community.js`/`sites.js`: `orde
 ### What's deliberately NOT done this phase
 
 Notification migration (still local, unstarted), Supabase Realtime for orders (still poll-on-focus/view-entry, same as Phase 8B), a real server-side product/supplier catalogue (pricing input remains client-supplied, only the arithmetic is server-enforced — see the pricing trust boundary note above), and a production/cloud Supabase project.
+
+## Phase 8D.1 — server-backed notifications
+
+**Status: complete, locally verified and hosted-verified.** `public/js/notifications.js` was rewritten as a synchronous-facade-over-async-cache module backed by the real `notifications`/`notification_preferences` Postgres tables — created in Phase 8A (`0007_notifications.sql`) but left deliberately unwired until now ("notifications are always a system-generated side effect" — this phase is the writer that comment always implied).
+
+### The core design decision: two creation paths, not one generic writer
+
+Rejected a single generic "create any notification" RPC in favor of matching each notification type to where its underlying event is already authoritative:
+1. **Order-lifecycle notifications** (12 types) are appended *inside* the existing order-lifecycle RPCs (`create_order`, `edit_order`, `approve_order`, `reject_order`, `revert_approval`, `complete_purchase`, `claim_delivery`, `mark_collected`, `mark_delivered`, `cancel_delivery`, `request_cancellation`, `decide_cancellation_request`), in the same transaction as each RPC's own `order_events` insert. Content (title/message, via new `_order_label`/`_format_price` SQL helpers that mirror `orderLifecycle.js`'s old JS string templates and `data.js`'s `formatPrice` exactly) and recipient lists (owners/buyers/approved members, via direct SQL against `owner_grants`/`buyer_grants`/`community_memberships`, mirroring `getOwnerIds`/`getBuyerIds`/`approvedMembers`) are computed from the row the RPC itself just validated and wrote — never from client input.
+2. **Non-order notifications** (7 types: buyer access grant/revoke/request/reject, site member add/remove, site archive) come from `community.js`/`sites.js`'s pre-existing direct client table writes (grants/memberships were never RPCs, unlike orders). Seven new narrow `notify_*` RPCs were added instead of converting those writes to RPCs (a much larger, riskier change that would have touched already-working, already-tested code for no reason beyond notifications) — each one independently re-validates the specific claim against real database state before writing: `notify_buyer_access_granted(communityId, recipientId)` requires a `buyer_grants` row to actually exist matching `(communityId, recipientId, granted_by_id = auth.uid())`; for revoke/remove, where that row is already gone by the time the notify call happens, it re-validates `is_owner(communityId, auth.uid())` instead — the same authority RLS already required for the delete that just happened.
+
+### Security: the actual gap this closes
+
+`0007`'s schema shipped in Phase 8A with **no INSERT grant on `notifications` for `authenticated` at all** — confirmed still true at the start of this phase (a direct `insert into notifications (...)` as any real, legitimate authenticated user is refused with `42501`, not just discouraged by app convention). This phase never added that grant; it built the RPC layer instead. Verified directly, twice:
+- **Locally (pgTAP, `06_notification_backend.sql`)**: anon cannot read/write `notifications` at all; a stranger cannot read/mark-read another user's notification (RLS); a stranger cannot forge a notification via a raw insert OR via a `notify_*` RPC for a grant/membership they didn't create; preference rows are private and self-service only; a legitimate action produces the correct notification; a retried/duplicate lifecycle call does not create a duplicate notification (the same conditional-`UPDATE`-with-`WHERE`-status guard that already makes order-lifecycle concurrency safe means a retry never reaches the notification insert a second time); recipient identity isolation holds even between two users sharing an identical display name. **21/21 new tests, full suite 82/82** (61 carried over unchanged from Phase 8C.5's hardening + these 21).
+- **Against the hosted `sitestock-dev` project**, via raw HTTP requests against the real Auth/REST/RPC API (no frontend involved, since the frontend JS changes for this phase weren't deployed at verification time): signed up real accounts, drove a full create-order → owner-notified → approve → buyer-notified flow, confirmed a stranger's direct insert and forged `notify_buyer_access_granted` call are both refused with `42501`, confirmed an owner cannot read a worker's notification by id (RLS, empty result), and confirmed both notification read-state and preference changes persist correctly across genuinely independent HTTP requests (each request is its own fresh "session" by construction — no client-side cache exists to create a false positive).
+
+### Preference filtering, ported faithfully
+
+`notification_type_enabled_for(userId, type)` (new SQL function) is the single source of truth for creation-time preference filtering server-side, mirroring the retired client-side `NOTIFICATION_TYPES`/`DEFAULT_PREFS`/`isTypeEnabledFor` mapping exactly — same category/configurable/subKey assignment per type, same defaults (four category presets default `true`, the three delivery sub-switches default `false`). Every insert in every RPC above gates through it. Verified directly: turning a recipient's `approvalUpdates` preference off before an order is created produces zero `order_awaiting_approval` notification for them, even though order creation itself still succeeds normally.
+
+### What changed in `public/js/`
+
+- `notifications.js` rewritten: reads (`getNotificationsFor`, `getUnreadCount`, `getPreferences`) stay synchronous over an in-memory cache (refreshed on auth transition, and via `main.js`'s existing `refreshDataCaches()` on view-entry/window-focus, alongside community/site/order refresh); writes (`markRead`, `markUnread`, `markAllRead`, `savePreferences`) are genuinely `async`, hitting the tables directly (already RLS-scoped to `auth.uid()`, so this is safe for these specific operations, unlike creation). **`notifyUsers` no longer exists.**
+- `orderLifecycle.js` no longer imports or calls `notifications.js` at all — every order-lifecycle notification is now a side effect of the RPC call the function was already making for the state change itself.
+- `community.js`/`sites.js` call the relevant `notify_*` RPC immediately after their own existing, already-authorized direct table write succeeds, replacing their old `notifyUsers(...)` calls.
+- A genuine bootstrap bug was caught and fixed during local verification: `notifications.js`'s cache/refresh section was initially declared before its pub-sub section, but `subscribeAuth`'s callback fires synchronously and immediately on subscribe — this produced a real `ReferenceError: Cannot access 'listeners' before initialization` on every page load. Fixed by reordering (pub-sub first), matching the same ordering rule `orderLifecycle.js`'s own header comment already documents for its identical pattern. Re-verified clean afterward, in a fresh browser tab (not a reused one — see the multi-device note below for why that distinction mattered this session).
+
+### Multi-device proof, done without relying on the sequential-login caveat
+
+Earlier phases' multi-device verification used sequential login/logout of two accounts in one browser tab/tool session, with an explicitly disclosed caveat that this wasn't truly two independent devices. This phase did better on both ends tested:
+- **Locally**: two genuinely separate browser tabs, each with its own real Supabase session and independent in-memory JS module cache. An action in tab A (mark notification read, change a preference) was only visible in tab B after B's own next fetch (a fresh reload) — never instantly, confirming both "it does persist server-side" and "there is genuinely no Realtime push happening."
+- **Hosted**: raw HTTP requests with zero client-side cache at all — the strongest form of this proof, since each request is unambiguously independent by construction, not just "a different browser tab that might share some in-memory state."
+
+### What's deliberately NOT done this phase
+
+Supabase Realtime (no `supabase.channel()`, no `postgres_changes` subscription, anywhere) — explicitly out of scope, to be considered only after this phase's data layer is accepted on its own. Notification pruning/capping (the `notifications` table only grows — flagged as a known future item, not fixed). Any change to notification *content* or *preference semantics* beyond porting them faithfully server-side — this was a data-layer migration, not a product redesign.
+
+## Phase 8D.1 hardening (migration 0015)
+
+**Status: complete, locally and hosted-verified.** A strict pre-commit audit run before staging Phase 8D.1 found the overall design sound — no RLS weakening, no privilege escalation, no generic notification-forging endpoint, no lifecycle scope creep — but surfaced two real, previously-undisclosed gaps. Both are closed here, forward-only: `0014` is never edited (already applied to hosted at audit time).
+
+### Gap 1: revoke/remove notification-content-integrity
+
+`notify_buyer_access_revoked`/`notify_site_member_removed` (0014) could only re-validate "is the caller currently an owner of this community/site" — the `buyer_grants`/`site_memberships` row is already deleted by the time a *separate* notify call runs, so there's nothing left to check the specific claim against. A real owner could therefore call either RPC with an arbitrary recipient uuid and produce a misleading "your access was removed"/"you were removed from this site" notification for someone who was never actually revoked/removed. Not a privilege escalation (the caller must still be a genuine owner; actor attribution can't be spoofed; no actual grant/membership state was ever affected by the old notify-only RPCs) but a real content-integrity defect.
+
+**Fix**: two new authoritative RPCs, `revoke_buyer_access(communityId, recipientId)` and `remove_site_member(siteId, recipientId)`, replace the old "client deletes the row directly, then separately calls a notify RPC" pattern for exactly these two operations. Each:
+1. requires `auth.uid()`
+2. verifies owner authority (`is_owner`, derived from the site's own `community_id` for `remove_site_member` — never a client-supplied one)
+3. performs the `DELETE` itself and checks Postgres's own `FOUND` variable — if zero rows matched, the row never existed (or was already removed), and the function refuses with `42704` **before** any notification code is reachable, exactly mirroring how every order-lifecycle RPC's guarded `UPDATE ... WHERE ... RETURNING` already makes a failed/retried call structurally unable to reach its own notification insert
+4. inserts the notification, in the same transaction, only once the `DELETE` has been proven to have actually removed a real row
+
+This is strictly stronger than the old design: the database itself now proves the removed row genuinely existed. `public/js/community.js`'s `revokeBuyerAccess`/`public/js/sites.js`'s `removeSiteMember` now call these RPCs instead of a client-side delete. The two superseded RPCs (`notify_buyer_access_revoked`, `notify_site_member_removed`) are **not dropped** (their bodies stay exactly as 0014 defined them) — their `EXECUTE` grant to `authenticated` is revoked instead, so they become permanently unreachable by any client, closing the gap outright rather than just adding a better alternative alongside the still-callable old one. Verified directly (both locally and hosted): even a genuine owner calling `notify_buyer_access_revoked`/`notify_site_member_removed` now gets `42501` "permission denied for function."
+
+The other five `notify_*` RPCs (granted, requested, rejected, site_member_added, site_archived) are **unchanged** — they already validate against a fact that genuinely persists (an existing grant/request/membership row, or `status`+`decided_by_id`/`archived_by_id` on a row that's never deleted), so they don't have this class of gap.
+
+### Gap 2: test-coverage completeness
+
+The same audit found only 2 of 7 `notify_*` RPCs (`notify_buyer_access_granted`, `notify_site_archived`) and 2 of 12 order-lifecycle notification types (`order_awaiting_approval`, `order_ready_for_purchase`) had been positively exercised by an actual test run — the rest rested on code review alone, despite the Phase 8D.1 report's own wording ("cannot call *any* `notify_*` RPC") implying broader executable coverage than what had genuinely been run.
+
+**Fix**: `supabase/tests/07_notification_matrix.sql` (45 new tests), covering:
+- All 7 non-order paths: legitimate success + forgery/unauthorized refusal for each, including the new nonexistent-removal case (items 4, 13) specific to `revoke_buyer_access`/`remove_site_member`, plus explicit confirmation (items 17–18) that the two superseded RPCs are unreachable even for a genuine owner.
+- A genuine 6-order lifecycle progression (create → approve → reject; create → approve → revert; full purchase → claim → collect → deliver; claim → cancel; purchase → request-cancellation → reject; purchase → request-cancellation → approve) exercising all 12 order-lifecycle notification types at least once each, asserting correct recipient/type/order-id, not just "didn't throw."
+- No-duplicate spot-checks across the whole matrix.
+
+One real fixture bug was caught and fixed while writing this file: two of the six test orders were briefly created while the wrong test identity was authenticated (an owner instead of the intended worker), which the `create_order` RPC's own owner-bypass silently allowed — a genuine test-authoring mistake, not a product bug, caught immediately when the dependent `request_cancellation` calls correctly refused with "only the requester may..." Fixed by adding the missing `tests.authenticate_as` calls before those two `create_order`s.
+
+### Verification record
+
+- **Full pgTAP suite: 127/127** (82 carried over unchanged from before this hardening pass + 45 new).
+- **Local functional** (real dev-server UI session + direct RPC calls against it): legitimate Buyer revoke and Site-member removal both verified through the actual Team-panel/site-detail UI; a false/nonexistent revoke or removal refused with `42704` and no misleading notification; an unauthorized (non-owner) attempt refused with `42501` and the real grant/membership left untouched.
+- **Hosted**: migration `0015` applied to `sitestock-dev` (`supabase db push --linked`), parity re-confirmed 0001–0015 local ⇄ hosted, then the identical legitimate/false/unauthorized matrix re-proven via raw HTTP against the real REST/RPC API for both `revoke_buyer_access` and `remove_site_member`, plus spot-checks: raw `notifications` insert still refused, anon still cannot call `revoke_buyer_access`, a user's own notification query returns only their own rows, and both superseded RPCs return `42501` even for a real owner.
+- **Frontend regression**: grant/add-member, role switching, Community→Sites, Worker ordering, order notifications, and Driver's zero-price rendering were all re-confirmed working live in the same dev-server session as the revoke/remove checks — no regressions from routing those two mutations through the new RPCs.
 
 ## Security notes for whoever provisions the real project
 

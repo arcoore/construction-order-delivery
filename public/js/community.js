@@ -30,9 +30,8 @@
 //   - explicit full refetch exposed as refreshCommunityCache(), called by
 //     main.js on view entry into a role/community screen and on window
 //     focus (see main.js's Phase 8B bootstrap section)
-import { getCurrentUserId, primeProfiles, resolveDisplayName } from './identity.js';
+import { getCurrentUserId, primeProfiles } from './identity.js';
 import { subscribeAuth } from './auth.js';
-import { notifyUsers } from './notifications.js';
 import { supabase } from './supabaseClient.js';
 
 // --- UI-only local state (NOT retired to Supabase — see CLAUDE.md's
@@ -452,36 +451,28 @@ export async function grantBuyerAccess(communityId, userId, grantedById) {
   cache.buyerGrants.push(mapGrant(data));
   notify();
 
-  const granterName = resolveDisplayName(grantedById);
-  notifyUsers([userId], {
-    type: 'buyer_access_granted',
-    title: "You've been granted buyer access",
-    message: `${granterName} gave you buyer access.`,
-    communityId,
-    actorId: grantedById,
-    actorName: granterName,
-    navigationTarget: { communityId, role: 'buyer' },
+  // Best-effort: the grant itself already succeeded and is the thing that
+  // actually matters — a notify failure here is logged, never allowed to
+  // make an already-successful grant look like it failed.
+  const { error: notifyError } = await supabase.rpc('notify_buyer_access_granted', {
+    p_community_id: communityId, p_recipient_id: userId,
   });
+  if (notifyError) console.error('notify_buyer_access_granted failed:', notifyError.message);
   return { ok: true };
 }
 
+// Phase 8D.1 hardening (0015): the removal and its notification are now one
+// atomic server-side operation (revoke_buyer_access RPC) — the database
+// itself proves a real grant existed before any notification is created,
+// rather than a client delete followed by a separately-trusted notify call.
+// See 0015_revoke_remove_notification_integrity.sql for the full rationale.
 export async function revokeBuyerAccess(communityId, userId, revokedById) {
-  const { error } = await supabase.from('buyer_grants').delete()
-    .eq('community_id', communityId).eq('user_id', userId);
+  const { error } = await supabase.rpc('revoke_buyer_access', {
+    p_community_id: communityId, p_recipient_id: userId,
+  });
   if (error) return { ok: false, error: error.message };
   cache.buyerGrants = cache.buyerGrants.filter(g => !(g.communityId === communityId && g.userId === userId));
   notify();
-
-  const revokerName = resolveDisplayName(revokedById);
-  notifyUsers([userId], {
-    type: 'buyer_access_revoked',
-    title: 'Buyer access removed',
-    message: `${revokerName} removed your buyer access.`,
-    communityId,
-    actorId: revokedById,
-    actorName: revokerName,
-    navigationTarget: { communityId },
-  });
   return { ok: true };
 }
 
@@ -506,18 +497,8 @@ export async function requestBuyerRole(communityId, userId) {
   cache.buyerRequests.push(request);
   notify();
 
-  const requesterName = resolveDisplayName(userId);
-  notifyUsers(getOwnerIds(communityId), {
-    type: 'buyer_access_requested',
-    title: 'Buyer access requested',
-    message: `${requesterName} requested buyer access.`,
-    communityId,
-    requestId: request.id,
-    actorId: userId,
-    actorName: requesterName,
-    navigationTarget: { communityId, role: 'owner' },
-  });
-
+  const { error: notifyError } = await supabase.rpc('notify_buyer_access_requested', { p_request_id: request.id });
+  if (notifyError) console.error('notify_buyer_access_requested failed:', notifyError.message);
   return request;
 }
 
@@ -541,17 +522,8 @@ export async function decideBuyerRequest(requestId, decision, decidedById) {
   if (decision === 'approved') {
     await grantBuyerAccess(mapped.communityId, mapped.userId, decidedById);
   } else {
-    const deciderName = resolveDisplayName(decidedById);
-    notifyUsers([mapped.userId], {
-      type: 'buyer_access_rejected',
-      title: 'Buyer access request declined',
-      message: `${deciderName} declined your buyer access request.`,
-      communityId: mapped.communityId,
-      requestId: mapped.id,
-      actorId: decidedById,
-      actorName: deciderName,
-      navigationTarget: { communityId: mapped.communityId, view: 'profile' },
-    });
+    const { error: notifyError } = await supabase.rpc('notify_buyer_access_rejected', { p_request_id: requestId });
+    if (notifyError) console.error('notify_buyer_access_rejected failed:', notifyError.message);
   }
   return { ok: true };
 }

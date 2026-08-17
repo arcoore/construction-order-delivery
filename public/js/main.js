@@ -18,6 +18,7 @@ import {
 import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
   markRead, markUnread, markAllRead, getPreferences, savePreferences,
+  refreshNotificationCache,
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
 import { refreshOrderCache } from './orderLifecycle.js';
@@ -34,9 +35,9 @@ import { refreshOrderCache } from './orderLifecycle.js';
 // grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
   try {
-    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache()]);
+    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache()]);
   } catch (err) {
-    console.error('SiteStock: failed to refresh community/site/order data', err);
+    console.error('SiteStock: failed to refresh community/site/order/notification data', err);
   }
 }
 
@@ -589,20 +590,20 @@ function renderNotifList() {
     btn.addEventListener('click', () => openNotification(btn.dataset.notifOpen));
   });
   notifList.querySelectorAll('[data-notif-toggle]').forEach(btn => {
-    btn.addEventListener('click', e => {
+    btn.addEventListener('click', async e => {
       e.stopPropagation();
       const id = btn.dataset.notifToggle;
       const n = getNotificationsFor(getCurrentUserId()).find(x => x.id === id);
       if (!n) return;
-      if (n.read) markUnread(id); else markRead(id);
+      if (n.read) await markUnread(id); else await markRead(id);
     });
   });
 }
 
-function openNotification(id) {
+async function openNotification(id) {
   const n = getNotificationsFor(getCurrentUserId()).find(x => x.id === id);
   if (!n) return;
-  markRead(id);
+  await markRead(id);
   notifPanel.hidden = true;
   navigateToNotification(n);
 }
@@ -661,8 +662,8 @@ notifBellBtn.addEventListener('click', e => {
 
 notifPanel.addEventListener('click', e => e.stopPropagation());
 
-notifMarkAllBtn.addEventListener('click', () => {
-  markAllRead(getCurrentUserId());
+notifMarkAllBtn.addEventListener('click', async () => {
+  await markAllRead(getCurrentUserId());
 });
 
 subscribeNotifications(renderNotifBell);
@@ -697,10 +698,11 @@ prefDeliveryAvailable.addEventListener('change', () => { prefsDraft.deliveryAvai
 prefDeliveryClaimed.addEventListener('change', () => { prefsDraft.deliveryClaimedEnabled = prefDeliveryClaimed.checked; });
 prefDeliveryCollected.addEventListener('change', () => { prefsDraft.deliveryCollectedEnabled = prefDeliveryCollected.checked; });
 
-notifPrefsSaveBtn.addEventListener('click', () => {
-  savePreferences(getCurrentUserId(), prefsDraft);
+notifPrefsSaveBtn.addEventListener('click', async () => {
+  const draft = prefsDraft;
   prefsDraft = null;
   notifPrefsModal.hidden = true;
+  await savePreferences(getCurrentUserId(), draft);
 });
 
 notifPrefsCancelBtn.addEventListener('click', () => {

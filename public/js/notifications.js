@@ -1,57 +1,38 @@
-// The single storage/read-state owner for in-app notifications. UI code must
-// never touch sitestock_notifications_v1 or sitestock_notification_prefs_v1
-// directly — everything goes through this module, exactly like store.js/
-// community.js own their respective storage.
+// Phase 8D.1 — notifications and notification preferences are now real
+// Supabase tables (`notifications`, `notification_preferences`; RLS-enforced
+// — see supabase/migrations/0007_notifications.sql / 0009_rls_policies.sql /
+// 0014_notifications_backend.sql), following the exact synchronous-facade-
+// over-async-cache pattern community.js/sites.js/orderLifecycle.js already
+// established: reads (getNotificationsFor, getUnreadCount, getPreferences)
+// stay SYNCHRONOUS over an in-memory cache — main.js's notification bell/
+// panel/prefs-modal render code calls these inline, unconverted; every
+// write (markRead, markUnread, markAllRead, savePreferences) is genuinely
+// `async`.
 //
-// recipientUserId is the only field ever used to decide "is this mine" —
-// never a display name (see identity.js). actorName is a cosmetic snapshot
-// only, mirroring orderLifecycle.js's event log.
+// CREATION IS NO LONGER A CLIENT-SIDE OPERATION. There is no `notifyUsers`
+// export anymore, and no INSERT grant on `notifications` for `authenticated`
+// at all (see 0007's original comment: "notifications are always a system-
+// generated side effect" — 0014 is the writer that comment always intended).
+// Every notification is created server-side: order-lifecycle notifications
+// are appended inside the existing order-lifecycle RPCs in the same
+// transaction as their order_events insert (orderLifecycle.js calls those
+// RPCs already, for the state change itself — it does not additionally call
+// anything here to also get a notification, the RPC already did it); the
+// seven non-order types (buyer access, site membership/archive) are created
+// by seven narrow `notify_*` RPCs that community.js/sites.js call directly
+// via `supabase.rpc(...)` immediately after their own already-authorized
+// direct table write succeeds — see this module's header history (this
+// comment block) if a future phase considers adding a client notification
+// path again: don't reintroduce a generic client-side notification writer,
+// the whole point of 0014 was closing that exact gap.
 //
-// This module is a leaf: it knows nothing about orders, communities, or
-// permissions. Callers (orderLifecycle.js, community.js) compute recipient
-// user ids themselves using community.js's existing permission functions,
-// and pass fully-formed, role-appropriate title/message text in — that's
-// what keeps driver-facing content free of prices: the caller decides what
-// each recipient is allowed to see, this module just stores and routes it.
-const NOTIFS_KEY = 'sitestock_notifications_v1';
-const PREFS_KEY = 'sitestock_notification_prefs_v1';
+// recipientUserId is still the only field ever used to decide "is this
+// mine" — never a display name (see identity.js) — RLS now enforces this as
+// a real security boundary too, not just an app-level convention.
+import { getCurrentUserId } from './identity.js';
+import { subscribeAuth } from './auth.js';
+import { supabase } from './supabaseClient.js';
 
-// Every notification type's category (for preference filtering) and whether
-// it can be muted at all. buyer_access_granted/revoked are non-configurable
-// because they directly affect the recipient's own permissions.
-const NOTIFICATION_TYPES = {
-  order_awaiting_approval: { category: 'approvalUpdates', configurable: true },
-  order_rejected: { category: 'approvalUpdates', configurable: true },
-  approval_reverted: { category: 'approvalUpdates', configurable: true },
-  order_ready_for_purchase: { category: 'orderUpdates', configurable: true },
-  delivery_available: { category: 'deliveryUpdates', configurable: true, subKey: 'deliveryAvailableEnabled' },
-  delivery_claimed: { category: 'deliveryUpdates', configurable: true, subKey: 'deliveryClaimedEnabled' },
-  delivery_cancelled: { category: 'deliveryUpdates', configurable: true },
-  delivery_collected: { category: 'deliveryUpdates', configurable: true, subKey: 'deliveryCollectedEnabled' },
-  order_delivered: { category: 'deliveryUpdates', configurable: true },
-  buyer_access_requested: { category: 'roleUpdates', configurable: true },
-  buyer_access_granted: { category: 'roleUpdates', configurable: false },
-  buyer_access_rejected: { category: 'roleUpdates', configurable: true },
-  buyer_access_revoked: { category: 'roleUpdates', configurable: false },
-  // Site membership/archive changes directly affect what the recipient can
-  // create orders for or purchase, exactly like buyer access above — same
-  // non-configurable treatment, same reasoning, same category.
-  site_member_added: { category: 'roleUpdates', configurable: false },
-  site_member_removed: { category: 'roleUpdates', configurable: false },
-  site_archived: { category: 'roleUpdates', configurable: false },
-  // Phase 7B — Worker corrections & cancellation. All three are ordinary,
-  // configurable orderUpdates: unlike the role/permission-change types
-  // above, nothing here changes what the recipient is allowed to do, so
-  // there's no reason to force them on.
-  cancellation_requested: { category: 'orderUpdates', configurable: true },
-  cancellation_approved: { category: 'orderUpdates', configurable: true },
-  cancellation_rejected: { category: 'orderUpdates', configurable: true },
-};
-
-// Delivery updates deliberately has mixed defaults within one category
-// (cancelled/delivered default ON, the three "routine" ones default OFF) —
-// that's why those three get their own subKey above and their own default
-// here, rather than everything just inheriting the category's default.
 const DEFAULT_PREFS = {
   orderUpdates: true,
   approvalUpdates: true,
@@ -62,165 +43,192 @@ const DEFAULT_PREFS = {
   deliveryCollectedEnabled: false,
 };
 
-function readNotifs() {
-  try {
-    const raw = localStorage.getItem(NOTIFS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+function mapNotificationRow(r) {
+  return {
+    id: r.id,
+    recipientUserId: r.recipient_user_id,
+    type: r.type,
+    category: r.category,
+    title: r.title,
+    message: r.message,
+    communityId: r.community_id,
+    orderId: r.order_id,
+    requestId: r.request_id,
+    eventId: r.event_id,
+    siteId: r.site_id,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    navigationTarget: r.navigation_target,
+    createdAt: new Date(r.created_at).getTime(),
+    read: r.read,
+    readAt: r.read_at ? new Date(r.read_at).getTime() : null,
+  };
 }
 
-function writeNotifs(list) {
-  localStorage.setItem(NOTIFS_KEY, JSON.stringify(list));
-  notify();
+function mapPrefsRow(r) {
+  return {
+    orderUpdates: r.order_updates,
+    approvalUpdates: r.approval_updates,
+    deliveryUpdates: r.delivery_updates,
+    roleUpdates: r.role_updates,
+    deliveryAvailableEnabled: r.delivery_available_enabled,
+    deliveryClaimedEnabled: r.delivery_claimed_enabled,
+    deliveryCollectedEnabled: r.delivery_collected_enabled,
+  };
 }
 
-function readPrefsList() {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+function prefsPatchToRow(patch) {
+  const row = {};
+  if (patch.orderUpdates !== undefined) row.order_updates = patch.orderUpdates;
+  if (patch.approvalUpdates !== undefined) row.approval_updates = patch.approvalUpdates;
+  if (patch.deliveryUpdates !== undefined) row.delivery_updates = patch.deliveryUpdates;
+  if (patch.roleUpdates !== undefined) row.role_updates = patch.roleUpdates;
+  if (patch.deliveryAvailableEnabled !== undefined) row.delivery_available_enabled = patch.deliveryAvailableEnabled;
+  if (patch.deliveryClaimedEnabled !== undefined) row.delivery_claimed_enabled = patch.deliveryClaimedEnabled;
+  if (patch.deliveryCollectedEnabled !== undefined) row.delivery_collected_enabled = patch.deliveryCollectedEnabled;
+  return row;
 }
 
-function writePrefsList(list) {
-  localStorage.setItem(PREFS_KEY, JSON.stringify(list));
-  notifyPrefs();
-}
-
+// --- Pub-sub -------------------------------------------------------------
+// Declared before refreshNotificationCache/the subscribeAuth wiring below,
+// since subscribeAuth calls its callback synchronously and immediately on
+// subscribe — refreshNotificationCache's early-return branch calls notify()/
+// notifyPrefs() right away, which would be a temporal-dead-zone error if
+// these were declared any later (same ordering rule orderLifecycle.js's own
+// header comment documents for its identical pattern).
 const listeners = new Set();
 function notify() {
-  const all = readNotifs();
-  listeners.forEach(fn => fn(all));
+  listeners.forEach(fn => fn(cache.notifications));
+}
+export function subscribeNotifications(fn) {
+  listeners.add(fn);
+  fn(cache.notifications);
+  return () => listeners.delete(fn);
 }
 
 const prefsListeners = new Set();
 function notifyPrefs() {
   prefsListeners.forEach(fn => fn());
 }
-
-window.addEventListener('storage', e => {
-  if (e.key === NOTIFS_KEY) notify();
-  if (e.key === PREFS_KEY) notifyPrefs();
-});
-
-export function subscribeNotifications(fn) {
-  listeners.add(fn);
-  fn(readNotifs());
-  return () => listeners.delete(fn);
-}
-
 export function subscribeNotificationPreferences(fn) {
   prefsListeners.add(fn);
   fn();
   return () => prefsListeners.delete(fn);
 }
 
-function newId() {
-  return crypto.randomUUID ? crypto.randomUUID() : `notif-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+// --- Cache -------------------------------------------------------------
+// RLS already scopes both tables to auth.uid() (see 0009/0007), so this
+// cache only ever holds the CURRENT user's own notifications/prefs row —
+// there is no cross-user data sitting in memory to accidentally leak
+// between accounts on a shared device.
+let cache = { notifications: [], prefs: null };
+export let notificationCacheReady = false;
+
+export async function refreshNotificationCache() {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    cache = { notifications: [], prefs: null };
+    notificationCacheReady = true;
+    notify();
+    notifyPrefs();
+    return;
+  }
+  const [notifsRes, prefsRes] = await Promise.all([
+    supabase.from('notifications').select('*'),
+    supabase.from('notification_preferences').select('*').maybeSingle(),
+  ]);
+  cache = {
+    notifications: (notifsRes.data || []).map(mapNotificationRow),
+    prefs: prefsRes.data ? mapPrefsRow(prefsRes.data) : null,
+  };
+  notificationCacheReady = true;
+  notify();
+  notifyPrefs();
 }
 
-export function getPreferences(userId) {
-  const rec = readPrefsList().find(p => p.userId === userId);
-  return rec ? { ...DEFAULT_PREFS, ...rec } : { ...DEFAULT_PREFS };
-}
+// Refetches on every auth transition (login, logout, account switch) —
+// clears to empty immediately on logout, loads fresh on login, exactly like
+// community.js/sites.js/orderLifecycle.js's identical subscriptions. This is
+// in addition to main.js's explicit refreshDataCaches() on view entry/focus.
+subscribeAuth(() => { refreshNotificationCache(); });
 
-export function savePreferences(userId, prefs) {
-  const list = readPrefsList();
-  const idx = list.findIndex(p => p.userId === userId);
-  const record = { ...DEFAULT_PREFS, ...prefs, userId, updatedAt: Date.now() };
-  if (idx === -1) list.push(record); else list[idx] = record;
-  writePrefsList(list);
-}
-
-// Creation-time filtering: if a category (or sub-switch) is off, the
-// notification is simply never written for that recipient. Turning the
-// preference back on later does not retroactively create what was missed —
-// there is nothing to "reveal," which is the deliberate, simpler behaviour.
-function isTypeEnabledFor(userId, type) {
-  const meta = NOTIFICATION_TYPES[type];
-  if (!meta || !meta.configurable) return true;
-  const prefs = getPreferences(userId);
-  if (prefs[meta.category] === false) return false;
-  if (meta.subKey) return prefs[meta.subKey] !== false;
-  return true;
-}
-
-// The single write path. Recipients are computed by the caller using
-// community.js's own permission functions — this module stays a leaf, no
-// permission logic lives here. The acting user is always excluded, even if
-// they'd otherwise be in the recipient list (no self-notifications).
-export function notifyUsers(recipientUserIds, {
-  type, title, message, communityId = null, orderId = null, requestId = null,
-  eventId = null, siteId = null, actorId = null, actorName = null, navigationTarget = null,
-}) {
-  const uniqueRecipients = Array.from(new Set((recipientUserIds || []).filter(Boolean)));
-  const notifs = readNotifs();
-  let changed = false;
-  uniqueRecipients.forEach(recipientUserId => {
-    if (recipientUserId === actorId) return;
-    if (!isTypeEnabledFor(recipientUserId, type)) return;
-    notifs.push({
-      id: newId(),
-      recipientUserId,
-      type,
-      category: NOTIFICATION_TYPES[type]?.category ?? null,
-      title,
-      message,
-      communityId,
-      orderId,
-      requestId,
-      eventId,
-      siteId,
-      actorId,
-      actorName,
-      navigationTarget,
-      createdAt: Date.now(),
-      read: false,
-      readAt: null,
-    });
-    changed = true;
-  });
-  if (changed) writeNotifs(notifs);
-}
+// --- Reads (synchronous, cache-backed) ------------------------------------
 
 export function getNotificationsFor(userId) {
-  return readNotifs().filter(n => n.recipientUserId === userId).sort((a, b) => b.createdAt - a.createdAt);
+  return cache.notifications.filter(n => n.recipientUserId === userId).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function getUnreadCount(userId) {
-  return readNotifs().filter(n => n.recipientUserId === userId && !n.read).length;
+  return cache.notifications.filter(n => n.recipientUserId === userId && !n.read).length;
 }
 
-export function markRead(id) {
-  const notifs = readNotifs();
-  const idx = notifs.findIndex(n => n.id === id);
-  if (idx === -1) return;
-  notifs[idx] = { ...notifs[idx], read: true, readAt: Date.now() };
-  writeNotifs(notifs);
+// userId is accepted for interface parity with the pre-8D.1 signature (every
+// call site already passes getCurrentUserId()) — RLS means the cache can
+// only ever contain the current user's own preferences row regardless, so a
+// mismatched userId would just fall through to defaults, never someone
+// else's real preferences.
+export function getPreferences(userId) {
+  if (userId !== getCurrentUserId()) return { ...DEFAULT_PREFS };
+  return cache.prefs ? { ...DEFAULT_PREFS, ...cache.prefs } : { ...DEFAULT_PREFS };
 }
 
-export function markUnread(id) {
-  const notifs = readNotifs();
-  const idx = notifs.findIndex(n => n.id === id);
-  if (idx === -1) return;
-  notifs[idx] = { ...notifs[idx], read: false, readAt: null };
-  writeNotifs(notifs);
+// --- Writes (genuinely async) ---------------------------------------------
+
+export async function markRead(id) {
+  const { data, error } = await supabase.from('notifications')
+    .update({ read: true, read_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const mapped = mapNotificationRow(data);
+  const idx = cache.notifications.findIndex(n => n.id === id);
+  if (idx !== -1) cache.notifications[idx] = mapped;
+  notify();
+  return { ok: true };
 }
 
-// Only ever touches rows already filtered to this userId — there is no
-// broader set for it to reach, by construction of the query itself.
-export function markAllRead(userId) {
-  const notifs = readNotifs();
-  let changed = false;
-  const updated = notifs.map(n => {
-    if (n.recipientUserId === userId && !n.read) {
-      changed = true;
-      return { ...n, read: true, readAt: Date.now() };
-    }
-    return n;
+export async function markUnread(id) {
+  const { data, error } = await supabase.from('notifications')
+    .update({ read: false, read_at: null })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const mapped = mapNotificationRow(data);
+  const idx = cache.notifications.findIndex(n => n.id === id);
+  if (idx !== -1) cache.notifications[idx] = mapped;
+  notify();
+  return { ok: true };
+}
+
+// RLS's own using-clause (recipient_user_id = auth.uid()) is the real
+// boundary here — this UPDATE's WHERE clause is a query-shaping convenience
+// on top of that, not the security check itself.
+export async function markAllRead(userId) {
+  const { data, error } = await supabase.from('notifications')
+    .update({ read: true, read_at: new Date().toISOString() })
+    .eq('recipient_user_id', userId)
+    .eq('read', false)
+    .select();
+  if (error) return { ok: false, error: error.message };
+  (data || []).forEach(row => {
+    const mapped = mapNotificationRow(row);
+    const idx = cache.notifications.findIndex(n => n.id === mapped.id);
+    if (idx !== -1) cache.notifications[idx] = mapped; else cache.notifications.push(mapped);
   });
-  if (changed) writeNotifs(updated);
+  notify();
+  return { ok: true };
+}
+
+export async function savePreferences(userId, patch) {
+  const row = { user_id: userId, ...prefsPatchToRow({ ...DEFAULT_PREFS, ...patch }), updated_at: new Date().toISOString() };
+  const { data, error } = await supabase.from('notification_preferences')
+    .upsert(row, { onConflict: 'user_id' })
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  cache.prefs = mapPrefsRow(data);
+  notifyPrefs();
+  return { ok: true };
 }

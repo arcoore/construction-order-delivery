@@ -17,9 +17,8 @@
 // show a UI affordance a user can no longer use, and the real write is
 // independently re-checked server-side regardless.
 import { isOwner, isApprovedMember, isBuyer } from './community.js';
-import { getCurrentUserId, primeProfiles, resolveDisplayName } from './identity.js';
+import { getCurrentUserId, primeProfiles } from './identity.js';
 import { subscribeAuth } from './auth.js';
-import { notifyUsers } from './notifications.js';
 import { supabase } from './supabaseClient.js';
 
 const listeners = new Set();
@@ -205,20 +204,8 @@ async function setSiteStatus(siteId, status, actorId) {
 export async function archiveSite(siteId, actorId) {
   const result = await setSiteStatus(siteId, 'archived', actorId);
   if (result.ok) {
-    const memberIds = getSiteMembers(siteId);
-    if (memberIds.length > 0) {
-      const actorName = resolveDisplayName(actorId);
-      notifyUsers(memberIds, {
-        type: 'site_archived',
-        title: 'Site archived',
-        message: `${actorName} archived ${result.site.name}. You can no longer create new orders for it.`,
-        communityId: result.site.communityId,
-        siteId: result.site.id,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: result.site.communityId, role: 'worker', siteId: result.site.id },
-      });
-    }
+    const { error: notifyError } = await supabase.rpc('notify_site_archived', { p_site_id: siteId });
+    if (notifyError) console.error('notify_site_archived failed:', notifyError.message);
   }
   return result;
 }
@@ -282,48 +269,29 @@ export async function addSiteMember(siteId, userId, actorId) {
   cache.memberships.push(mapMembership(data));
   notify();
 
-  const actorName = resolveDisplayName(actorId);
-  notifyUsers([userId], {
-    type: 'site_member_added',
-    title: 'Added to a site',
-    message: `${actorName} added you to ${site.name}.`,
-    communityId: site.communityId,
-    siteId: site.id,
-    actorId,
-    actorName,
-    navigationTarget: { communityId: site.communityId, role: 'worker', siteId: site.id },
-  });
-
+  const { error: notifyError } = await supabase.rpc('notify_site_member_added', { p_site_id: siteId, p_recipient_id: userId });
+  if (notifyError) console.error('notify_site_member_added failed:', notifyError.message);
   return { ok: true };
 }
 
+// Phase 8D.1 hardening (0015): the removal and its notification are now one
+// atomic server-side operation (remove_site_member RPC) — the database
+// itself proves a real membership existed before any notification is
+// created, rather than a client delete followed by a separately-trusted
+// notify call. The isOwner check below stays as a client-side fast-fail for
+// UX (avoids a round trip for an obviously-unauthorized attempt); the RPC's
+// own is_owner + existence checks are the real, non-bypassable boundary.
+// See 0015_revoke_remove_notification_integrity.sql for the full rationale.
 export async function removeSiteMember(siteId, userId, actorId) {
   const site = getSite(siteId);
   if (!site) return { ok: false, error: 'Site not found.' };
   if (!isOwner(site.communityId, actorId)) {
     return { ok: false, error: 'Only the owner can remove employees from a site.' };
   }
-  const wasMember = isSiteMember(siteId, userId);
-  const { error } = await supabase.from('site_memberships').delete()
-    .eq('site_id', siteId).eq('user_id', userId);
+  const { error } = await supabase.rpc('remove_site_member', { p_site_id: siteId, p_recipient_id: userId });
   if (error) return { ok: false, error: error.message };
   cache.memberships = cache.memberships.filter(m => !(m.siteId === siteId && m.userId === userId));
   notify();
-
-  if (wasMember) {
-    const actorName = resolveDisplayName(actorId);
-    notifyUsers([userId], {
-      type: 'site_member_removed',
-      title: 'Removed from a site',
-      message: `${actorName} removed you from ${site.name}.`,
-      communityId: site.communityId,
-      siteId: site.id,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: site.communityId, role: 'worker', siteId: site.id },
-    });
-  }
-
   return { ok: true };
 }
 

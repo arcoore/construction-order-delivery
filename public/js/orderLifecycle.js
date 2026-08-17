@@ -28,10 +28,14 @@
 // ACTOR IDENTITY: every RPC function derives the acting user from auth.uid()
 // and the acting display name from a server-side profiles lookup
 // (_current_display_name()) — never from a parameter. This module doesn't
-// accept or send actorId/actorName to any RPC; where a notification needs
-// "who did this," it reads getCurrentUserId()/getCurrentDisplayName() from
-// identity.js directly (the same live session the RPC call itself just used
-// auth.uid() against), never a value threaded in from a caller.
+// accept or send actorId/actorName to any RPC.
+//
+// NOTIFICATIONS (Phase 8D.1): every order-lifecycle notification is now
+// written server-side, inside the same RPC/transaction as the state change
+// itself and the order_events insert — see
+// supabase/migrations/0014_notifications_backend.sql. This module no longer
+// imports or calls notifications.js at all; there is nothing left for it to
+// do here once the RPC call above has resolved.
 //
 // PRICING TRUST BOUNDARY: unit_price is still client-supplied — there is no
 // server-side product/stockist catalogue (public/js/data.js is a static
@@ -42,12 +46,10 @@
 // unit_price * quantity — this module never sends a total_price to any RPC,
 // and nothing in this file trusts totalPrice for anything numeric.
 import { supabase } from './supabaseClient.js';
-import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
+import { getCurrentUserId } from './identity.js';
 import { subscribeAuth } from './auth.js';
-import { getOwnerIds, getBuyerIds, approvedMembers, refreshCommunityCache } from './community.js';
+import { refreshCommunityCache } from './community.js';
 import { refreshSitesCache } from './sites.js';
-import { notifyUsers } from './notifications.js';
-import { formatPrice } from './data.js';
 
 export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000; // documented server-side too (0010's revert_approval) — kept exported since nothing currently reads it, but harmless to preserve for any future UI countdown display.
 
@@ -253,10 +255,6 @@ function getOrder(orderId) {
   return cache.orders.find(o => o.id === orderId) || null;
 }
 
-function orderLabel(order) {
-  return `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
-}
-
 // --- Cache mutation helpers ------------------------------------------
 
 function upsertOrder(order) {
@@ -363,34 +361,9 @@ export async function createOrder(fields) {
   const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', order.id);
   if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-  if (order.approvalWasRequired) {
-    notifyUsers(getOwnerIds(order.communityId), {
-      type: 'order_awaiting_approval',
-      title: 'New order needs approval',
-      message: `${actorName || 'A worker'} requested ${orderLabel(order)} for ${order.siteName || 'the site'}.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
-    });
-  } else {
-    notifyUsers(getBuyerIds(order.communityId), {
-      type: 'order_ready_for_purchase',
-      title: 'Order ready to purchase',
-      message: `${orderLabel(order)} for ${order.siteName || 'the site'} — ${formatPrice(order.totalPrice)} — is ready to purchase.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The order_awaiting_approval / order_ready_for_purchase notification is
+  // written server-side by create_order itself (see
+  // supabase/migrations/0014_notifications_backend.sql) — nothing to do here.
   return { ok: true, order };
 }
 
@@ -429,23 +402,9 @@ export async function editOrder(orderId, fields) {
   const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', orderId).order('created_at', { ascending: false }).limit(2);
   if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
 
-  const wasReapproved = current.status === 'pending_purchase' && !!current.approvedById && order.status === 'pending_approval';
-  if (wasReapproved) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers(getOwnerIds(order.communityId), {
-      type: 'order_awaiting_approval',
-      title: 'New order needs approval',
-      message: `${actorName || 'A worker'} edited ${orderLabel(order)} for ${order.siteName || 'the site'} — it needs approval again.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The forced-reapproval order_awaiting_approval notification (when this
+  // edit reset an already-approved order) is written server-side by
+  // edit_order itself — see supabase/migrations/0014_notifications_backend.sql.
   return { ok: true, order };
 }
 
@@ -467,24 +426,9 @@ export async function requestCancellation(orderId, reason) {
   if (error) return handleRpcFailure(error, { orderId });
 
   const request = upsertCancellationRequest(mapCancellationRequestRow(data));
-  const order = getOrder(orderId);
 
-  if (order && order.purchasedById) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers([order.purchasedById], {
-      type: 'cancellation_requested',
-      title: 'Cancellation requested',
-      message: `${actorName || 'A worker'} requested to cancel ${orderLabel(order)} for ${order.siteName || 'the site'}: ${reason}`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The cancellation_requested notification (to the buyer, when the order
+  // has one) is written server-side by request_cancellation itself.
   return { ok: true, request };
 }
 
@@ -495,20 +439,8 @@ export async function approveOrder(orderId) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-  notifyUsers(getBuyerIds(order.communityId), {
-    type: 'order_ready_for_purchase',
-    title: 'Order ready to purchase',
-    message: `${orderLabel(order)} for ${order.siteName || 'the site'} — ${formatPrice(order.totalPrice)} — was approved and is ready to purchase.`,
-    communityId: order.communityId,
-    orderId: order.id,
-    siteId: order.siteId,
-    actorId,
-    actorName,
-    navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-  });
-
+  // The order_ready_for_purchase notification (to buyers) is written
+  // server-side by approve_order itself.
   return { ok: true, order };
 }
 
@@ -517,22 +449,8 @@ export async function rejectOrder(orderId, reason) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  if (order.requestedById) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers([order.requestedById], {
-      type: 'order_rejected',
-      title: 'Your order was rejected',
-      message: `${actorName || 'The owner'} rejected ${orderLabel(order)} for ${order.siteName || 'the site'}${reason ? `: ${reason}` : '.'}`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The order_rejected notification (to the requester) is written
+  // server-side by reject_order itself.
   return { ok: true, order };
 }
 
@@ -541,22 +459,8 @@ export async function revertApproval(orderId) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  if (order.requestedById) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers([order.requestedById], {
-      type: 'approval_reverted',
-      title: 'Approval decision reverted',
-      message: `${actorName || 'The owner'} reverted the decision on ${orderLabel(order)} for ${order.siteName || 'the site'} — it's back awaiting approval.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The approval_reverted notification (to the requester) is written
+  // server-side by revert_approval itself.
   return { ok: true, order };
 }
 
@@ -579,20 +483,8 @@ export async function completePurchase(orderId) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-  notifyUsers(approvedMembers(order.communityId), {
-    type: 'delivery_available',
-    title: 'New delivery available',
-    message: `${orderLabel(order)} for ${order.siteName || 'the site'} is ready for pickup from ${order.stockistName || 'the stockist'}.`,
-    communityId: order.communityId,
-    orderId: order.id,
-    siteId: order.siteId,
-    actorId,
-    actorName,
-    navigationTarget: { communityId: order.communityId, role: 'driver', orderId: order.id, siteId: order.siteId },
-  });
-
+  // The delivery_available notification (to approved members) is written
+  // server-side by complete_purchase itself.
   return { ok: true, order };
 }
 
@@ -624,40 +516,11 @@ export async function decideCancellationRequest(requestId, decision, decisionRea
     return { ok: false, error: 'This order has already been collected and can no longer be cancelled.' };
   }
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-
-  if (decision === 'rejected') {
-    if (request && request.requestedById) {
-      notifyUsers([request.requestedById], {
-        type: 'cancellation_rejected',
-        title: 'Cancellation request rejected',
-        message: `${actorName || 'The buyer'} rejected your cancellation request for ${order ? orderLabel(order) : 'the order'} for ${order?.siteName || 'the site'}${decisionReason ? `: ${decisionReason}` : '.'}`,
-        communityId: request.communityId,
-        orderId: request.orderId,
-        siteId: request.siteId,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: request.communityId, role: 'worker', orderId: request.orderId, siteId: request.siteId },
-      });
-    }
-    return { ok: true, request, order };
-  }
-
-  // decision === 'approved'
-  if (request && request.requestedById && order) {
-    notifyUsers([request.requestedById], {
-      type: 'cancellation_approved',
-      title: 'Cancellation approved',
-      message: `${actorName || 'The buyer'} approved your cancellation request for ${orderLabel(order)} for ${order.siteName || 'the site'}.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
-    });
-  }
+  // The cancellation_rejected / cancellation_approved notification (to the
+  // requester) is written server-side by decide_cancellation_request itself
+  // — never on the auto-close branch above, matching the pre-existing
+  // behavior exactly (only a real decision notifies, not the deterministic
+  // "collected before decision" close-out).
   return { ok: true, request, order };
 }
 
@@ -668,22 +531,8 @@ export async function claimDelivery(orderId) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  if (order.purchasedById) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers([order.purchasedById], {
-      type: 'delivery_claimed',
-      title: 'Driver assigned to your order',
-      message: `${actorName || 'A driver'} claimed ${orderLabel(order)} for ${order.siteName || 'the site'} for delivery.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The delivery_claimed notification (to the buyer) is written
+  // server-side by claim_delivery itself.
   return { ok: true, order };
 }
 
@@ -692,22 +541,8 @@ export async function collectDelivery(orderId) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  if (order.purchasedById) {
-    const actorId = getCurrentUserId();
-    const actorName = getCurrentDisplayName();
-    notifyUsers([order.purchasedById], {
-      type: 'delivery_collected',
-      title: 'Order collected',
-      message: `${orderLabel(order)} for ${order.siteName || 'the site'} has been collected and is on its way.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The delivery_collected notification (to the buyer) is written
+  // server-side by mark_collected itself.
   return { ok: true, order };
 }
 
@@ -723,36 +558,8 @@ export async function deliverOrder(orderId, deliveryTime, deliveryLocation) {
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-  const message = `${orderLabel(order)} for ${order.siteName || 'the site'} was delivered to ${order.deliveryLocation}.`;
-  if (order.purchasedById) {
-    notifyUsers([order.purchasedById], {
-      type: 'order_delivered',
-      title: 'Order delivered',
-      message,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-  if (order.requestedById) {
-    notifyUsers([order.requestedById], {
-      type: 'order_delivered',
-      title: 'Order delivered',
-      message,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
-    });
-  }
-
+  // The order_delivered notification (to both the buyer and the requester)
+  // is written server-side by mark_delivered itself.
   return { ok: true, order };
 }
 
@@ -766,32 +573,7 @@ export async function cancelDelivery(orderId, reason) {
   const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', orderId).order('created_at', { ascending: false }).limit(2);
   if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
 
-  const actorId = getCurrentUserId();
-  const actorName = getCurrentDisplayName();
-  if (order.purchasedById) {
-    notifyUsers([order.purchasedById], {
-      type: 'delivery_cancelled',
-      title: 'Delivery cancelled',
-      message: `${actorName || 'The driver'} cancelled the delivery for ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}. It's back in the driver pool.`,
-      communityId: order.communityId,
-      orderId: order.id,
-      siteId: order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
-    });
-  }
-  notifyUsers(getOwnerIds(order.communityId), {
-    type: 'delivery_cancelled',
-    title: 'Delivery cancelled',
-    message: `${actorName || 'A driver'} cancelled the delivery for ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}.`,
-    communityId: order.communityId,
-    orderId: order.id,
-    siteId: order.siteId,
-    actorId,
-    actorName,
-    navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
-  });
-
+  // The delivery_cancelled notification (to both the buyer and the owners)
+  // is written server-side by cancel_delivery itself.
   return { ok: true, order };
 }
