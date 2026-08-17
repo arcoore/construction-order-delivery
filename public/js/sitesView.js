@@ -1,5 +1,5 @@
 import { getInitials, formatPrice, timeAgo } from './data.js';
-import { subscribe } from './store.js';
+import { subscribe } from './orderLifecycle.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
   archiveSite, restoreSite, getSiteMembers, isSiteMember, addSiteMember, removeSiteMember,

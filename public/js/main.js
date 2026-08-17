@@ -20,21 +20,23 @@ import {
   markRead, markUnread, markAllRead, getPreferences, savePreferences,
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
+import { refreshOrderCache } from './orderLifecycle.js';
 
-// Phase 8B: identity/company/site data is now Supabase-backed and shared
-// across devices, but there's no Realtime subscription yet (deliberately
-// deferred — see CLAUDE.md's Phase 8B section) — freshness comes from
-// explicit refetch-on-write (community.js/sites.js's own writers),
+// Phase 8B/8C: identity/company/site/order data is now Supabase-backed and
+// shared across devices, but there's no Realtime subscription yet
+// (deliberately deferred — see CLAUDE.md) — freshness comes from explicit
+// refetch-on-write (community.js/sites.js/orderLifecycle.js's own writers),
 // refetch-on-view-entry (this helper, called from the routing functions
-// below that actually render community/site-dependent content), and
+// below that actually render community/site/order-dependent content), and
 // refetch-on-window-focus (wired at the bottom of this file). None of this
-// is the security boundary — RLS is — so a failed/slow refresh here degrades
-// to "briefly stale UI," never to a false permission grant.
+// is the security boundary — RLS/the RPC functions are — so a failed/slow
+// refresh here degrades to "briefly stale UI," never to a false permission
+// grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
   try {
-    await Promise.all([refreshCommunityCache(), refreshSitesCache()]);
+    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache()]);
   } catch (err) {
-    console.error('SiteStock: failed to refresh community/site data', err);
+    console.error('SiteStock: failed to refresh community/site/order data', err);
   }
 }
 
@@ -328,7 +330,11 @@ async function showRoleView() {
     highlightOrderIfPending();
   } else if (role === 'buyer') {
     showOnly(buyerView);
-    refreshBuyerView(pendingNotifOrderId);
+    // Awaited (unlike the other three roles' refresh calls) because
+    // refreshBuyerView is itself async since Phase 8C — it awaits
+    // releaseHoldIfAny(), a real abandonPurchase RPC, before it's safe to
+    // treat the Buyer view as actually refreshed.
+    await refreshBuyerView(pendingNotifOrderId);
     pendingNotifOrderId = null;
   }
 }

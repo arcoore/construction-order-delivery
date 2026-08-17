@@ -1,10 +1,10 @@
-# SiteStock backend foundation (Phase 8A / 8B)
+# SiteStock backend foundation (Phase 8A / 8B / 8C)
 
-**Status: identity, companies (communities), and sites are now Supabase-backed and locally verified end-to-end through the real frontend (Phase 8B). Orders, order events, cancellation requests, and notifications are still `localStorage`-only — see "Phase 8B — frontend wiring (hybrid)" below for exactly which data moved and which didn't. No cloud/production Supabase project exists yet — everything below runs against the local Supabase CLI dev stack only.**
+**Status: identity, companies (communities), sites, orders, order events, and cancellation requests are all now Supabase-backed and locally verified end-to-end through the real frontend (Phase 8B + Phase 8C). Only in-app notifications and notification preferences are still `localStorage`-only — see "Phase 8C — order lifecycle migration" below for exactly what moved this phase and what's still local. No cloud/production Supabase project exists yet — everything below runs against the local Supabase CLI dev stack only.**
 
 ## What this is
 
-This directory is the Postgres/Supabase backend designed in the Phase 8 architecture document and built in Phase 8A, then partially wired to `public/` in Phase 8B. `public/` is **not** fully migrated — see the Phase 8B section below for the exact hybrid boundary (which data is server-backed now vs. still local).
+This directory is the Postgres/Supabase backend designed in the Phase 8 architecture document and built in Phase 8A, then wired to `public/` in two stages: Phase 8B (identity/companies/sites) and Phase 8C (orders/order events/cancellation requests). `public/` is **not** fully migrated — notifications remain local — see the Phase 8C section below for the exact remaining hybrid boundary.
 
 ## Layout
 
@@ -22,11 +22,14 @@ supabase/
     0008_permission_functions.sql      — is_owner / is_approved_member / can_access_site / etc.
     0009_rls_policies.sql              — every table's RLS policies, explicit per action
     0010_order_lifecycle_functions.sql — every order-lifecycle RPC function
+    0011_grants.sql                     — explicit authenticated GRANTs (table + RPC EXECUTE)
+    0012_widen_edit_order.sql          — Phase 8C: widened edit_order RPC (full field set, server-computed total_price)
   tests/                                — pgTAP tests, one concern per file
     00_helpers.sql                     — tests.create_user() / tests.authenticate_as()
     01_isolation_and_permissions.sql   — cross-company isolation, site/buyer permissions
     02_order_lifecycle_and_races.sql   — unauthorized actions, claim/purchase races, cancellation race
     03_notification_isolation.sql      — notification recipient isolation
+    04_edit_order_and_widening.sql     — Phase 8C: edit_order authorization, pricing, reapproval, stale-version conflict
 ```
 
 ## How to actually run this
@@ -96,6 +99,53 @@ Three real bugs were only found by actually running this against Postgres, not b
 ### What's deliberately NOT done this phase
 
 Orders/order events/cancellation requests/notifications migration (Phase 8C+), Supabase Realtime (currently poll-on-focus/view-entry instead), a production/cloud Supabase project, service-role usage anywhere in the frontend (only the anon key is ever shipped to the browser), and a `community` → `company` internal rename (user-facing wording only).
+
+## Phase 8C — order lifecycle migration
+
+**Status: complete, locally verified.** `public/js/orderLifecycle.js` was rewritten as a genuinely async facade backed by the real `orders`/`order_events`/`cancellation_requests` Postgres tables (already created in Phase 8A, unwired until now). The two standalone modules that used to own this data — `store.js` (low-level order CRUD) and `cancellationRequests.js` (the cancellation-request collection) — were both deleted; their responsibilities folded into `orderLifecycle.js`. A repo-wide grep confirms zero remaining references to either file or to the old `sitestock_orders_v4`/`sitestock_order_events_v1`/`sitestock_cancellation_requests_v1` localStorage keys.
+
+### What changed in the backend itself
+
+- **Migration `0012_widen_edit_order.sql`**: the Phase 8A `edit_order` RPC only accepted a narrow set of parameters. Widened to the full field set `site.js`'s Worker edit form actually needs (17 parameters — product/variant/quantity/unit/delivery details/site/stockist/pricing), added an `orders_unit_price_nonnegative` CHECK constraint, and added a "no changes made" guard the narrow version lacked. `total_price` is **never** a parameter — always computed server-side as `coalesce(p_unit_price, 0) * p_quantity`, so the browser cannot set it directly no matter what it sends. (Postgres function-overload gotcha hit and fixed here: `CREATE OR REPLACE FUNCTION` with a different parameter list creates a *second* overloaded function rather than replacing the first — the migration explicitly `DROP FUNCTION IF EXISTS`s the old narrow signature first.)
+- **Optimistic concurrency (`version` column)**: every order gained an integer `version` column. Every write RPC takes `p_expected_version`, locks the row (`SELECT ... FOR UPDATE`), and raises `errcode = '40001'` (serialization_failure) if the real version has moved on since the client last read it — real database-level concurrency control, not the old client-side "re-read localStorage before writing" convention.
+- **Pricing trust boundary, stated plainly**: `total_price` is server-computed and `unit_price` is server-validated as non-negative — but there is still no server-side product catalogue. `unit_price` itself is still supplied by the browser (from the `data.js` mock catalog) and is not independently verified against any supplier/catalogue source. This is a deliberate, documented limitation, not an oversight — building a real product catalogue or supplier API was explicitly out of scope this phase.
+- **pgTAP tests (`tests/04_edit_order_and_widening.sql`, 9 new tests)**: unauthorized edit refused (`42501`), a successful edit correctly recomputes `total_price` server-side and increments `version`, a no-op edit is refused (`22023`), an edit to an already-approved order correctly forces reapproval (status → `pending_approval`, `approved_by_id` cleared, `approval_reverted` event logged), a stale-`version` edit is refused (`40001`), and a negative `unit_price` is rejected (`23514`). Full suite: **46/46 passing** (37 from Phase 8A.5 + 9 new). Two of the three originally-planned "race" tests turned out to already be covered by the existing `02_order_lifecycle_and_races.sql` suite (items 14 and 16) — documented in the test file's header rather than padding the count artificially.
+- **Genuine multi-connection concurrency, beyond what pgTAP alone can prove**: pgTAP tests run inside a single transaction, which can't demonstrate a real simultaneous race. Two additional races were run via raw `docker exec ... psql` with two backgrounded connections and `pg_sleep` to force real overlap: a concurrent `start_purchase` race (two buyers, one order) and a concurrent `claim_delivery` race (two drivers, one order) — in both cases exactly one connection succeeded and the other was correctly refused with a stale-version conflict.
+
+### Why write functions became async, but reads stayed synchronous
+
+Same reasoning Phase 8B already established for `community.js`/`sites.js`: `orderLifecycle.js`'s **read** functions (`getOrders`, `getOrderEvents`, `getEventsForCommunity`, the cancellation-request reads) stay synchronous over an in-memory cache, because the four excluded UI files (`owner.js`/`buyer.js`/`driver.js`/`site.js`) still call reads inline inside render code. **Write** functions are different: Phase 8C made every one of them (`createOrder`, `editOrder`, `cancelOrderDirect`, `requestCancellation`, `decideCancellationRequest`, `approveOrder`, `rejectOrder`, `revertApproval`, `startPurchase`, `abandonPurchase`, `completePurchase`, `claimDelivery`, `collectDelivery`, `cancelDelivery`, `deliverOrder`) genuinely `async`, and every call site across all four UI files was updated to `await` them, with an in-flight guard (a disabled button or a module-level flag) around each one so a slow network can't produce a duplicate submission. This was a deliberate, explicitly-scoped decision for this phase — not an incidental change, and not license to make the read side async too.
+
+**Actor identity is no longer passed in by the caller.** Every write function's signature dropped its old `actorId`/`actorName` parameters — the server derives the acting user from the real Supabase session (`auth.uid()`) inside the RPC, so passing (and trusting) a client-supplied actor id would have been misleading. `orderLifecycle.js` uses `identity.js`'s `getCurrentUserId()`/`getCurrentDisplayName()` directly wherever a notification needs the acting user's identity.
+
+### Failure handling — stale/race refresh rule
+
+`orderLifecycle.js`'s `handleRpcFailure(error, { orderId, requestId })` inspects the Postgres error code embedded in the RPC's response body (`error.code`, exposed by supabase-js regardless of the wrapping HTTP status) and refreshes the relevant cache slice on:
+- `40001` (stale version / serialization failure) — refetches the specific order/request so the UI shows the real current state instead of the client's stale guess.
+- `42704` (undefined/not found — e.g. the order was deleted or the id was never valid) — same refetch.
+- `42501` (permission denied — e.g. a grant was revoked mid-session) — refetches the order/request **and** the community/site caches, since a permission failure here often means an owner/buyer grant or site membership changed underneath the user.
+
+**A `40001` surfaces as HTTP `500`, not 409 — this is expected, not a bug.** PostgREST's default SQLSTATE-class-to-HTTP mapping puts the entire class `40` (Transaction Rollback, which includes `40001` serialization_failure) at `500`. This was directly observed during testing (a raw network-log entry showing `POST .../rpc/edit_order → 500 Internal Server Error` during a deliberate stale-version test) and traced to this exact PostgREST behavior — confirmed correct because `handleRpcFailure` keys off `error.code` from the response body, not the HTTP status, so the refresh logic fires correctly regardless of the misleading status label.
+
+### Buyer hold-to-confirm, gated on real server confirmation
+
+`buyer.js`'s press-and-hold purchase confirmation was rewritten as an explicit state machine (`idle → starting → holding → completing/abandoning → done`). The critical property: **the 3-second countdown never begins until `startPurchase` has actually round-tripped to the server and succeeded** — `begin()` `await`s the RPC before entering `holding`; a release requested while still `starting` is deferred and handled once the await resolves (never fired twice, never racing the in-flight request). Verified directly: a real `pointerdown`/`pointerup` cycle correctly drove `startPurchase` → real DB state `purchase_in_progress` (confirmed via direct `psql` query) → release correctly reverted to `pending_purchase`; a separate direct-call test confirmed `completePurchase()` correctly reaches `purchased` with the right total and notification fan-out. (Full natural 3-second auto-complete via synthetic pointer events was not directly observed end-to-end — a documented, pre-existing Browser-pane `requestAnimationFrame`-doesn't-fire-when-not-composited limitation, unrelated to Phase 8C's own correctness; the gating behavior that actually matters was proven via the methods above.)
+
+### What was tested (Phase 8C, local stack)
+
+- **Golden path**: worker creates → owner approves → buyer purchases (real hold-gated confirm) → driver claims/collects/delivers, all through the unmodified UI flow, all state and event-log entries correct at each step.
+- **Genuine two-connection races**: concurrent `start_purchase` (two buyers) and concurrent `claim_delivery` (two drivers) on the same order — exactly one connection won each time, verified via raw multi-connection `psql`, not just pgTAP's sequential assertions.
+- **Edit/reapproval**: editing an approved order correctly forces `pending_approval` and clears approval fields, preserving the original `approved` event; editing an unapproved order does not.
+- **Cancellation**: direct cancel; cancellation-request → buyer approve; cancellation-request → buyer reject; a driver collecting the order before the buyer decides correctly auto-closes the request as rejected with a system-generated reason, leaving the order untouched at `collected`.
+- **Stale-version conflict**: an edit against a stale `version` is refused with `40001` (observed as HTTP 500 per the PostgREST mapping above), and the UI correctly refreshes to the real current order state.
+- **Live mid-session permission revocation**: a user's access was revoked while their screen was already open; the next write attempt was correctly refused server-side (RLS, not just a stale client cache), and the UI recovered via the `42501` refresh path.
+- **Cross-company isolation**: re-confirmed for the newly-migrated order/event/cancellation-request data, matching the standard already set for identity/companies/sites in Phase 8B.
+- **Regression sweep**: Owner tabs/detail/timeline, Driver Requests/My Deliveries/Completed tabs and zero-price rendering, Buyer cancellation-request panel, notification generation and click-through, login/default-role routing, session/bootstrap restoration after a fresh page load — all re-verified against the async rewrite and behave identically to before.
+- **Console/network**: zero unexplained console errors across the full pass. The only two entries observed in the browser tool's cumulative error log were a stale-version-test `500` (explained above — expected, correctly handled, not a bug) and a `403` matching a deliberate permission-revocation/cross-company probe (expected refusal, not a bug).
+
+### What's deliberately NOT done this phase
+
+Notification migration (still local, unstarted), Supabase Realtime for orders (still poll-on-focus/view-entry, same as Phase 8B), a real server-side product/supplier catalogue (pricing input remains client-supplied, only the arithmetic is server-enforced — see the pricing trust boundary note above), and a production/cloud Supabase project.
 
 ## Security notes for whoever provisions the real project
 

@@ -1,9 +1,8 @@
 import { getBranch, getProduct, getInitials } from './data.js';
 import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
-import { subscribe } from './store.js';
 import { getActiveCommunityId } from './community.js';
-import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
-import { claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
+import { getCurrentUserId } from './identity.js';
+import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -95,10 +94,6 @@ function nearestBranchFor(order, from) {
     }
   }
   return best ? { branch: best, distanceKm: from ? bestDist : null } : null;
-}
-
-function currentDriverName() {
-  return getCurrentDisplayName() || 'Unnamed driver';
 }
 
 function currentDriverId() {
@@ -248,23 +243,39 @@ function renderOrderCard(order, pickup) {
   `;
 }
 
-function handleAction(action, orderId) {
-  const actorId = currentDriverId();
-  const actorName = currentDriverName();
+let actionInFlight = false;
 
-  let result;
-  if (action === 'claim') {
-    result = claimDelivery(orderId, actorId, actorName);
-  } else if (action === 'collect') {
-    result = collectDelivery(orderId, actorId, actorName);
-  } else if (action === 'deliver') {
+async function handleAction(action, orderId) {
+  if (action === 'deliver') {
     deliveringId = orderId;
     render();
     return;
-  } else if (action === 'cancel-deliver') {
+  }
+  if (action === 'cancel-deliver') {
     deliveringId = null;
     render();
     return;
+  }
+  if (action === 'cancel') {
+    cancellingId = orderId;
+    render();
+    return;
+  }
+  if (action === 'cancel-cancel') {
+    cancellingId = null;
+    render();
+    return;
+  }
+
+  if (actionInFlight) return;
+
+  let result;
+  if (action === 'claim') {
+    actionInFlight = true;
+    result = await claimDelivery(orderId);
+  } else if (action === 'collect') {
+    actionInFlight = true;
+    result = await collectDelivery(orderId);
   } else if (action === 'confirm-deliver') {
     const timeInput = document.getElementById('delivery-time-input');
     const locationInput = document.getElementById('delivery-location-input');
@@ -278,16 +289,9 @@ function handleAction(action, orderId) {
       locationInput.focus();
       return;
     }
-    result = deliverOrder(orderId, actorId, actorName, new Date(timeVal).getTime(), locationVal);
+    actionInFlight = true;
+    result = await deliverOrder(orderId, new Date(timeVal).getTime(), locationVal);
     deliveringId = null;
-  } else if (action === 'cancel') {
-    cancellingId = orderId;
-    render();
-    return;
-  } else if (action === 'cancel-cancel') {
-    cancellingId = null;
-    render();
-    return;
   } else if (action === 'confirm-cancel') {
     const reasonInput = document.getElementById('cancel-reason-input');
     const reason = reasonInput ? reasonInput.value.trim() : '';
@@ -295,9 +299,11 @@ function handleAction(action, orderId) {
       reasonInput.focus();
       return;
     }
-    result = cancelDelivery(orderId, actorId, actorName, reason);
+    actionInFlight = true;
+    result = await cancelDelivery(orderId, reason);
     cancellingId = null;
   }
+  actionInFlight = false;
 
   if (result && !result.ok) {
     alert(result.error);

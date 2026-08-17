@@ -1,236 +1,371 @@
-// The single guarded entry point for every order state change. UI code
-// (site.js/owner.js/driver.js/buyer.js) must never call store.js's
-// updateOrder directly for a lifecycle action — every transition here is
-// validated against the state machine below and, where relevant, against
-// who's actually allowed to make it, so an invalid transition is refused
-// at the data layer regardless of what the UI happened to render.
+// The single entry point for every order state change — Phase 8C rewrite.
+// Orders, order events, and cancellation requests are now real Supabase
+// tables (RLS-enforced, server-authoritative RPC functions in
+// supabase/migrations/0010_order_lifecycle_functions.sql /
+// 0012_widen_edit_order.sql), replacing store.js and cancellationRequests.js
+// entirely — neither file exists anymore; this module absorbs both.
 //
-// Every transition also appends an immutable event to an append-only log
-// (sitestock_order_events_v1). Only addOrderEvent/getOrderEvents/
-// getEventsForCommunity/subscribeOrderEvents are exported — there is no
-// update/delete, by design, so history can't be edited during normal
-// operation.
-import { getOrders, addOrder, updateOrder, newId } from './store.js';
-import { isOwner, isApprovedMember, getOwnerIds, getBuyerIds, approvedMembers } from './community.js';
-import { getSite, canCreateOrderForSite, canPurchaseForSite } from './sites.js';
+// CACHE LIFECYCLE (same contract Phase 8B established for community.js/
+// sites.js — read that pattern first if you haven't):
+// Every read export below (getOrders, getOrderEvents, getEventsForCommunity,
+// subscribe, subscribeOrderEvents, the four cancellation-request reads,
+// subscribeCancellationRequests) is SYNCHRONOUS on purpose — owner.js/
+// buyer.js/driver.js/site.js/sitesView.js call them inline inside
+// synchronous render code that isn't being converted to async. They read an
+// in-memory cache (orders/events/cancellationRequests) kept fresh by real
+// Supabase traffic. Every write export is genuinely `async` — call sites in
+// those five files now `await` them (Phase 8C's whole point was ending the
+// hybrid; unlike Phase 8B, these UI files ARE touched this phase, since
+// several of them synchronously branch on a write's return value in a way
+// that Phase 8B's boolean permission checks never did — see PROGRESS.md's
+// Phase 8C entry for the full reasoning).
+//
+// NEVER write to localStorage for orders/events/cancellation requests, and
+// never fall back to a local write on a failed Supabase call — the database
+// is the only source of truth for this data now. A failed RPC call always
+// resolves { ok: false, error }, never silently succeeds locally.
+//
+// ACTOR IDENTITY: every RPC function derives the acting user from auth.uid()
+// and the acting display name from a server-side profiles lookup
+// (_current_display_name()) — never from a parameter. This module doesn't
+// accept or send actorId/actorName to any RPC; where a notification needs
+// "who did this," it reads getCurrentUserId()/getCurrentDisplayName() from
+// identity.js directly (the same live session the RPC call itself just used
+// auth.uid() against), never a value threaded in from a caller.
+//
+// PRICING TRUST BOUNDARY: unit_price is still client-supplied — there is no
+// server-side product/stockist catalogue (public/js/data.js is a static
+// frontend file with no Postgres table backing it), so the server cannot
+// independently verify a unit_price is the real supplier price. What IS
+// server-enforced: unit_price must be non-negative (a real check constraint,
+// migrations/0012), and total_price is ALWAYS server-computed as
+// unit_price * quantity — this module never sends a total_price to any RPC,
+// and nothing in this file trusts totalPrice for anything numeric.
+import { supabase } from './supabaseClient.js';
+import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
+import { subscribeAuth } from './auth.js';
+import { getOwnerIds, getBuyerIds, approvedMembers, refreshCommunityCache } from './community.js';
+import { refreshSitesCache } from './sites.js';
 import { notifyUsers } from './notifications.js';
 import { formatPrice } from './data.js';
-import {
-  getCancellationRequest, createCancellationRequest, updateCancellationRequestDecision,
-} from './cancellationRequests.js';
 
-const EVENTS_KEY = 'sitestock_order_events_v1';
-export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000;
+export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000; // documented server-side too (0010's revert_approval) — kept exported since nothing currently reads it, but harmless to preserve for any future UI countdown display.
+
+// --- Cache -----------------------------------------------------------
+let cache = { orders: [], events: [], cancellationRequests: [] };
+export let orderCacheReady = false;
+
+function mapOrderRow(r) {
+  return {
+    id: r.id,
+    communityId: r.community_id,
+    siteId: r.site_id,
+    siteName: r.site_name,
+    siteAddress: r.site_address,
+    sitePostcode: r.site_postcode,
+    siteDeliveryInstructions: r.site_delivery_instructions,
+    productId: r.product_id,
+    productName: r.product_name,
+    variant: r.variant,
+    quantity: r.quantity,
+    unit: r.unit,
+    deliveryPostcode: r.delivery_postcode,
+    deliveryLat: r.delivery_lat,
+    deliveryLon: r.delivery_lon,
+    requestedById: r.requested_by_id,
+    requestedBy: r.requested_by,
+    status: r.status,
+    approvalWasRequired: r.approval_was_required,
+    createdAt: new Date(r.created_at).getTime(),
+    driverId: r.driver_id,
+    driver: r.driver,
+    claimedAt: r.claimed_at ? new Date(r.claimed_at).getTime() : null,
+    collectedAt: r.collected_at ? new Date(r.collected_at).getTime() : null,
+    deliveredAt: r.delivered_at ? new Date(r.delivered_at).getTime() : null,
+    deliveryTime: r.delivery_time ? new Date(r.delivery_time).getTime() : null,
+    deliveryLocation: r.delivery_location,
+    stockistId: r.stockist_id,
+    stockistName: r.stockist_name,
+    stockistWebsite: r.stockist_website,
+    stockistPostcode: r.stockist_postcode,
+    pickupEstimate: r.pickup_estimate,
+    unitPrice: r.unit_price,
+    totalPrice: r.total_price,
+    approvedById: r.approved_by_id,
+    approvedBy: r.approved_by,
+    approvedAt: r.approved_at ? new Date(r.approved_at).getTime() : null,
+    rejectedById: r.rejected_by_id,
+    rejectedBy: r.rejected_by,
+    rejectedAt: r.rejected_at ? new Date(r.rejected_at).getTime() : null,
+    rejectionReason: r.rejection_reason,
+    purchaseStartedById: r.purchase_started_by_id,
+    purchaseStartedBy: r.purchase_started_by,
+    purchaseStartedAt: r.purchase_started_at ? new Date(r.purchase_started_at).getTime() : null,
+    purchasedById: r.purchased_by_id,
+    purchasedBy: r.purchased_by,
+    purchasedAt: r.purchased_at ? new Date(r.purchased_at).getTime() : null,
+    cancelledById: r.cancelled_by_id,
+    cancelledBy: r.cancelled_by,
+    cancelledAt: r.cancelled_at ? new Date(r.cancelled_at).getTime() : null,
+    cancellationReason: r.cancellation_reason,
+    orderCancelledById: r.order_cancelled_by_id,
+    orderCancelledBy: r.order_cancelled_by,
+    orderCancelledAt: r.order_cancelled_at ? new Date(r.order_cancelled_at).getTime() : null,
+    orderCancellationReason: r.order_cancellation_reason,
+    version: r.version,
+  };
+}
+
+function mapEventRow(r) {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    communityId: r.community_id,
+    type: r.type,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    fromStatus: r.from_status,
+    toStatus: r.to_status,
+    reason: r.reason,
+    meta: r.meta,
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+
+function mapCancellationRequestRow(r) {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    communityId: r.community_id,
+    siteId: r.site_id,
+    requestedById: r.requested_by_id,
+    requestedBy: r.requested_by,
+    reason: r.reason,
+    status: r.status,
+    createdAt: new Date(r.created_at).getTime(),
+    decidedAt: r.decided_at ? new Date(r.decided_at).getTime() : null,
+    decidedById: r.decided_by_id,
+    decidedBy: r.decided_by,
+    decisionReason: r.decision_reason,
+  };
+}
+
+// --- Pub-sub -----------------------------------------------------------
+// Declared before refreshOrderCache/the subscribeAuth wiring below, since
+// subscribeAuth calls its callback synchronously and immediately on
+// subscribe — refreshOrderCache's early-return branch calls notifyOrders()
+// etc. right away, which would be a temporal-dead-zone error if these were
+// declared any later in the file.
+
+const orderListeners = new Set();
+function notifyOrders() {
+  orderListeners.forEach(fn => fn(cache.orders));
+}
+export function subscribe(fn) {
+  orderListeners.add(fn);
+  fn(cache.orders);
+  return () => orderListeners.delete(fn);
+}
 
 const eventListeners = new Set();
 function notifyEvents() {
-  const events = readEvents();
-  eventListeners.forEach(fn => fn(events));
+  eventListeners.forEach(fn => fn(cache.events));
 }
-
-function readEvents() {
-  try {
-    const raw = localStorage.getItem(EVENTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeEvent(event) {
-  const events = readEvents();
-  events.push(event);
-  localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-  notifyEvents();
-}
-
-window.addEventListener('storage', e => {
-  if (e.key === EVENTS_KEY) notifyEvents();
-});
-
 export function subscribeOrderEvents(fn) {
   eventListeners.add(fn);
-  fn(readEvents());
+  fn(cache.events);
   return () => eventListeners.delete(fn);
 }
 
+const cancellationRequestListeners = new Set();
+function notifyCancellationRequests() {
+  cancellationRequestListeners.forEach(fn => fn());
+}
+export function subscribeCancellationRequests(fn) {
+  cancellationRequestListeners.add(fn);
+  fn();
+  return () => cancellationRequestListeners.delete(fn);
+}
+
+// Full refetch of all three tables this module owns — same pattern as
+// community.js's refreshCommunityCache. Called reactively on every auth
+// transition, explicitly in main.js's bootstrap, and via main.js's existing
+// refreshDataCaches() on view entry / window focus.
+export async function refreshOrderCache() {
+  const userId = getCurrentUserId();
+  if (!userId) {
+    cache = { orders: [], events: [], cancellationRequests: [] };
+    orderCacheReady = true;
+    notifyOrders();
+    notifyEvents();
+    notifyCancellationRequests();
+    return;
+  }
+  const [ordersRes, eventsRes, crRes] = await Promise.all([
+    supabase.from('orders').select('*'),
+    supabase.from('order_events').select('*'),
+    supabase.from('cancellation_requests').select('*'),
+  ]);
+  cache = {
+    orders: (ordersRes.data || []).map(mapOrderRow),
+    events: (eventsRes.data || []).map(mapEventRow),
+    cancellationRequests: (crRes.data || []).map(mapCancellationRequestRow),
+  };
+  orderCacheReady = true;
+  notifyOrders();
+  notifyEvents();
+  notifyCancellationRequests();
+}
+
+subscribeAuth(() => { refreshOrderCache(); });
+
+// --- Sync reads ----------------------------------------------------------
+
+export function getOrders() {
+  return cache.orders;
+}
+
 export function getOrderEvents(orderId) {
-  return readEvents().filter(e => e.orderId === orderId).sort((a, b) => a.createdAt - b.createdAt);
+  return cache.events.filter(e => e.orderId === orderId).sort((a, b) => a.createdAt - b.createdAt);
 }
 
 export function getEventsForCommunity(communityId) {
-  return readEvents().filter(e => e.communityId === communityId).sort((a, b) => b.createdAt - a.createdAt);
+  return cache.events.filter(e => e.communityId === communityId).sort((a, b) => b.createdAt - a.createdAt);
 }
 
-function addOrderEvent({ orderId, communityId, type, actorId, actorName, fromStatus, toStatus, reason = null, meta = null }) {
-  writeEvent({
-    id: newId(),
-    orderId,
-    communityId,
-    type,
-    actorId: actorId ?? null,
-    actorName: actorName ?? null,
-    fromStatus,
-    toStatus,
-    reason,
-    meta,
-    createdAt: Date.now(),
-  });
+export function getCancellationRequests() {
+  return cache.cancellationRequests;
 }
 
-// The state machine. Keys are the order's current status; values map an
-// action name to the status it leads to. Any (status, action) pair not
-// listed here is refused.
-//
-// Phase 7B additions: `edit`/`edit_and_reapprove` (Worker corrections) and
-// `cancel_order` (both Worker direct-cancel and Buyer-approved post-purchase
-// cancellation, which share one terminal `cancelled` status rather than
-// splitting into two — see editOrder/cancelOrderDirect/
-// decideCancellationRequest below for why each action name maps where it
-// does). `cancel_order` deliberately has no entry at `collected` or
-// `delivered` — that's what makes a Buyer's approval of an already-collected
-// order's cancellation request fail *at this table*, not just in a
-// hand-written status check, exactly the same "no edge = refused"
-// discipline every other transition here already relies on. `cancel_order`
-// at `purchased`/`claimed` is only ever reachable via
-// decideCancellationRequest (an approved Buyer decision) — cancelOrderDirect
-// refuses before ever calling applyTransition at those statuses, the same
-// way the existing `claimed.cancel` edge (a Driver dropping their own
-// claim — an unrelated, unmodified action) is only ever reachable via
-// cancelDelivery's own actor check, never exposed generally just because
-// the table allows it.
-const TRANSITIONS = {
-  pending_approval: { approve: 'pending_purchase', reject: 'rejected', edit: 'pending_approval', cancel_order: 'cancelled' },
-  rejected: { revert: 'pending_approval' },
-  pending_purchase: {
-    revert: 'pending_approval', start_purchase: 'purchase_in_progress',
-    edit: 'pending_purchase', edit_and_reapprove: 'pending_approval', cancel_order: 'cancelled',
-  },
-  purchase_in_progress: { abandon_purchase: 'pending_purchase', complete_purchase: 'purchased' },
-  purchased: { claim: 'claimed', cancel_order: 'cancelled' },
-  claimed: { collect: 'collected', cancel: 'purchased', cancel_order: 'cancelled' },
-  collected: { deliver: 'delivered' },
-  delivered: {},
-  cancelled: {},
-};
+export function getCancellationRequest(requestId) {
+  return cache.cancellationRequests.find(r => r.id === requestId) || null;
+}
+
+export function getCancellationRequestsForOrder(orderId) {
+  return cache.cancellationRequests.filter(r => r.orderId === orderId);
+}
+
+export function getPendingCancellationRequestForOrder(orderId) {
+  return cache.cancellationRequests.find(r => r.orderId === orderId && r.status === 'pending') || null;
+}
 
 function getOrder(orderId) {
-  return getOrders().find(o => o.id === orderId) || null;
+  return cache.orders.find(o => o.id === orderId) || null;
 }
 
 function orderLabel(order) {
   return `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
 }
 
-// Re-reads fresh order state, validates the transition is legal from its
-// *current* status, applies the patch, and logs one or more events for it —
-// all synchronously in one call, which is what makes this safe against two
-// near-simultaneous claims/purchases in the same browser: whichever call
-// runs first wins, and the second sees the already-updated status and is
-// refused.
-function applyTransition(orderId, action, patch, buildEvents) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
+// --- Cache mutation helpers ------------------------------------------
 
-  const allowed = TRANSITIONS[order.status] || {};
-  const toStatus = allowed[action];
-  if (!toStatus) {
-    return { ok: false, error: `Cannot ${action.replace(/_/g, ' ')} an order in status "${order.status}".` };
+function upsertOrder(order) {
+  const idx = cache.orders.findIndex(o => o.id === order.id);
+  if (idx === -1) cache.orders.push(order); else cache.orders[idx] = order;
+  notifyOrders();
+  return order;
+}
+
+function upsertEvents(rows) {
+  rows.forEach(r => cache.events.push(r));
+  notifyEvents();
+}
+
+function upsertCancellationRequest(request) {
+  const idx = cache.cancellationRequests.findIndex(r => r.id === request.id);
+  if (idx === -1) cache.cancellationRequests.push(request); else cache.cancellationRequests[idx] = request;
+  notifyCancellationRequests();
+  return request;
+}
+
+// Re-fetches a single order/request from Supabase and merges it into cache —
+// used after a stale/race/permission failure so the UI reflects reality
+// instead of continuing to show a cached state the server just proved
+// wrong. A missing row (RLS no longer returns it — access was revoked) is
+// removed from the cache rather than left stale.
+async function refreshOneOrder(orderId) {
+  const { data } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
+  if (data) {
+    upsertOrder(mapOrderRow(data));
+  } else {
+    cache.orders = cache.orders.filter(o => o.id !== orderId);
+    notifyOrders();
   }
+}
 
-  const fromStatus = order.status;
-  updateOrder(orderId, { ...patch, status: toStatus });
+async function refreshOneCancellationRequest(requestId) {
+  const { data } = await supabase.from('cancellation_requests').select('*').eq('id', requestId).maybeSingle();
+  if (data) {
+    upsertCancellationRequest(mapCancellationRequestRow(data));
+  } else {
+    cache.cancellationRequests = cache.cancellationRequests.filter(r => r.id !== requestId);
+    notifyCancellationRequests();
+  }
+}
 
-  const events = buildEvents(fromStatus, toStatus);
-  events.forEach(e => addOrderEvent({ orderId, communityId: order.communityId, fromStatus, toStatus, ...e }));
-
-  return { ok: true, order: getOrder(orderId) };
+// Every write function funnels its failure through here. errcodes 40001
+// (stale/lost-a-race), 42704 (not found), and 42501 (permission refused)
+// all mean "the cached state the UI was showing is no longer current" —
+// refresh the specific row so the UI can re-render off reality, per the
+// approved Phase 8C stale-refresh rule. 42501 additionally refreshes the
+// Phase 8B community/site caches, since a permission refusal here can mean
+// a grant was revoked mid-session, not just an order race. 23514/22023
+// (validation) are pure input problems — no cache is stale, no refresh.
+async function handleRpcFailure(error, { orderId, requestId } = {}) {
+  const code = error.code;
+  if (code === '40001' || code === '42704' || code === '42501') {
+    const refreshes = [];
+    if (orderId) refreshes.push(refreshOneOrder(orderId));
+    if (requestId) refreshes.push(refreshOneCancellationRequest(requestId));
+    if (code === '42501') {
+      refreshes.push(refreshCommunityCache());
+      refreshes.push(refreshSitesCache());
+    }
+    await Promise.all(refreshes);
+  }
+  return { ok: false, error: error.message };
 }
 
 // --- Order creation -------------------------------------------------------
 
-// A siteId in `fields` is never itself a permission — this re-derives
-// authorization fresh from canCreateOrderForSite (owner, or an approved
-// community member who's also a member of this specific site) before
-// writing anything, so a worker can't create an order for a site they
-// aren't assigned to no matter what the UI happened to let them submit.
-// The site's name/address/postcode/deliveryInstructions are snapshotted
-// onto the order at this moment — later renames/archives of the site never
-// reinterpret an already-placed order.
-export function createOrder(fields, actorId, actorName, approvalRequired) {
-  const { siteId, communityId } = fields;
-  const site = getSite(siteId);
-  if (!site) return { ok: false, error: 'Site not found.' };
-  if (site.communityId !== communityId) {
-    return { ok: false, error: 'This site does not belong to the selected community.' };
-  }
-  if (!canCreateOrderForSite(siteId, communityId, actorId)) {
-    return { ok: false, error: 'You are not authorized to create orders for this site.' };
-  }
-  if (site.status !== 'active') {
-    return { ok: false, error: 'This site is archived and cannot receive new orders.' };
-  }
-
-  const status = approvalRequired ? 'pending_approval' : 'pending_purchase';
-  const order = {
-    id: newId(),
-    ...fields,
-    siteName: site.name,
-    siteAddress: site.address,
-    sitePostcode: site.postcode,
-    siteDeliveryInstructions: site.deliveryInstructions,
-    status,
-    approvalWasRequired: approvalRequired,
-    createdAt: Date.now(),
-    driver: null,
-    driverId: null,
-    claimedAt: null,
-    collectedAt: null,
-    deliveredAt: null,
-    deliveryTime: null,
-    deliveryLocation: null,
-    approvedBy: null,
-    approvedById: null,
-    approvedAt: null,
-    rejectedBy: null,
-    rejectedById: null,
-    rejectedAt: null,
-    rejectionReason: null,
-    purchaseStartedBy: null,
-    purchaseStartedById: null,
-    purchaseStartedAt: null,
-    purchasedBy: null,
-    purchasedById: null,
-    purchasedAt: null,
-    cancelledBy: null,
-    cancelledById: null,
-    cancelledAt: null,
-    cancellationReason: null,
-    // Distinct from cancelledBy/cancelledById/cancelledAt/cancellationReason
-    // above, which are specifically about a Driver dropping their own
-    // delivery claim (order stays alive, back in the pool). These are about
-    // the ORDER itself becoming genuinely, terminally cancelled — via a
-    // Worker's direct cancel or a Buyer-approved cancellation request.
-    // Reusing the driver's field names for a different meaning would
-    // quietly conflate two unrelated events.
-    orderCancelledBy: null,
-    orderCancelledById: null,
-    orderCancelledAt: null,
-    orderCancellationReason: null,
-  };
-  addOrder(order);
-  addOrderEvent({
-    orderId: order.id,
-    communityId: order.communityId,
-    type: 'order_created',
-    actorId,
-    actorName,
-    fromStatus: null,
-    toStatus: status,
-    meta: { approvalRequired },
+// fields: { communityId, siteId, productId, productName, variant, quantity,
+// unit, deliveryPostcode, deliveryLat, deliveryLon, stockistId,
+// stockistName, stockistWebsite, stockistPostcode, pickupEstimate,
+// unitPrice }. Approval-required and site authorization are both derived
+// server-side (create_order reads the community's own require_owner_approval
+// column and re-checks can_create_order_for_site itself) — this function no
+// longer pre-checks either, since the RPC is now the sole authority on both.
+export async function createOrder(fields) {
+  const { data, error } = await supabase.rpc('create_order', {
+    p_community_id: fields.communityId,
+    p_site_id: fields.siteId,
+    p_product_id: fields.productId,
+    p_product_name: fields.productName,
+    p_variant: fields.variant ?? null,
+    p_quantity: fields.quantity,
+    p_unit: fields.unit,
+    p_delivery_postcode: fields.deliveryPostcode,
+    p_delivery_lat: fields.deliveryLat ?? null,
+    p_delivery_lon: fields.deliveryLon ?? null,
+    p_stockist_id: fields.stockistId ?? null,
+    p_stockist_name: fields.stockistName ?? null,
+    p_stockist_website: fields.stockistWebsite ?? null,
+    p_stockist_postcode: fields.stockistPostcode ?? null,
+    p_pickup_estimate: fields.pickupEstimate ?? null,
+    p_unit_price: fields.unitPrice ?? null,
   });
+  if (error) return handleRpcFailure(error);
 
-  if (approvalRequired) {
+  const order = upsertOrder(mapOrderRow(data));
+  // The order_created event is written server-side by the RPC itself; pull
+  // it into the event cache too so a subscribed timeline updates immediately
+  // rather than waiting for the next full refresh.
+  const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', order.id);
+  if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
+
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+  if (order.approvalWasRequired) {
     notifyUsers(getOwnerIds(order.communityId), {
       type: 'order_awaiting_approval',
       title: 'New order needs approval',
@@ -259,563 +394,88 @@ export function createOrder(fields, actorId, actorName, approvalRequired) {
   return { ok: true, order };
 }
 
-// --- Owner actions ---------------------------------------------------------
+// --- Worker corrections & cancellation --------------------------------
 
-export function approveOrder(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (!isOwner(order.communityId, actorId)) return { ok: false, error: 'Only the owner can approve orders.' };
+// fields: same shape as createOrder's minus communityId, plus siteId if it's
+// changing. p_expected_version is read from the current cache automatically
+// — callers don't need to track it themselves, matching the original
+// signature's simplicity from the caller's point of view.
+export async function editOrder(orderId, fields) {
+  const current = getOrder(orderId);
+  if (!current) return { ok: false, error: 'Order not found.' };
 
-  const result = applyTransition(orderId, 'approve', {
-    approvedBy: actorName,
-    approvedById: actorId,
-    approvedAt: Date.now(),
-  }, () => [{ type: 'approved', actorId, actorName }]);
+  const { data, error } = await supabase.rpc('edit_order', {
+    p_order_id: orderId,
+    p_expected_version: current.version,
+    p_product_id: fields.productId,
+    p_product_name: fields.productName,
+    p_variant: fields.variant ?? null,
+    p_quantity: fields.quantity,
+    p_unit: fields.unit,
+    p_delivery_postcode: fields.deliveryPostcode,
+    p_delivery_lat: fields.deliveryLat ?? null,
+    p_delivery_lon: fields.deliveryLon ?? null,
+    p_site_id: fields.siteId ?? current.siteId,
+    p_stockist_id: fields.stockistId ?? null,
+    p_stockist_name: fields.stockistName ?? null,
+    p_stockist_website: fields.stockistWebsite ?? null,
+    p_stockist_postcode: fields.stockistPostcode ?? null,
+    p_pickup_estimate: fields.pickupEstimate ?? null,
+    p_unit_price: fields.unitPrice ?? null,
+  });
+  if (error) return handleRpcFailure(error, { orderId });
 
-  if (result.ok) {
-    notifyUsers(getBuyerIds(result.order.communityId), {
-      type: 'order_ready_for_purchase',
-      title: 'Order ready to purchase',
-      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — ${formatPrice(result.order.totalPrice)} — was approved and is ready to purchase.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
+  const order = upsertOrder(mapOrderRow(data));
+  const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', orderId).order('created_at', { ascending: false }).limit(2);
+  if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
 
-export function rejectOrder(orderId, actorId, actorName, reason) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (!isOwner(order.communityId, actorId)) return { ok: false, error: 'Only the owner can reject orders.' };
-
-  const result = applyTransition(orderId, 'reject', {
-    rejectedBy: actorName,
-    rejectedById: actorId,
-    rejectedAt: Date.now(),
-    rejectionReason: reason || null,
-  }, () => [{ type: 'rejected', actorId, actorName, reason: reason || null }]);
-
-  if (result.ok && result.order.requestedById) {
-    notifyUsers([result.order.requestedById], {
-      type: 'order_rejected',
-      title: 'Your order was rejected',
-      message: `${actorName || 'The owner'} rejected ${orderLabel(result.order)} for ${result.order.siteName || 'the site'}${reason ? `: ${reason}` : '.'}`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
-
-export function revertApproval(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (!isOwner(order.communityId, actorId)) return { ok: false, error: 'Only the owner can revert this decision.' };
-  if (!order.approvalWasRequired) {
-    return { ok: false, error: 'This order never went through approval, so there is nothing to revert.' };
-  }
-  const decidedAt = order.approvedAt || order.rejectedAt;
-  if (!decidedAt || Date.now() - decidedAt > REVERT_WINDOW_MS) {
-    return { ok: false, error: 'The 72-hour revert window has closed.' };
-  }
-
-  const result = applyTransition(orderId, 'revert', {
-    approvedBy: null,
-    approvedById: null,
-    approvedAt: null,
-    rejectedBy: null,
-    rejectedById: null,
-    rejectedAt: null,
-    rejectionReason: null,
-  }, () => [{ type: 'approval_reverted', actorId, actorName }]);
-
-  if (result.ok && result.order.requestedById) {
-    notifyUsers([result.order.requestedById], {
-      type: 'approval_reverted',
-      title: 'Approval decision reverted',
-      message: `${actorName || 'The owner'} reverted the decision on ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — it's back awaiting approval.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
-
-// --- Buyer actions -----------------------------------------------------
-
-export function startPurchase(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  // canPurchaseForSite already covers "is a buyer at all" (owner, or an
-  // approved buyer who's also a member of this order's site) — a single
-  // check here, same as createOrder's single canCreateOrderForSite check.
-  if (!canPurchaseForSite(order.siteId, order.communityId, actorId)) {
-    return { ok: false, error: 'Only an approved buyer with access to this site can purchase this order.' };
-  }
-
-  return applyTransition(orderId, 'start_purchase', {
-    purchaseStartedBy: actorName,
-    purchaseStartedById: actorId,
-    purchaseStartedAt: Date.now(),
-  }, () => [{ type: 'purchase_started', actorId, actorName }]);
-}
-
-export function abandonPurchase(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.purchaseStartedById !== actorId) {
-    return { ok: false, error: 'Only the buyer who started this purchase can release it.' };
-  }
-
-  return applyTransition(orderId, 'abandon_purchase', {
-    purchaseStartedBy: null,
-    purchaseStartedById: null,
-    purchaseStartedAt: null,
-  }, () => [{ type: 'purchase_abandoned', actorId, actorName }]);
-}
-
-// Confirms the buyer has already completed the purchase externally — this
-// does not perform any purchasing itself, it only records the confirmation
-// once the 3-second hold (enforced in buyer.js) completes.
-export function completePurchase(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.purchaseStartedById !== actorId) {
-    return { ok: false, error: 'Only the buyer who started this purchase can confirm it.' };
-  }
-
-  const result = applyTransition(orderId, 'complete_purchase', {
-    purchaseStartedBy: null,
-    purchaseStartedById: null,
-    purchaseStartedAt: null,
-    purchasedBy: actorName,
-    purchasedById: actorId,
-    purchasedAt: Date.now(),
-  }, () => [{ type: 'purchased', actorId, actorName }]);
-
-  if (result.ok) {
-    // Driver-pool broadcast — deliberately no price anywhere in this
-    // content, generated here rather than left to the UI to hide later.
-    // Carries siteId like every other order notification, but drivers are
-    // never site-scoped (see main.js's navigateToNotification) — any
-    // approved member can claim any purchased order regardless of site
-    // membership, unchanged from Phase 4A.
-    notifyUsers(approvedMembers(result.order.communityId), {
-      type: 'delivery_available',
-      title: 'New delivery available',
-      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} is ready for pickup from ${result.order.stockistName || 'the stockist'}.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'driver', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
-
-// --- Driver actions ----------------------------------------------------
-
-export function claimDelivery(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (!isApprovedMember(order.communityId, actorId)) {
-    return { ok: false, error: 'Only an approved member of this community can claim deliveries.' };
-  }
-
-  const result = applyTransition(orderId, 'claim', {
-    driver: actorName,
-    driverId: actorId,
-    claimedAt: Date.now(),
-  }, () => [{ type: 'delivery_claimed', actorId, actorName }]);
-
-  if (result.ok && result.order.purchasedById) {
-    notifyUsers([result.order.purchasedById], {
-      type: 'delivery_claimed',
-      title: 'Driver assigned to your order',
-      message: `${actorName || 'A driver'} claimed ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} for delivery.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
-
-export function collectDelivery(orderId, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.driverId !== actorId) return { ok: false, error: 'Only the assigned driver can mark this collected.' };
-
-  const result = applyTransition(orderId, 'collect', {
-    collectedAt: Date.now(),
-  }, () => [{ type: 'collected', actorId, actorName }]);
-
-  if (result.ok && result.order.purchasedById) {
-    notifyUsers([result.order.purchasedById], {
-      type: 'delivery_collected',
-      title: 'Order collected',
-      message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} has been collected and is on its way.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'buyer', orderId: result.order.id, siteId: result.order.siteId },
-    });
-  }
-  return result;
-}
-
-// deliveredAt is recorded automatically (the moment this was confirmed);
-// deliveryTime is what the driver reports as when they actually delivered —
-// the two can differ (e.g. confirmed later due to no signal), so both are
-// kept rather than treating the auto timestamp as the reported one.
-export function deliverOrder(orderId, actorId, actorName, deliveryTime, deliveryLocation) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.driverId !== actorId) return { ok: false, error: 'Only the assigned driver can mark this delivered.' };
-  if (!deliveryTime) return { ok: false, error: 'A delivery time is required.' };
-  if (!deliveryLocation || !deliveryLocation.trim()) return { ok: false, error: 'A delivery location is required.' };
-
-  const location = deliveryLocation.trim();
-  const result = applyTransition(orderId, 'deliver', {
-    deliveredAt: Date.now(),
-    deliveryTime,
-    deliveryLocation: location,
-  }, () => [{
-    type: 'delivered',
-    actorId,
-    actorName,
-    meta: { deliveryTime, deliveryLocation: location },
-  }]);
-
-  if (result.ok) {
-    const o = result.order;
-    const message = `${orderLabel(o)} for ${o.siteName || 'the site'} was delivered to ${o.deliveryLocation}.`;
-    // Split into two calls rather than one shared recipient list — buyer and
-    // worker land in different role-views, so each needs its own
-    // navigationTarget rather than one target trying to serve both.
-    if (o.purchasedById) {
-      notifyUsers([o.purchasedById], {
-        type: 'order_delivered',
-        title: 'Order delivered',
-        message,
-        communityId: o.communityId,
-        orderId: o.id,
-        siteId: o.siteId,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id, siteId: o.siteId },
-      });
-    }
-    if (o.requestedById) {
-      notifyUsers([o.requestedById], {
-        type: 'order_delivered',
-        title: 'Order delivered',
-        message,
-        communityId: o.communityId,
-        orderId: o.id,
-        siteId: o.siteId,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: o.communityId, role: 'worker', orderId: o.id, siteId: o.siteId },
-      });
-    }
-  }
-  return result;
-}
-
-// Cancelling returns the order to the driver pool (status back to
-// 'purchased') so another driver can claim it. The order's own driver/
-// driverId fields get cleared, so who *was* assigned is only recoverable
-// from the event's meta — which is exactly what a future notification
-// feature needs to tell the buyer who dropped the delivery and why.
-export function cancelDelivery(orderId, actorId, actorName, reason) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.driverId !== actorId) return { ok: false, error: 'Only the assigned driver can cancel this delivery.' };
-  if (!reason || !reason.trim()) return { ok: false, error: 'A reason is required to cancel a delivery.' };
-
-  const trimmedReason = reason.trim();
-  const result = applyTransition(orderId, 'cancel', {
-    driver: null,
-    driverId: null,
-    claimedAt: null,
-    cancelledBy: actorName,
-    cancelledById: actorId,
-    cancelledAt: Date.now(),
-    cancellationReason: trimmedReason,
-  }, (fromStatus, toStatus) => [
-    {
-      type: 'delivery_cancelled',
-      actorId,
-      actorName,
-      reason: trimmedReason,
-      meta: { previousDriverId: actorId, previousDriverName: actorName, purchasedById: order.purchasedById },
-    },
-    { type: 'delivery_returned_to_pool', actorId: null, actorName: null },
-  ]);
-
-  if (result.ok) {
-    const o = result.order;
-    if (o.purchasedById) {
-      notifyUsers([o.purchasedById], {
-        type: 'delivery_cancelled',
-        title: 'Delivery cancelled',
-        message: `${actorName || 'The driver'} cancelled the delivery for ${orderLabel(o)} for ${o.siteName || 'the site'}: ${trimmedReason}. It's back in the driver pool.`,
-        communityId: o.communityId,
-        orderId: o.id,
-        siteId: o.siteId,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: o.communityId, role: 'buyer', orderId: o.id, siteId: o.siteId },
-      });
-    }
-    notifyUsers(getOwnerIds(o.communityId), {
-      type: 'delivery_cancelled',
-      title: 'Delivery cancelled',
-      message: `${actorName || 'A driver'} cancelled the delivery for ${orderLabel(o)} for ${o.siteName || 'the site'}: ${trimmedReason}.`,
-      communityId: o.communityId,
-      orderId: o.id,
-      siteId: o.siteId,
-      actorId,
-      actorName,
-      navigationTarget: { communityId: o.communityId, role: 'owner', orderId: o.id, siteId: o.siteId },
-    });
-  }
-  return result;
-}
-
-// --- Worker corrections & cancellation (Phase 7B) --------------------------
-//
-// Only ever legal on an order this actor themselves requested — rule #1 is
-// absolute here, with no Owner override in this phase (see the Phase 7A
-// architecture plan, section U.1). Every function below re-derives
-// authorization from a fresh read, exactly like every action above it.
-
-// Fields a Worker edit is ever allowed to touch. Deliberately excludes
-// requestedBy/requestedById (provenance, immutable), createdAt, and the
-// status/actor-decision fields every other action already owns. siteId is
-// handled separately below since changing it requires re-authorizing
-// against the *new* site and re-snapshotting its fields — never trusting
-// caller-supplied site text, the same discipline createOrder already uses.
-const EDITABLE_ORDER_FIELDS = [
-  'productId', 'productName', 'variant', 'quantity', 'unit',
-  'deliveryPostcode', 'deliveryLat', 'deliveryLon',
-  'stockistId', 'stockistName', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate',
-  'unitPrice', 'totalPrice',
-];
-
-// Applies a Worker's correction to their own order. Which action name gets
-// passed to applyTransition depends on more than just the current status —
-// it depends on whether a real Owner approval has actually happened
-// (order.approvedById), which the TRANSITIONS table alone can't express for
-// a single status admitting two different outcomes — so that decision is
-// made here, once, before ever touching the shared transition engine.
-export function editOrder(orderId, fields, actorId, actorName) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.requestedById !== actorId) {
-    return { ok: false, error: 'Only the worker who requested this order can edit it.' };
-  }
-  if (!isApprovedMember(order.communityId, actorId)) {
-    return { ok: false, error: 'You are no longer an approved member of this community.' };
-  }
-
-  let action;
-  if (order.status === 'pending_approval') {
-    action = 'edit';
-  } else if (order.status === 'pending_purchase') {
-    action = order.approvedById ? 'edit_and_reapprove' : 'edit';
-  } else if (order.status === 'purchase_in_progress') {
-    return { ok: false, error: 'A buyer is currently confirming purchase on this order — try again in a moment.' };
-  } else {
-    return { ok: false, error: 'This order can no longer be edited directly.' };
-  }
-
-  const patch = {};
-  const changes = {};
-
-  for (const key of EDITABLE_ORDER_FIELDS) {
-    if (fields[key] !== undefined && fields[key] !== order[key]) {
-      changes[key] = { from: order[key], to: fields[key] };
-      patch[key] = fields[key];
-    }
-  }
-
-  if (fields.siteId !== undefined && fields.siteId !== order.siteId) {
-    const site = getSite(fields.siteId);
-    if (!site) return { ok: false, error: 'Site not found.' };
-    if (site.communityId !== order.communityId) {
-      return { ok: false, error: 'This site does not belong to the selected community.' };
-    }
-    if (!canCreateOrderForSite(fields.siteId, order.communityId, actorId)) {
-      return { ok: false, error: 'You are not authorized to create orders for this site.' };
-    }
-    if (site.status !== 'active') {
-      return { ok: false, error: 'This site is archived and cannot receive new orders.' };
-    }
-    changes.siteId = { from: order.siteId, to: site.id };
-    changes.siteName = { from: order.siteName, to: site.name };
-    changes.siteAddress = { from: order.siteAddress, to: site.address };
-    changes.sitePostcode = { from: order.sitePostcode, to: site.postcode };
-    changes.siteDeliveryInstructions = { from: order.siteDeliveryInstructions, to: site.deliveryInstructions };
-    patch.siteId = site.id;
-    patch.siteName = site.name;
-    patch.siteAddress = site.address;
-    patch.sitePostcode = site.postcode;
-    patch.siteDeliveryInstructions = site.deliveryInstructions;
-  }
-
-  if (Object.keys(changes).length === 0) {
-    return { ok: false, error: 'No changes were made.' };
-  }
-
-  // Two events from one transition — the same multi-event shape
-  // cancelDelivery already uses (delivery_cancelled +
-  // delivery_returned_to_pool) — so the diff and the approval-invalidation
-  // read as two distinct, honest things in the timeline rather than being
-  // folded into one another. The original 'approved' event from when the
-  // Owner first signed off is never touched — events are append-only, this
-  // just adds to the record, it never overwrites it.
-  const events = [{ type: 'order_edited', actorId, actorName, meta: { changes } }];
-  if (action === 'edit_and_reapprove') {
-    patch.approvedBy = null;
-    patch.approvedById = null;
-    patch.approvedAt = null;
-    events.push({ type: 'approval_reverted', actorId, actorName });
-  }
-
-  const result = applyTransition(orderId, action, patch, () => events);
-
-  if (result.ok && action === 'edit_and_reapprove') {
-    // Reusing the exact notification the Owner already gets on original
-    // creation — from their point of view, "something new needs my
-    // attention in Awaiting Approval" is equally true either way. Unlike
-    // the Owner's own manual revert (which doesn't re-notify them, since
-    // they obviously already know), this is a Worker creating new work for
-    // the Owner, which does deserve a ping.
-    notifyUsers(getOwnerIds(result.order.communityId), {
+  const wasReapproved = current.status === 'pending_purchase' && !!current.approvedById && order.status === 'pending_approval';
+  if (wasReapproved) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
+    notifyUsers(getOwnerIds(order.communityId), {
       type: 'order_awaiting_approval',
       title: 'New order needs approval',
-      message: `${actorName || 'A worker'} edited ${orderLabel(result.order)} for ${result.order.siteName || 'the site'} — it needs approval again.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
+      message: `${actorName || 'A worker'} edited ${orderLabel(order)} for ${order.siteName || 'the site'} — it needs approval again.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'owner', orderId: result.order.id, siteId: result.order.siteId },
+      navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
     });
   }
 
-  return result;
+  return { ok: true, order };
 }
 
-// Direct, instant cancellation — only ever legal before any money has been
-// spent (rule #5), regardless of whether the order was ever approved.
-// purchase_in_progress fails safe: the hold resolves in seconds either way,
-// so the Worker just retries once it does. purchased/claimed/collected/
-// delivered/cancelled/rejected all fall outside the two statuses this
-// function explicitly allows, refused with a clear, specific message rather
-// than a generic "invalid transition."
-export function cancelOrderDirect(orderId, actorId, actorName, reason) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.requestedById !== actorId) {
-    return { ok: false, error: 'Only the worker who requested this order can cancel it.' };
-  }
-  if (!isApprovedMember(order.communityId, actorId)) {
-    return { ok: false, error: 'You are no longer an approved member of this community.' };
-  }
-  if (order.status === 'purchase_in_progress') {
-    return { ok: false, error: 'A buyer is currently confirming purchase on this order — try again in a moment.' };
-  }
-  if (order.status !== 'pending_approval' && order.status !== 'pending_purchase') {
-    return { ok: false, error: 'This order can no longer be cancelled directly — once purchased, you can request a cancellation instead.' };
-  }
-
-  const trimmedReason = reason && reason.trim() ? reason.trim() : null;
-
-  return applyTransition(orderId, 'cancel_order', {
-    orderCancelledBy: actorName,
-    orderCancelledById: actorId,
-    orderCancelledAt: Date.now(),
-    orderCancellationReason: trimmedReason,
-  }, () => [
-    { type: 'order_cancelled', actorId, actorName, reason: trimmedReason, meta: { via: 'direct' } },
-  ]);
-}
-
-// --- Post-purchase cancellation requests ------------------------------
-
-// Submits a request rather than cancelling directly — once money's spent,
-// the Buyer decides (rule #8). Only legal at purchased/claimed; blocked
-// from collected onward, since the goods are then physically with the
-// driver and approving a cancellation would need a way to tell them to
-// stop/return it, which this phase deliberately doesn't build (see the
-// Phase 7A plan, section D). order.status is left completely untouched by
-// this call — a pending request must never block a Driver from claiming or
-// collecting normally.
-export function requestCancellation(orderId, actorId, actorName, reason) {
-  const order = getOrder(orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.requestedById !== actorId) {
-    return { ok: false, error: 'Only the worker who requested this order can request its cancellation.' };
-  }
-  if (!isApprovedMember(order.communityId, actorId)) {
-    return { ok: false, error: 'You are no longer an approved member of this community.' };
-  }
-  if (order.status !== 'purchased' && order.status !== 'claimed') {
-    return { ok: false, error: 'A cancellation request can only be submitted after purchase and before the order is collected.' };
-  }
-  if (!reason || !reason.trim()) {
-    return { ok: false, error: 'A reason is required to request a cancellation.' };
-  }
-
-  const trimmedReason = reason.trim();
-  const result = createCancellationRequest(orderId, order.communityId, order.siteId, actorId, actorName, trimmedReason);
-  if (!result.ok) return result;
-
-  addOrderEvent({
-    orderId: order.id,
-    communityId: order.communityId,
-    type: 'cancellation_requested',
-    actorId,
-    actorName,
-    fromStatus: order.status,
-    toStatus: order.status,
-    reason: trimmedReason,
-    meta: { requestId: result.request.id },
+export async function cancelOrderDirect(orderId, reason) {
+  const { data, error } = await supabase.rpc('cancel_order_direct', {
+    p_order_id: orderId,
+    p_reason: reason || null,
   });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+  return { ok: true, order };
+}
 
-  // Targets the specific buyer who actually purchased it — matching the
-  // existing precedent set by delivery_claimed/delivery_collected, which
-  // both notify [order.purchasedById] rather than broadcasting to every
-  // buyer, since (unlike pre-purchase) there's now a specific person with
-  // the most context to act.
-  if (order.purchasedById) {
+export async function requestCancellation(orderId, reason) {
+  const { data, error } = await supabase.rpc('request_cancellation', {
+    p_order_id: orderId,
+    p_reason: reason,
+  });
+  if (error) return handleRpcFailure(error, { orderId });
+
+  const request = upsertCancellationRequest(mapCancellationRequestRow(data));
+  const order = getOrder(orderId);
+
+  if (order && order.purchasedById) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
     notifyUsers([order.purchasedById], {
       type: 'cancellation_requested',
       title: 'Cancellation requested',
-      message: `${actorName || 'A worker'} requested to cancel ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}`,
+      message: `${actorName || 'A worker'} requested to cancel ${orderLabel(order)} for ${order.siteName || 'the site'}: ${reason}`,
       communityId: order.communityId,
       orderId: order.id,
       siteId: order.siteId,
@@ -825,51 +485,45 @@ export function requestCancellation(orderId, actorId, actorName, reason) {
     });
   }
 
-  return { ok: true, request: result.request, order };
+  return { ok: true, request };
 }
 
-// The Buyer's decision. Re-checks everything fresh rather than trusting
-// anything about the request or the order as they stood when the UI last
-// rendered them — including, for an approval, re-attempting the underlying
-// order transition and letting the TRANSITIONS table itself be the final
-// word on whether it's still legal (it has no cancel_order edge past
-// `claimed`, so an order a Driver has since collected refuses automatically,
-// no separate status check needed here to catch that race).
-export function decideCancellationRequest(requestId, decision, actorId, actorName, decisionReason) {
-  const request = getCancellationRequest(requestId);
-  if (!request) return { ok: false, error: 'Cancellation request not found.' };
-  if (request.status !== 'pending') {
-    return { ok: false, error: 'This cancellation request has already been decided.' };
-  }
+// --- Owner actions ---------------------------------------------------------
 
-  const order = getOrder(request.orderId);
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (request.communityId !== order.communityId) {
-    return { ok: false, error: 'This request does not match the order\'s community.' };
-  }
-  if (!canPurchaseForSite(order.siteId, order.communityId, actorId)) {
-    return { ok: false, error: 'Only an approved buyer with access to this site can decide this request.' };
-  }
+export async function approveOrder(orderId) {
+  const { data, error } = await supabase.rpc('approve_order', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
 
-  const trimmedDecisionReason = decisionReason && decisionReason.trim() ? decisionReason.trim() : null;
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+  notifyUsers(getBuyerIds(order.communityId), {
+    type: 'order_ready_for_purchase',
+    title: 'Order ready to purchase',
+    message: `${orderLabel(order)} for ${order.siteName || 'the site'} — ${formatPrice(order.totalPrice)} — was approved and is ready to purchase.`,
+    communityId: order.communityId,
+    orderId: order.id,
+    siteId: order.siteId,
+    actorId,
+    actorName,
+    navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+  });
 
-  if (decision === 'rejected') {
-    updateCancellationRequestDecision(requestId, 'rejected', actorId, actorName, trimmedDecisionReason);
-    addOrderEvent({
-      orderId: order.id,
-      communityId: order.communityId,
-      type: 'cancellation_rejected',
-      actorId,
-      actorName,
-      fromStatus: order.status,
-      toStatus: order.status,
-      reason: trimmedDecisionReason,
-      meta: { requestId },
-    });
-    notifyUsers([request.requestedById], {
-      type: 'cancellation_rejected',
-      title: 'Cancellation request rejected',
-      message: `${actorName || 'The buyer'} rejected your cancellation request for ${orderLabel(order)} for ${order.siteName || 'the site'}${trimmedDecisionReason ? `: ${trimmedDecisionReason}` : '.'}`,
+  return { ok: true, order };
+}
+
+export async function rejectOrder(orderId, reason) {
+  const { data, error } = await supabase.rpc('reject_order', { p_order_id: orderId, p_reason: reason || null });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  if (order.requestedById) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
+    notifyUsers([order.requestedById], {
+      type: 'order_rejected',
+      title: 'Your order was rejected',
+      message: `${actorName || 'The owner'} rejected ${orderLabel(order)} for ${order.siteName || 'the site'}${reason ? `: ${reason}` : '.'}`,
       communityId: order.communityId,
       orderId: order.id,
       siteId: order.siteId,
@@ -877,87 +531,267 @@ export function decideCancellationRequest(requestId, decision, actorId, actorNam
       actorName,
       navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
     });
-    return { ok: true, request: getCancellationRequest(requestId), order };
   }
 
-  if (decision === 'approved') {
-    const wasClaimed = order.status === 'claimed';
-    const previousDriverId = order.driverId;
-    const previousDriverName = order.driver;
+  return { ok: true, order };
+}
 
-    const result = applyTransition(order.id, 'cancel_order', {
-      orderCancelledBy: actorName,
-      orderCancelledById: actorId,
-      orderCancelledAt: Date.now(),
-      orderCancellationReason: request.reason,
-      driver: null,
-      driverId: null,
-      claimedAt: null,
-    }, () => [
-      {
-        type: 'order_cancelled',
+export async function revertApproval(orderId) {
+  const { data, error } = await supabase.rpc('revert_approval', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  if (order.requestedById) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
+    notifyUsers([order.requestedById], {
+      type: 'approval_reverted',
+      title: 'Approval decision reverted',
+      message: `${actorName || 'The owner'} reverted the decision on ${orderLabel(order)} for ${order.siteName || 'the site'} — it's back awaiting approval.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
+    });
+  }
+
+  return { ok: true, order };
+}
+
+// --- Buyer actions -----------------------------------------------------
+
+export async function startPurchase(orderId) {
+  const { data, error } = await supabase.rpc('start_purchase', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  return { ok: true, order: upsertOrder(mapOrderRow(data)) };
+}
+
+export async function abandonPurchase(orderId) {
+  const { data, error } = await supabase.rpc('abandon_purchase', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  return { ok: true, order: upsertOrder(mapOrderRow(data)) };
+}
+
+export async function completePurchase(orderId) {
+  const { data, error } = await supabase.rpc('complete_purchase', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+  notifyUsers(approvedMembers(order.communityId), {
+    type: 'delivery_available',
+    title: 'New delivery available',
+    message: `${orderLabel(order)} for ${order.siteName || 'the site'} is ready for pickup from ${order.stockistName || 'the stockist'}.`,
+    communityId: order.communityId,
+    orderId: order.id,
+    siteId: order.siteId,
+    actorId,
+    actorName,
+    navigationTarget: { communityId: order.communityId, role: 'driver', orderId: order.id, siteId: order.siteId },
+  });
+
+  return { ok: true, order };
+}
+
+export async function decideCancellationRequest(requestId, decision, decisionReason) {
+  const { data, error } = await supabase.rpc('decide_cancellation_request', {
+    p_request_id: requestId,
+    p_decision: decision,
+    p_decision_reason: decisionReason || null,
+  });
+  if (error) return handleRpcFailure(error, { requestId });
+
+  // Not an exception — decide_cancellation_request returns a jsonb result
+  // even on the deterministic "collected before decision" auto-close, per
+  // its own documented design (kept exactly as-is, per the approved Phase
+  // 8C decision not to change this RPC's response shape). Refetch both
+  // the request and the order regardless of outcome so the cache reflects
+  // exactly what the server just did.
+  const result = data;
+  await refreshOneCancellationRequest(requestId);
+  const request = getCancellationRequest(requestId);
+  const orderIdForRefresh = request ? request.orderId : null;
+  if (orderIdForRefresh) await refreshOneOrder(orderIdForRefresh);
+  const order = orderIdForRefresh ? getOrder(orderIdForRefresh) : null;
+
+  if (!result.ok) {
+    // Deterministic auto-close (order was collected before the decision
+    // landed) — surfaced to the Buyer as a real, specific refusal, never
+    // faked as success.
+    return { ok: false, error: 'This order has already been collected and can no longer be cancelled.' };
+  }
+
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+
+  if (decision === 'rejected') {
+    if (request && request.requestedById) {
+      notifyUsers([request.requestedById], {
+        type: 'cancellation_rejected',
+        title: 'Cancellation request rejected',
+        message: `${actorName || 'The buyer'} rejected your cancellation request for ${order ? orderLabel(order) : 'the order'} for ${order?.siteName || 'the site'}${decisionReason ? `: ${decisionReason}` : '.'}`,
+        communityId: request.communityId,
+        orderId: request.orderId,
+        siteId: request.siteId,
         actorId,
         actorName,
-        reason: request.reason,
-        meta: { via: 'cancellation_request', requestId, previousDriverId, previousDriverName },
-      },
-    ]);
-
-    if (!result.ok) {
-      // The order progressed past a decidable state (collected) before this
-      // decision landed. Close the request out deterministically rather
-      // than leaving it dangling as 'pending' forever — the Worker gets a
-      // truthful outcome instead of silence.
-      const autoReason = 'Automatically closed — the order was collected before a decision was made.';
-      updateCancellationRequestDecision(requestId, 'rejected', null, null, autoReason);
-      addOrderEvent({
-        orderId: order.id,
-        communityId: order.communityId,
-        type: 'cancellation_rejected',
-        actorId: null,
-        actorName: null,
-        fromStatus: order.status,
-        toStatus: order.status,
-        reason: autoReason,
-        meta: { requestId, autoClosed: true },
+        navigationTarget: { communityId: request.communityId, role: 'worker', orderId: request.orderId, siteId: request.siteId },
       });
-      return { ok: false, error: 'This order has already been collected and can no longer be cancelled.' };
     }
+    return { ok: true, request, order };
+  }
 
-    updateCancellationRequestDecision(requestId, 'approved', actorId, actorName, trimmedDecisionReason);
-
+  // decision === 'approved'
+  if (request && request.requestedById && order) {
     notifyUsers([request.requestedById], {
       type: 'cancellation_approved',
       title: 'Cancellation approved',
-      message: `${actorName || 'The buyer'} approved your cancellation request for ${orderLabel(result.order)} for ${result.order.siteName || 'the site'}.`,
-      communityId: result.order.communityId,
-      orderId: result.order.id,
-      siteId: result.order.siteId,
+      message: `${actorName || 'The buyer'} approved your cancellation request for ${orderLabel(order)} for ${order.siteName || 'the site'}.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
       actorId,
       actorName,
-      navigationTarget: { communityId: result.order.communityId, role: 'worker', orderId: result.order.id, siteId: result.order.siteId },
+      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
     });
+  }
+  return { ok: true, request, order };
+}
 
-    // The order stays alive from the Driver's point of view right up until
-    // this moment — they otherwise have no way to learn the thing they
-    // claimed is no longer needed. Same event, one more recipient, not a
-    // new notification type.
-    if (wasClaimed && previousDriverId) {
-      notifyUsers([previousDriverId], {
-        type: 'cancellation_approved',
-        title: 'Delivery cancelled',
-        message: `${orderLabel(result.order)} for ${result.order.siteName || 'the site'} has been cancelled and no longer needs to be delivered.`,
-        communityId: result.order.communityId,
-        orderId: result.order.id,
-        siteId: result.order.siteId,
-        actorId,
-        actorName,
-        navigationTarget: { communityId: result.order.communityId, role: 'driver', orderId: result.order.id, siteId: result.order.siteId },
-      });
-    }
+// --- Driver actions ----------------------------------------------------
 
-    return { ok: true, request: getCancellationRequest(requestId), order: result.order };
+export async function claimDelivery(orderId) {
+  const { data, error } = await supabase.rpc('claim_delivery', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  if (order.purchasedById) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
+    notifyUsers([order.purchasedById], {
+      type: 'delivery_claimed',
+      title: 'Driver assigned to your order',
+      message: `${actorName || 'A driver'} claimed ${orderLabel(order)} for ${order.siteName || 'the site'} for delivery.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+    });
   }
 
-  return { ok: false, error: 'Invalid decision.' };
+  return { ok: true, order };
+}
+
+export async function collectDelivery(orderId) {
+  const { data, error } = await supabase.rpc('mark_collected', { p_order_id: orderId });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  if (order.purchasedById) {
+    const actorId = getCurrentUserId();
+    const actorName = getCurrentDisplayName();
+    notifyUsers([order.purchasedById], {
+      type: 'delivery_collected',
+      title: 'Order collected',
+      message: `${orderLabel(order)} for ${order.siteName || 'the site'} has been collected and is on its way.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+    });
+  }
+
+  return { ok: true, order };
+}
+
+export async function deliverOrder(orderId, deliveryTime, deliveryLocation) {
+  if (!deliveryTime) return { ok: false, error: 'A delivery time is required.' };
+  if (!deliveryLocation || !deliveryLocation.trim()) return { ok: false, error: 'A delivery location is required.' };
+
+  const { data, error } = await supabase.rpc('mark_delivered', {
+    p_order_id: orderId,
+    p_delivery_time: new Date(deliveryTime).toISOString(),
+    p_delivery_location: deliveryLocation.trim(),
+  });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+  const message = `${orderLabel(order)} for ${order.siteName || 'the site'} was delivered to ${order.deliveryLocation}.`;
+  if (order.purchasedById) {
+    notifyUsers([order.purchasedById], {
+      type: 'order_delivered',
+      title: 'Order delivered',
+      message,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+    });
+  }
+  if (order.requestedById) {
+    notifyUsers([order.requestedById], {
+      type: 'order_delivered',
+      title: 'Order delivered',
+      message,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'worker', orderId: order.id, siteId: order.siteId },
+    });
+  }
+
+  return { ok: true, order };
+}
+
+export async function cancelDelivery(orderId, reason) {
+  if (!reason || !reason.trim()) return { ok: false, error: 'A reason is required to cancel a delivery.' };
+  const trimmedReason = reason.trim();
+
+  const { data, error } = await supabase.rpc('cancel_delivery', { p_order_id: orderId, p_reason: trimmedReason });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+  const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', orderId).order('created_at', { ascending: false }).limit(2);
+  if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
+
+  const actorId = getCurrentUserId();
+  const actorName = getCurrentDisplayName();
+  if (order.purchasedById) {
+    notifyUsers([order.purchasedById], {
+      type: 'delivery_cancelled',
+      title: 'Delivery cancelled',
+      message: `${actorName || 'The driver'} cancelled the delivery for ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}. It's back in the driver pool.`,
+      communityId: order.communityId,
+      orderId: order.id,
+      siteId: order.siteId,
+      actorId,
+      actorName,
+      navigationTarget: { communityId: order.communityId, role: 'buyer', orderId: order.id, siteId: order.siteId },
+    });
+  }
+  notifyUsers(getOwnerIds(order.communityId), {
+    type: 'delivery_cancelled',
+    title: 'Delivery cancelled',
+    message: `${actorName || 'A driver'} cancelled the delivery for ${orderLabel(order)} for ${order.siteName || 'the site'}: ${trimmedReason}.`,
+    communityId: order.communityId,
+    orderId: order.id,
+    siteId: order.siteId,
+    actorId,
+    actorName,
+    navigationTarget: { communityId: order.communityId, role: 'owner', orderId: order.id, siteId: order.siteId },
+  });
+
+  return { ok: true, order };
 }

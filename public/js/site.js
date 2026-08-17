@@ -1,13 +1,12 @@
 import { searchProducts, getBranchesForProduct, getAvailability, getCategoryIcon, formatPrice, getProduct } from './data.js';
 import { geocodePostcode } from './geo.js';
-import { subscribe } from './store.js';
-import { createOrder, editOrder, cancelOrderDirect, requestCancellation } from './orderLifecycle.js';
+import {
+  subscribe, createOrder, editOrder, cancelOrderDirect, requestCancellation,
+  getPendingCancellationRequestForOrder, getCancellationRequestsForOrder, subscribeCancellationRequests,
+} from './orderLifecycle.js';
 import { getActiveCommunityId, isApprovalRequired } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
 import { getActiveSitesForUser } from './sites.js';
-import {
-  getPendingCancellationRequestForOrder, getCancellationRequestsForOrder, subscribeCancellationRequests,
-} from './cancellationRequests.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -326,16 +325,21 @@ function renderConfirmStep(product, variant, details, branch) {
     <button id="confirm-order-btn" class="btn btn-primary btn-block">Confirm order</button>
   `;
 
-  document.getElementById('confirm-order-btn').addEventListener('click', () => {
-    submitOrder(product, variant, details, branch, avail);
+  const confirmBtn = document.getElementById('confirm-order-btn');
+  confirmBtn.addEventListener('click', () => {
+    submitOrder(product, variant, details, branch, avail, confirmBtn);
   });
 }
 
-function submitOrder(product, variant, details, branch, avail) {
+async function submitOrder(product, variant, details, branch, avail, confirmBtn) {
   const communityId = getActiveCommunityId();
+  // Display-only — the server independently derives whether approval is
+  // required from the community's own setting when it processes the
+  // request; this is just used to word the confirmation message correctly.
   const approvalRequired = isApprovalRequired(communityId);
 
-  const result = createOrder({
+  confirmBtn.disabled = true;
+  const result = await createOrder({
     communityId,
     siteId: selectedSite ? selectedSite.id : null,
     productId: product.id,
@@ -346,25 +350,24 @@ function submitOrder(product, variant, details, branch, avail) {
     deliveryPostcode: details.deliveryPostcode,
     deliveryLat: details.deliveryLat,
     deliveryLon: details.deliveryLon,
-    requestedBy: details.requestedBy,
-    requestedById: details.requestedById,
     stockistId: branch.id,
     stockistName: branch.name,
     stockistWebsite: branch.website,
     stockistPostcode: branch.postcode,
     pickupEstimate: avail ? avail.label : null,
     unitPrice: product.unitPrice,
-    totalPrice: product.unitPrice * details.quantity,
-  }, details.requestedById, details.requestedBy, approvalRequired);
+  });
 
   if (!result.ok) {
+    confirmBtn.disabled = false;
     alert(result.error);
     return;
   }
 
+  const stillApprovalRequired = result.order.approvalWasRequired;
   orderFormEl.innerHTML = `
     <h2>Request sent</h2>
-    <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${approvalRequired
+    <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${stillApprovalRequired
       ? 'Waiting for the owner to approve it before a buyer can purchase it.'
       : 'It\'s gone straight to a buyer to purchase — this community doesn\'t require owner approval.'}</p>
   `;
@@ -511,11 +514,16 @@ function wireCancelHoldButton(orderId) {
   // cancelOrderDirect is a single atomic action with no "in progress" state
   // in the data layer (there's no data-layer lock to abandon on release),
   // so it's only ever called once, right at the moment the hold completes.
-  function complete() {
-    if (startedAt == null) return;
+  // `completing` guards against tick()'s rAF re-entering complete() a
+  // second time while the RPC is still in flight.
+  let completing = false;
+  async function complete() {
+    if (startedAt == null || completing) return;
+    completing = true;
     cancelAnimationFrame(rafId);
     startedAt = null;
-    const result = cancelOrderDirect(orderId, getCurrentUserId(), getCurrentDisplayName() || 'Unknown', null);
+    const result = await cancelOrderDirect(orderId, null);
+    completing = false;
     if (!result.ok) {
       statusEl.textContent = result.error;
       statusEl.className = 'form-status error';
@@ -541,7 +549,7 @@ function wireCancelHoldButton(orderId) {
   btn.addEventListener('pointercancel', release);
 }
 
-function handleWorkerAction(action, orderId) {
+async function handleWorkerAction(action, orderId) {
   if (action === 'edit') {
     const order = latestOrders.find(o => o.id === orderId);
     if (order) openEditForm(order);
@@ -574,8 +582,11 @@ function handleWorkerAction(action, orderId) {
       if (input) input.focus();
       return;
     }
-    const result = requestCancellation(orderId, getCurrentUserId(), getCurrentDisplayName() || 'Unknown', reason);
+    const submitBtn = document.querySelector('[data-worker-action="request-cancel-submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    const result = await requestCancellation(orderId, reason);
     if (!result.ok) {
+      if (submitBtn) submitBtn.disabled = false;
       const statusEl = document.getElementById('worker-request-cancel-status');
       if (statusEl) {
         statusEl.textContent = result.error;
@@ -862,6 +873,7 @@ function renderEditPickSite() {
 async function submitEdit() {
   const s = editState;
   const statusEl = document.getElementById('edit-form-status');
+  const saveBtn = document.getElementById('edit-save-btn');
   const quantity = Number(document.getElementById('edit-qty-input').value) || 1;
   const postcodeRaw = document.getElementById('edit-postcode-input').value.trim();
 
@@ -886,7 +898,6 @@ async function submitEdit() {
     stockistPostcode: s.stockistPostcode,
     pickupEstimate: s.pickupEstimate,
     unitPrice: s.unitPrice,
-    totalPrice: s.unitPrice != null ? s.unitPrice * quantity : s.order.totalPrice,
   };
 
   if (deliveryPostcode !== s.order.deliveryPostcode) {
@@ -903,8 +914,10 @@ async function submitEdit() {
   }
 
   const willReapprove = !!s.order.approvedById;
-  const result = editOrder(s.order.id, fields, getCurrentUserId(), getCurrentDisplayName() || 'Unknown');
+  saveBtn.disabled = true;
+  const result = await editOrder(s.order.id, fields);
   if (!result.ok) {
+    saveBtn.disabled = false;
     statusEl.textContent = result.error;
     statusEl.className = 'form-status error';
     return;

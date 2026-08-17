@@ -1,5 +1,4 @@
 import { formatPrice, getInitials, getCategoryIcon, getProduct, timeAgo } from './data.js';
-import { subscribe } from './store.js';
 import {
   getActiveCommunityId, getJoinRequests, decideJoinRequest, subscribeCommunities,
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
@@ -8,7 +7,7 @@ import {
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
-  approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
+  subscribe, approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
 } from './orderLifecycle.js';
 
 const tabsEl = document.getElementById('owner-tabs');
@@ -537,29 +536,37 @@ function renderOrderCard(order) {
   `;
 }
 
-function handleAction(action, orderId) {
-  const actorId = currentOwnerId();
-  const actorName = currentOwnerName();
+let actionInFlight = false;
 
-  let result;
-  if (action === 'approve') {
-    result = approveOrder(orderId, actorId, actorName);
-  } else if (action === 'reject') {
+async function handleAction(action, orderId) {
+  if (action === 'reject') {
     rejectingId = orderId;
     render();
     return;
-  } else if (action === 'cancel-reject') {
+  }
+  if (action === 'cancel-reject') {
     rejectingId = null;
     render();
     return;
+  }
+
+  if (actionInFlight) return;
+
+  let result;
+  if (action === 'approve') {
+    actionInFlight = true;
+    result = await approveOrder(orderId);
   } else if (action === 'confirm-reject') {
     const reasonInput = document.getElementById('reject-reason-input');
     const reason = reasonInput ? reasonInput.value.trim() : '';
-    result = rejectOrder(orderId, actorId, actorName, reason);
+    actionInFlight = true;
+    result = await rejectOrder(orderId, reason);
     rejectingId = null;
   } else if (action === 'revert') {
-    result = revertApproval(orderId, actorId, actorName);
+    actionInFlight = true;
+    result = await revertApproval(orderId);
   }
+  actionInFlight = false;
 
   if (result && !result.ok) {
     alert(result.error);

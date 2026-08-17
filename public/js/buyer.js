@@ -1,10 +1,11 @@
 import { formatPrice, getCategoryIcon, getProduct } from './data.js';
-import { subscribe } from './store.js';
 import { getActiveCommunityId } from './community.js';
-import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
-import { startPurchase, abandonPurchase, completePurchase, decideCancellationRequest } from './orderLifecycle.js';
+import { getCurrentUserId } from './identity.js';
+import {
+  subscribe, startPurchase, abandonPurchase, completePurchase, decideCancellationRequest,
+  getCancellationRequests, subscribeCancellationRequests,
+} from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
-import { getCancellationRequests, subscribeCancellationRequests } from './cancellationRequests.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -27,12 +28,45 @@ const CANCEL_REQUEST_STATUS_LABELS = {
 
 let latestOrders = [];
 let selectedOrderId = null;
-let holdState = null; // { startedAt, rafId, orderId } while a hold is in progress
 let decidingRequestId = null;
 let decidingAction = null; // 'approved' | 'rejected'
 
-backBtn.addEventListener('click', () => {
-  releaseHoldIfAny();
+// --- Hold-to-confirm state machine ---------------------------------------
+// idle -> starting -> holding -> completing -> done, with 'abandoning'
+// reachable from 'holding' (a normal early release) or from 'starting' (a
+// release that happened while startPurchase's RPC was still in flight —
+// resolved once that RPC settles, see begin() below). Server state is
+// authoritative throughout: the countdown never starts until startPurchase
+// has actually succeeded server-side, and completePurchase/abandonPurchase
+// are each called at most once per hold, guarded by the phase itself so a
+// stray rAF frame or a duplicate pointer event can never double-fire either.
+let holdPhase = 'idle';
+let holdOrderId = null;
+let holdStartedAt = null;
+let holdRafId = null;
+let releaseRequestedDuringStart = false;
+
+// Bumped every time wireHoldButton() runs (a fresh detail render, whether
+// for the same order revisited or a different one) and every time the
+// Buyer leaves the detail view entirely (showList()). A begin()/complete()
+// continuation captures the value current at wire time and compares against
+// this later — if they no longer match, its own button/fill/label/statusEl
+// references point at DOM the Buyer has since left, and any UI mutation is
+// skipped (server-state handling still runs regardless; only DOM writes are
+// guarded).
+let holdGeneration = 0;
+
+function holdInProgress() {
+  return holdPhase !== 'idle';
+}
+
+backBtn.addEventListener('click', async () => {
+  // releaseHoldIfAny() itself is phase-aware: it's a genuine, awaited
+  // abandonPurchase call only when a hold is actively 'holding'; for
+  // 'starting'/'completing' it just flags the in-flight begin()/complete()
+  // continuation to clean up once its own RPC resolves, and never issues a
+  // second, racing call against the same order (see wireHoldButton below).
+  await releaseHoldIfAny();
   showList();
 });
 
@@ -40,12 +74,9 @@ function currentBuyerId() {
   return getCurrentUserId();
 }
 
-function currentBuyerName() {
-  return getCurrentDisplayName() || 'Unnamed buyer';
-}
-
 function showList() {
   selectedOrderId = null;
+  holdGeneration++; // invalidates any in-flight hold's DOM-touching continuation
   detailPanel.hidden = true;
   listPanel.hidden = false;
   render();
@@ -138,7 +169,9 @@ function renderCancellationRequests() {
   if (reasonInput) reasonInput.focus();
 }
 
-function handleCancelRequestAction(action, requestId) {
+let decisionInFlight = false;
+
+async function handleCancelRequestAction(action, requestId) {
   if (action === 'start-approve') {
     decidingRequestId = requestId;
     decidingAction = 'approved';
@@ -158,13 +191,17 @@ function handleCancelRequestAction(action, requestId) {
     return;
   }
   if (action === 'confirm') {
+    if (decisionInFlight) return;
     const reasonInput = document.getElementById('cancel-decision-reason-input');
     const reason = reasonInput ? reasonInput.value.trim() : '';
-    const result = decideCancellationRequest(requestId, decidingAction, currentBuyerId(), currentBuyerName(), reason || null);
+    decisionInFlight = true;
+    const result = await decideCancellationRequest(requestId, decidingAction, reason || null);
+    decisionInFlight = false;
     if (!result.ok) {
       // Do not fake success — e.g. a Driver may have collected the order
       // between the request and this decision, which the data layer refuses
-      // deterministically. Show exactly what it returned.
+      // deterministically (reconstructed from a fresh Supabase refetch, not
+      // trusted from any stale local state). Show exactly what it returned.
       const statusEl = document.getElementById('cancel-decision-status');
       if (statusEl) {
         statusEl.textContent = result.error;
@@ -202,7 +239,7 @@ function render() {
     const stillPending = latestOrders.find(
       o => o.id === selectedOrderId && o.status === 'pending_purchase' && visibleToCurrentBuyer(o)
     );
-    if (!stillPending && !holdState) {
+    if (!stillPending && !holdInProgress()) {
       // Someone else purchased or claimed it, or we lost access to its site,
       // while we were looking — bounce back.
       showList();
@@ -270,64 +307,154 @@ function renderDetail() {
 }
 
 function wireHoldButton(orderId) {
+  const myGeneration = ++holdGeneration;
   const btn = document.getElementById('hold-purchase-btn');
   const fill = document.getElementById('hold-purchase-fill');
   const label = document.getElementById('hold-purchase-label');
   const statusEl = document.getElementById('buyer-purchase-status');
 
-  function begin() {
-    if (holdState) return;
-    const result = startPurchase(orderId, currentBuyerId(), currentBuyerName());
+  // False once the Buyer has left this exact render (list, a different
+  // order, or this order re-rendered) — see holdGeneration's own comment.
+  function isLive() {
+    return myGeneration === holdGeneration;
+  }
+
+  function resetFill(text) {
+    if (!isLive()) return;
+    fill.style.width = '0%';
+    label.textContent = text || 'Press and hold to confirm Purchased';
+  }
+
+  function setStatus(text, cls) {
+    if (!isLive()) return;
+    statusEl.textContent = text;
+    statusEl.className = cls;
+  }
+
+  // Surfaces a failure regardless of whether this view is still live —
+  // inline in the status line when it is; via alert() (the same pattern
+  // owner.js/driver.js already use for a background action's failure) when
+  // the Buyer has since navigated away and there's no live element to write
+  // it into.
+  function reportError(message) {
+    if (isLive()) {
+      setStatus(message, 'form-status error');
+    } else {
+      alert(message);
+    }
+  }
+
+  // Only after the server has actually confirmed purchase_in_progress does
+  // the deliberate 3-second hold begin — this is the requirement that
+  // matters most here: no amount of holding the button counts for anything
+  // until startPurchase has genuinely succeeded server-side.
+  async function begin() {
+    if (holdPhase !== 'idle') return; // buttons protected while an RPC is in flight
+    holdPhase = 'starting';
+    holdOrderId = orderId;
+    releaseRequestedDuringStart = false;
+    setStatus('', 'form-status');
+    if (isLive()) label.textContent = 'Starting…';
+
+    const result = await startPurchase(orderId);
+
     if (!result.ok) {
-      statusEl.textContent = result.error;
-      statusEl.className = 'form-status error';
+      holdPhase = 'idle';
+      holdOrderId = null;
+      resetFill();
+      reportError(result.error);
       return;
     }
-    statusEl.textContent = '';
-    statusEl.className = 'form-status';
-    label.textContent = 'Keep holding…';
-    const startedAt = performance.now();
-    holdState = { startedAt, orderId };
+
+    if (releaseRequestedDuringStart) {
+      // The Buyer let go — or navigated away entirely, which also sets
+      // this flag via releaseHoldIfAny() below — before the server
+      // confirmed. Either way there is now a genuine purchase_in_progress
+      // lock server-side that nothing else will release; abandon it
+      // exactly once. No DOM is touched if the view has since gone stale.
+      releaseRequestedDuringStart = false;
+      holdPhase = 'abandoning';
+      resetFill();
+      const abandonResult = await abandonPurchase(orderId);
+      holdPhase = 'idle';
+      holdOrderId = null;
+      if (!abandonResult.ok) {
+        // Do not pretend this succeeded — the order may still be
+        // purchase_in_progress server-side. handleRpcFailure inside
+        // abandonPurchase already refreshed the cache for the error codes
+        // that matter; re-render so a still-live view reflects it.
+        reportError(abandonResult.error);
+        render();
+      }
+      return;
+    }
+
+    holdPhase = 'holding';
+    if (isLive()) label.textContent = 'Keep holding…';
+    holdStartedAt = performance.now();
     tick();
   }
 
   function tick() {
-    if (!holdState) return;
-    const elapsed = performance.now() - holdState.startedAt;
-    const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
-    fill.style.width = `${pct}%`;
+    if (holdPhase !== 'holding') return;
+    const elapsed = performance.now() - holdStartedAt;
+    if (isLive()) {
+      const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
+      fill.style.width = `${pct}%`;
+    }
     if (elapsed >= HOLD_MS) {
+      // Set before calling complete() — this is what stops a second rAF
+      // frame (or a pointerup arriving in the same tick) from ever
+      // triggering a second completePurchase call for this hold.
+      holdPhase = 'completing';
       complete();
       return;
     }
-    holdState.rafId = requestAnimationFrame(tick);
+    holdRafId = requestAnimationFrame(tick);
   }
 
-  function complete() {
-    if (!holdState) return;
-    cancelAnimationFrame(holdState.rafId);
-    holdState = null;
-    const result = completePurchase(orderId, currentBuyerId(), currentBuyerName());
+  async function complete() {
+    if (holdRafId) cancelAnimationFrame(holdRafId);
+    holdRafId = null;
+    const result = await completePurchase(orderId);
     if (!result.ok) {
-      statusEl.textContent = result.error;
-      statusEl.className = 'form-status error';
-      fill.style.width = '0%';
-      label.textContent = 'Press and hold to confirm Purchased';
+      holdPhase = 'idle';
+      holdOrderId = null;
+      resetFill();
+      reportError(result.error);
       return;
     }
-    label.textContent = 'Purchased ✓';
-    statusEl.textContent = 'Confirmed — this order is now available to drivers.';
-    statusEl.className = 'form-status success';
-    setTimeout(showList, 1200);
+    holdPhase = 'done';
+    if (isLive()) {
+      label.textContent = 'Purchased ✓';
+      statusEl.textContent = 'Confirmed — this order is now available to drivers.';
+      statusEl.className = 'form-status success';
+      setTimeout(showList, 1200);
+    }
   }
 
-  function release() {
-    if (!holdState) return;
-    cancelAnimationFrame(holdState.rafId);
-    holdState = null;
-    fill.style.width = '0%';
-    label.textContent = 'Press and hold to confirm Purchased';
-    abandonPurchase(orderId, currentBuyerId(), currentBuyerName());
+  async function release() {
+    if (holdPhase === 'starting') {
+      // Can't abandon yet — no purchase_in_progress lock exists server-side
+      // until startPurchase resolves. begin()'s own continuation (above)
+      // checks this flag the moment it does, and is the only code path that
+      // ever acts on it — avoids two independent completions racing to call
+      // abandonPurchase for the same hold.
+      releaseRequestedDuringStart = true;
+      return;
+    }
+    if (holdPhase !== 'holding') return; // completing/abandoning/done/idle: nothing to do, never double-fire
+    holdPhase = 'abandoning';
+    if (holdRafId) cancelAnimationFrame(holdRafId);
+    holdRafId = null;
+    resetFill();
+    const result = await abandonPurchase(orderId);
+    holdPhase = 'idle';
+    holdOrderId = null;
+    if (!result.ok) {
+      reportError(result.error);
+      render();
+    }
   }
 
   btn.addEventListener('pointerdown', begin);
@@ -336,16 +463,30 @@ function wireHoldButton(orderId) {
   btn.addEventListener('pointercancel', release);
 }
 
-function releaseHoldIfAny() {
-  if (!holdState) return;
-  const { orderId } = holdState;
-  if (holdState.rafId) cancelAnimationFrame(holdState.rafId);
-  holdState = null;
-  abandonPurchase(orderId, currentBuyerId(), currentBuyerName());
+async function releaseHoldIfAny() {
+  if (holdPhase === 'starting') {
+    releaseRequestedDuringStart = true;
+    return;
+  }
+  if (holdPhase !== 'holding') return;
+  const orderId = holdOrderId;
+  holdPhase = 'abandoning';
+  if (holdRafId) cancelAnimationFrame(holdRafId);
+  holdRafId = null;
+  const result = await abandonPurchase(orderId);
+  holdPhase = 'idle';
+  holdOrderId = null;
+  if (!result.ok) {
+    // No live hold-button DOM here — this runs from navigation (backBtn /
+    // refreshBuyerView), not from the button itself. The order cache is
+    // already refreshed for the error codes that matter (handleRpcFailure,
+    // orderLifecycle.js); the caller's own next render picks up the truth.
+    alert(result.error);
+  }
 }
 
-export function refreshBuyerView(orderId = null) {
-  releaseHoldIfAny();
+export async function refreshBuyerView(orderId = null) {
+  await releaseHoldIfAny();
   decidingRequestId = null;
   decidingAction = null;
   const target = orderId && latestOrders.find(o => o.id === orderId && o.status === 'pending_purchase');
