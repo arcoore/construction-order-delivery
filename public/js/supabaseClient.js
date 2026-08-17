@@ -24,6 +24,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // explicit, obvious constant swap in this one file is the intended
 // mechanism, checked via window.SITESTOCK_SUPABASE_* first so a future
 // deploy-time script tag can override without editing this file.
+// Set by env.js (loaded before this module — see index.html) when the
+// current hostname doesn't match a known environment. Fails closed rather
+// than silently defaulting to local Supabase or guessing a backend.
+if (window.SITESTOCK_SUPABASE_CONFIG_ERROR) {
+  throw new Error('SiteStock: ' + window.SITESTOCK_SUPABASE_CONFIG_ERROR);
+}
+
 const SUPABASE_URL = window.SITESTOCK_SUPABASE_URL || 'http://127.0.0.1:54321';
 const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
