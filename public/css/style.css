@@ -525,6 +525,12 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   color: var(--text-muted);
 }
 
+.source-distance {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .source-availability {
   font-size: 0.78rem;
   font-weight: 700;

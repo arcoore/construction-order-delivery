@@ -1,5 +1,5 @@
 import { searchProducts, getBranchesForProduct, getAvailability, getCategoryIcon, formatPrice, getProduct } from './data.js';
-import { geocodePostcode } from './geo.js';
+import { geocodePostcode, distanceKm } from './geo.js';
 import {
   subscribe, createOrder, editOrder, cancelOrderDirect, requestCancellation,
   getPendingCancellationRequestForOrder, getCancellationRequestsForOrder, subscribeCancellationRequests,
@@ -251,19 +251,51 @@ async function goToSourceStep(product, variant) {
   renderSourceStep(product, variant, details);
 }
 
+// Phase A — honest, distance-only supplier ranking. Real straight-line
+// (haversine) distance from the Site's already-geocoded delivery coordinate
+// to each candidate branch, nearest first — the only ranking factor here,
+// since price/availability are still demo/static data (see data.js) and
+// would be dishonest to rank on. Never mutates the shared BRANCHES fixture
+// or product.branchIds — always maps to new objects. A branch (or,
+// defensively, a missing delivery coordinate — shouldn't happen given
+// goToSourceStep already blocks on a failed geocode, but checked anyway)
+// without a usable coordinate sorts last, labeled "Distance unavailable"
+// rather than showing NaN or silently pretending a distance was computed.
+// Array.prototype.sort is stable (ES2019+), so equal/unavailable distances
+// naturally fall back to the existing catalog order — no secondary sort key
+// needed.
+function rankBranchesByDistance(branches, details) {
+  const origin = (details.deliveryLat != null && details.deliveryLon != null)
+    ? { lat: details.deliveryLat, lon: details.deliveryLon }
+    : null;
+  return branches
+    .map(branch => ({
+      ...branch,
+      distanceKm: (origin && branch.lat != null && branch.lon != null)
+        ? distanceKm(origin, branch)
+        : null,
+    }))
+    .sort((a, b) => {
+      if (a.distanceKm == null && b.distanceKm == null) return 0;
+      if (a.distanceKm == null) return 1;
+      if (b.distanceKm == null) return -1;
+      return a.distanceKm - b.distanceKm;
+    });
+}
+
 function renderSourceStep(product, variant, details) {
   setBackAction('Back to order details', () => {
     renderDetailsStep(product, variant, details);
   });
 
-  const sources = getBranchesForProduct(product);
+  const sources = rankBranchesByDistance(getBranchesForProduct(product), details);
 
   orderFormEl.innerHTML = `
     <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
     <p class="hint">${details.quantity} &times; ${product.unit} &middot; deliver to ${details.deliveryPostcode}</p>
 
     <label class="field-label">Where should this be ordered from?</label>
-    <p class="hint">These are the stockists carrying this item, with how soon it'd be ready. Pick one to tell the driver where to buy it.</p>
+    <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock — pick one to tell the driver where to buy it.</p>
     <div class="variant-list">
       ${sources.map(s => {
         const avail = getAvailability(s.id, product.id);
@@ -273,6 +305,7 @@ function renderSourceStep(product, variant, details) {
           <span class="variant-option-label">
             <span class="source-name">${s.name}</span>
             <span class="source-meta">${s.website} &middot; ${s.postcode}</span>
+            <span class="source-distance">${s.distanceKm != null ? `~${s.distanceKm.toFixed(1)} km from site` : 'Distance unavailable'}</span>
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
           <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
