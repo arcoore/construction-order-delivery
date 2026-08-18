@@ -1,4 +1,5 @@
-import { getBranch, getProduct, getInitials } from './data.js';
+import { getProduct, getInitials } from './data.js';
+import { getBranch } from './suppliers.js';
 import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
@@ -73,6 +74,20 @@ tabsEl.addEventListener('click', e => {
   render();
 });
 
+// Phase B hardening — real numeric coordinates only. A resolved branch can
+// still have null lat/lon (never required by Phase A/B), and since 0018 a
+// branch can legitimately fail to resolve at all (getBranch returns null —
+// its supplier or the branch itself went inactive after an in-flight
+// order's stockistId was snapshotted). Never coerce a missing coordinate
+// into 0,0 (JS's `null - lat` silently does exactly that) — return null,
+// never Infinity/NaN, whenever either point isn't a real coordinate.
+function safeDistanceKm(a, b) {
+  if (!a || !b || !Number.isFinite(a.lat) || !Number.isFinite(a.lon) || !Number.isFinite(b.lat) || !Number.isFinite(b.lon)) {
+    return null;
+  }
+  return distanceKm(a, b);
+}
+
 // Defensive fallback only — every order should already carry the stockistId
 // the worker chose at creation. Kept in case that's ever missing.
 function nearestBranchFor(order, from) {
@@ -83,9 +98,9 @@ function nearestBranchFor(order, from) {
   for (const bid of product.branchIds) {
     const branch = getBranch(bid);
     if (!branch) continue;
-    const d = from ? distanceKm(from, branch) : null;
+    const d = from ? safeDistanceKm(from, branch) : null;
     if (from) {
-      if (d < bestDist) {
+      if (d != null && d < bestDist) {
         bestDist = d;
         best = branch;
       }
@@ -94,6 +109,21 @@ function nearestBranchFor(order, from) {
     }
   }
   return best ? { branch: best, distanceKm: from ? bestDist : null } : null;
+}
+
+// Phase B hardening — order.stockistId can now legitimately fail to
+// resolve (see safeDistanceKm's comment above); this never crashes and
+// never invents a distance. Calls getBranch exactly once (the old code
+// called it twice per order, redundantly).
+function resolvePickup(order, from) {
+  if (order.stockistId) {
+    const branch = getBranch(order.stockistId);
+    return {
+      branch,
+      distanceKm: (branch && from) ? safeDistanceKm(from, branch) : null,
+    };
+  }
+  return nearestBranchFor(order, from);
 }
 
 function currentDriverId() {
@@ -117,12 +147,7 @@ function render() {
     return;
   }
 
-  const withDistance = filtered.map(o => {
-    const pickup = o.stockistId
-      ? { branch: getBranch(o.stockistId), distanceKm: driverPos ? distanceKm(driverPos, getBranch(o.stockistId)) : null }
-      : nearestBranchFor(o, driverPos);
-    return { order: o, pickup };
-  });
+  const withDistance = filtered.map(o => ({ order: o, pickup: resolvePickup(o, driverPos) }));
 
   if (activeTab === 'available') {
     if (driverPos) {
@@ -158,9 +183,20 @@ const STATUS_LABELS = {
 function renderOrderCard(order, pickup) {
   const branch = pickup?.branch;
   const dist = pickup?.distanceKm;
-  const deliveryDist = branch && order.deliveryLat != null
-    ? distanceKm(branch, { lat: order.deliveryLat, lon: order.deliveryLon })
+  const deliveryDist = branch
+    ? safeDistanceKm(branch, { lat: order.deliveryLat, lon: order.deliveryLon })
     : null;
+  // Phase B hardening — when the live branch can't be resolved (deactivated
+  // since this order's stockistId was snapshotted), fall back to the
+  // order's own point-in-time snapshot fields rather than showing nothing —
+  // historical/in-flight order display must never depend on a live supplier
+  // row. Pickup distance has no snapshot substitute, so it's simply omitted
+  // (Number.isFinite below), matching how this card already silently omits
+  // it when the Driver hasn't set a location — never "Infinity"/"NaN".
+  const buyFromName = branch ? branch.name : (order.stockistName || 'Unknown');
+  const buyFromSub = branch
+    ? `${branch.website} &middot; ${branch.postcode}`
+    : [order.stockistWebsite, order.stockistPostcode].filter(Boolean).join(' &middot; ');
 
   let actionHtml = '';
   if (order.status === 'purchased') {
@@ -221,10 +257,10 @@ function renderOrderCard(order, pickup) {
       <div class="driver-route">
         <div class="route-step">
           <span class="route-label">Buy from</span>
-          <span class="route-value">${branch ? branch.name : 'Unknown'}</span>
-          ${branch ? `<span class="route-sub">${branch.website} &middot; ${branch.postcode}</span>` : ''}
+          <span class="route-value">${buyFromName}</span>
+          ${buyFromSub ? `<span class="route-sub">${buyFromSub}</span>` : ''}
           ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
-          ${dist != null ? `<span class="route-dist">${dist.toFixed(1)} km from you</span>` : ''}
+          ${Number.isFinite(dist) ? `<span class="route-dist">${dist.toFixed(1)} km from you</span>` : ''}
         </div>
         <div class="route-arrow">&rarr;</div>
         <div class="route-step">
@@ -232,7 +268,7 @@ function renderOrderCard(order, pickup) {
           <span class="route-value">${order.siteName || order.deliveryPostcode}</span>
           ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
           ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${order.siteDeliveryInstructions}</span>` : ''}
-          ${deliveryDist != null ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
+          ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
         </div>
       </div>
       <span class="status-badge status-${order.status}">${STATUS_LABELS[order.status] || order.status}</span>

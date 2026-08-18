@@ -1,21 +1,14 @@
-// Mock branch network (builders' merchants). Coordinates are approximate
-// city-centre locations for demo purposes, not exact street addresses.
-export const BRANCHES = [
-  { id: 'b1', name: 'Travis Perkins - London Wandsworth', website: 'travisperkins.co.uk', postcode: 'SW18 4ES', lat: 51.4571, lon: -0.1998 },
-  { id: 'b2', name: 'Jewson - Manchester', website: 'jewson.co.uk', postcode: 'M11 4AU', lat: 53.4808, lon: -2.1749 },
-  { id: 'b3', name: 'Selco - Birmingham', website: 'selcobw.com', postcode: 'B6 7DB', lat: 52.4862, lon: -1.8904 },
-  { id: 'b4', name: 'Wickes Trade - Leeds', website: 'wickes.co.uk', postcode: 'LS10 1AB', lat: 53.8008, lon: -1.5491 },
-  { id: 'b5', name: 'Travis Perkins - Bristol', website: 'travisperkins.co.uk', postcode: 'BS1 6XX', lat: 51.4545, lon: -2.5879 },
-  { id: 'b6', name: 'Jewson - Glasgow', website: 'jewson.co.uk', postcode: 'G1 1AA', lat: 55.8642, lon: -4.2518 },
-  { id: 'b7', name: 'MKM Building Supplies - Liverpool', website: 'mkmbs.co.uk', postcode: 'L1 8JQ', lat: 53.4084, lon: -2.9916 },
-  { id: 'b8', name: 'Selco - Newcastle', website: 'selcobw.com', postcode: 'NE1 7RU', lat: 54.9783, lon: -1.6178 },
-  { id: 'b9', name: 'Buildbase - Sheffield', website: 'buildbase.co.uk', postcode: 'S1 2HE', lat: 53.3811, lon: -1.4701 },
-  { id: 'b10', name: 'Jewson - Nottingham', website: 'jewson.co.uk', postcode: 'NG1 6HA', lat: 52.9548, lon: -1.1581 },
-  { id: 'b11', name: 'Travis Perkins - Cardiff', website: 'travisperkins.co.uk', postcode: 'CF10 1EP', lat: 51.4816, lon: -3.1791 },
-  { id: 'b12', name: 'Buildbase - Edinburgh', website: 'buildbase.co.uk', postcode: 'EH1 1AA', lat: 55.9533, lon: -3.1883 },
-];
-
-const ALL_BRANCH_IDS = BRANCHES.map(b => b.id);
+// Phase B — the branch network (builders' merchants) moved to Supabase-
+// backed `suppliers.js` (real `suppliers`/`supplier_branches` tables, see
+// supabase/migrations/0017_supplier_branch_foundation.sql). The former
+// `BRANCHES` array, `getBranch`, and `getBranchesForProduct` that lived here
+// are gone — `getBranchesForProduct` now lives in `suppliers.js`, imported
+// by the two call sites that need it (site.js, driver.js). This literal
+// list of catalogue keys ('b1'..'b12') is the one remaining link between
+// this file and that table: it must stay in sync with
+// supplier_branches.catalogue_key, since PRODUCTS below still reference
+// branches by these same stable string ids, exactly as they always have.
+const ALL_BRANCH_IDS = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10', 'b11', 'b12'];
 
 // Mock product catalog. `keywords` widen the search match beyond the name.
 // Every product defines `variants` (the size/type choice) — the ordering
@@ -141,14 +134,6 @@ export function searchProducts(query) {
     .filter(r => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .map(r => r.product);
-}
-
-export function getBranch(id) {
-  return BRANCHES.find(b => b.id === id);
-}
-
-export function getBranchesForProduct(product) {
-  return product.branchIds.map(id => getBranch(id)).filter(Boolean);
 }
 
 export function getProduct(id) {

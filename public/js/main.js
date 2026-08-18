@@ -22,6 +22,7 @@ import {
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
 import { refreshOrderCache } from './orderLifecycle.js';
+import { refreshSupplierCache } from './suppliers.js';
 import { startRealtimeForSession, stopRealtime } from './realtime.js';
 
 // Phase 8B/8C: identity/company/site/order data is now Supabase-backed and
@@ -36,9 +37,9 @@ import { startRealtimeForSession, stopRealtime } from './realtime.js';
 // grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
   try {
-    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache()]);
+    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache(), refreshSupplierCache()]);
   } catch (err) {
-    console.error('SiteStock: failed to refresh community/site/order/notification data', err);
+    console.error('SiteStock: failed to refresh community/site/order/notification/supplier data', err);
   }
 }
 
