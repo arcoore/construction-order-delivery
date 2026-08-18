@@ -22,6 +22,7 @@ import {
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
 import { refreshOrderCache } from './orderLifecycle.js';
+import { startRealtimeForSession, stopRealtime } from './realtime.js';
 
 // Phase 8B/8C: identity/company/site/order data is now Supabase-backed and
 // shared across devices, but there's no Realtime subscription yet
@@ -528,10 +529,22 @@ window.addEventListener('sitestock:enter-community', () => {
 
 window.addEventListener('sitestock:logged-in', () => {
   setActiveRole(null);
+  // Phase 8D.2 — starts (or restarts, idempotently) Realtime for whichever
+  // account just logged in. Safe even though community/order/notification
+  // cache refreshes triggered by the auth transition may still be in
+  // flight — every refreshXCache() this could race is itself a full,
+  // idempotent replace, so "channel opens slightly before/after the first
+  // cache load resolves" has no bad outcome either way.
+  startRealtimeForSession();
   routeFromTop();
 });
 
 window.addEventListener('sitestock:logout', async () => {
+  // Phase 8D.2 — stop BEFORE clearing session state, not after: this is
+  // what guarantees no in-flight event from the outgoing account's channels
+  // can still be processed once the auth transition below starts clearing
+  // caches out from under it.
+  stopRealtime();
   setActiveCommunityId(null);
   notifPanel.hidden = true;
   notifPrefsModal.hidden = true;
@@ -554,6 +567,25 @@ subscribeCommunities(() => {
   const userId = getCurrentUserId();
   if (!community || !isApprovedMember(community.id, userId)) {
     showCommunityPicker();
+    return;
+  }
+  // Phase 8D.2 — live permission revalidation. This callback already fires
+  // on every community-cache change regardless of cause (a same-tab write,
+  // window-focus refresh, or — new this phase — a Realtime-triggered
+  // refreshCommunityCache()/refreshSitesCache()), so the only new thing
+  // here is the check itself, not a new trigger. Never treat a Realtime
+  // event as proof of anything: by the time this callback runs, the cache
+  // has already been authoritatively refetched under RLS, so
+  // eligibleRoles() here reflects real, current, server-checked state —
+  // exactly what a fresh page load would compute, just running earlier
+  // than the user's next navigation would have surfaced it. Mirrors
+  // navigateToNotification's existing "a target is a wish, never an
+  // authority" fallback shape below, just triggered by a live cache change
+  // instead of a notification click.
+  const role = getActiveRole();
+  if (role && !eligibleRoles(community.id, userId).includes(role)) {
+    setActiveRole(null);
+    showRoleSelect();
   }
 });
 
@@ -721,14 +753,25 @@ notifPrefsCancelBtn.addEventListener('click', () => {
 async function bootstrap() {
   await authReady;
   await Promise.all([loadAllProfiles(), refreshDataCaches()]);
+  // Phase 8D.2 — covers session restore (a page load with an existing
+  // Supabase session already in localStorage), which never fires
+  // 'sitestock:logged-in' — that event only exists for the login FORM's own
+  // success path. startRealtimeForSession() itself no-ops if there's no
+  // authenticated user, so this is safe to call unconditionally here too.
+  startRealtimeForSession();
   bootstrapLoadingView.classList.remove('active');
   routeFromTop();
 }
 
-// Lightweight freshness mechanism (Phase 8B — no Realtime yet, see
-// CLAUDE.md): re-pulls community/site data whenever the tab regains focus,
-// so switching back after changes happened elsewhere (another tab, another
-// device) doesn't leave a badly stale cache sitting around indefinitely.
+// Lightweight freshness mechanism, kept as a fallback even after Phase
+// 8D.2 added Realtime (see CLAUDE.md's Phase 8D.2 section) — Realtime
+// itself reconnects and re-refreshes on its own after a dropped
+// connection, but a focus-triggered refresh is still the thing that
+// recovers correctness if the websocket never reconnects at all (a real
+// possibility: corporate proxies, restrictive networks, browser
+// extensions). Re-pulls community/site/order/notification data whenever
+// the tab regains focus, so switching back after changes happened
+// elsewhere doesn't leave a badly stale cache sitting around indefinitely.
 // This does not itself force a re-render of every open view — see
 // refreshDataCaches()'s header for why that's an accepted, documented
 // limitation for owner/buyer/driver/site.js specifically.

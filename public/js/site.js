@@ -6,7 +6,7 @@ import {
 } from './orderLifecycle.js';
 import { getActiveCommunityId, isApprovalRequired } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
-import { getActiveSitesForUser } from './sites.js';
+import { getActiveSitesForUser, subscribeSites } from './sites.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -982,3 +982,16 @@ subscribe(orders => {
 });
 
 subscribeCancellationRequests(renderSiteOrders);
+
+// Phase 8D.2 — live site-picker freshness. Previously this list only ever
+// refreshed on the next full view-entry (refreshWorkerView, called from
+// main.js's showRoleView) — a site removal mid-session (owner-side,
+// Realtime-triggered or same-tab) left a stale, no-longer-authorized site
+// sitting in the picker until the Worker next navigated away and back. This
+// only ever re-renders the picker's own list — it never bypasses
+// createOrder's/editOrder's own independent canCreateOrderForSite
+// re-check, which already refuses server-side regardless of what this UI
+// happens to be showing.
+subscribeSites(() => {
+  if (!siteSelectPanel.hidden) renderSiteSelectList();
+});
