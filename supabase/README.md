@@ -226,9 +226,9 @@ One real fixture bug was caught and fixed while writing this file: two of the si
 - **Hosted**: migration `0015` applied to `sitestock-dev` (`supabase db push --linked`), parity re-confirmed 0001–0015 local ⇄ hosted, then the identical legitimate/false/unauthorized matrix re-proven via raw HTTP against the real REST/RPC API for both `revoke_buyer_access` and `remove_site_member`, plus spot-checks: raw `notifications` insert still refused, anon still cannot call `revoke_buyer_access`, a user's own notification query returns only their own rows, and both superseded RPCs return `42501` even for a real owner.
 - **Frontend regression**: grant/add-member, role switching, Community→Sites, Worker ordering, order notifications, and Driver's zero-price rendering were all re-confirmed working live in the same dev-server session as the revoke/remove checks — no regressions from routing those two mutations through the new RPCs.
 
-## Phase 8D.2 — Realtime (local)
+## Phase 8D.2 — Realtime
 
-**Status: implemented and verified against BOTH the local Supabase stack and hosted `sitestock-dev`.** Migration `0016` applied to both; the full local test matrix was independently re-run and passed on hosted (see "Hosted verification" below). **Not yet verified against a genuine second physical device** — that PC + phone acceptance test is the one remaining gate before this phase is considered closed. Do not read this section as evidence that a real second device has confirmed cross-device push — backend/browser-session verification is done, real-device verification is not.
+**Status: CLOSED. Implemented and verified against the local Supabase stack, hosted `sitestock-dev`, and a genuine second-physical-device (PC + phone) acceptance test — all three passed.** Migration `0016` applied to both backends; the full local test matrix was independently re-run and passed on hosted (see "Hosted verification" below). The physical-device pass itself found one real bug — see "Real-device acceptance test (PC + phone)" below — fixed, re-verified locally and on hosted, then confirmed by a real physical retest. It is now correct to say a real second device has confirmed cross-device push for this app.
 
 ### What this phase is
 
@@ -272,9 +272,24 @@ Two fresh local test communities/accounts were used, with real Supabase Auth ses
 - **Full test matrix re-run and passed on hosted**: real order created via an authenticated Worker RPC call produced a live notification + dashboard update in an idle, already-open Owner session; the full order chain (create → approve → purchase → claim → collect → deliver) propagated automatically through every open Owner/Worker/Driver view; **both permission-invalidation DELETE scenarios that had the local bug — Buyer revoke and site removal — re-confirmed fixed on hosted**, each tested bidirectionally; channel-lifecycle steady states and no-accumulation across role/community switches and a real account switch all confirmed; a forged cross-company subscription received zero events against a real matching write in a genuinely separate hosted company; disconnect/reconnect and the focus-only fallback (tested with Realtime left genuinely disconnected) both confirmed correct catch-up and that the app remains fully usable with the websocket unavailable.
 - **Temporary test configuration**: the local dev frontend was pointed at hosted via a temporary, uncommitted edit to `public/js/env.js`'s `localhost` branch (publishable/anon key only, never service_role/password/access_token), reverted before this turn ended — confirmed via an empty `git diff` on that file.
 
-### What's deliberately NOT done this phase
+### Real-device acceptance test (PC + phone)
 
-A genuine second-physical-device (PC + phone) test — required before Phase 8D.2 can be called fully closed, per explicit direction. Any change to an RLS policy, an RPC's authorization logic, the notification schema, or the order lifecycle.
+The genuine second-physical-device acceptance test — deliberately deferred past every backend/browser-session pass above — was run in a later session, against this same verified Realtime implementation.
+
+- **Test 1 (order propagation)**: PASS. Worker order placed on the phone updated the Owner's already-open PC dashboard automatically, no refresh.
+- **Test 2 (notifications)**: PASS. Notifications updated automatically on both devices, no refresh.
+- **Test 3 (Buyer access revocation)**: PASS. Revoking a Buyer's access on the PC correctly routed the phone away from the now-unauthorized Buyer view automatically.
+- **Test 4 (active-site invalidation)**: **FAILED on the first physical attempt.** The Worker had already entered a site (not sitting on the site picker) when the Owner removed their site membership on the PC — the phone did not leave the unauthorized site context until manually refreshed.
+- **Root cause**: `public/js/site.js`'s `subscribeSites` reactive handler only ever re-rendered the site *picker's* list, and only while the Worker was actually sitting on the picker screen (`siteSelectPanel` visible) — exactly the case the local multi-tab pass above exercised, and the only case it exercised. It never checked the Worker's already-chosen `selectedSite` (search/order-form screens, picker hidden) against a freshly refreshed sites cache at all, so a removal that happened while genuinely *inside* a site had nothing to react to it.
+- **Fix**: the same `subscribeSites` handler now additionally compares `selectedSite` against the authoritative, just-refreshed `getActiveSitesForUser()` result (never the raw Realtime payload) and, if it's no longer in the list, calls the existing `refreshWorkerView()` to force the Worker back to a safe, freshly re-derived site-selection screen — the same reset `main.js` already uses on ordinary view-entry, reusing the pre-existing "you haven't been assigned to a site yet" fallback when none remain. Frontend-only (`public/js/site.js`); no migration, RLS, or RPC change — `createOrder`'s/`editOrder`'s own independent server-side `canCreateOrderForSite` re-check was never bypassable and was never the actual security boundary here.
+- **Retest before the physical retry**: reproduced the bug on the unfixed code first (`git stash`) to confirm the failure mode precisely, then restored the fix and reverified both locally and against hosted `sitestock-dev` (same temporary `env.js` override technique as above, reverted, confirmed via empty `git diff`) — in both environments the Worker's screen automatically left the stale site context with zero refresh and zero console errors. The original picker-visible scenario was re-run too, confirming no regression. Full pgTAP suite unaffected (144/144 — no database change).
+- **Physical retest**: the user then repeated Test 4 on the real PC + real phone against the verified fix artifact, without any manual refresh, and confirmed it passed.
+
+All four tests now pass on genuine, separate physical hardware. Phase 8D.2 is closed.
+
+### What was deliberately NOT done this phase
+
+Any change to an RLS policy, an RPC's authorization logic, the notification schema, or the order lifecycle.
 
 ## Security notes for whoever provisions the real project
 

@@ -983,15 +983,35 @@ subscribe(orders => {
 
 subscribeCancellationRequests(renderSiteOrders);
 
-// Phase 8D.2 — live site-picker freshness. Previously this list only ever
-// refreshed on the next full view-entry (refreshWorkerView, called from
-// main.js's showRoleView) — a site removal mid-session (owner-side,
-// Realtime-triggered or same-tab) left a stale, no-longer-authorized site
-// sitting in the picker until the Worker next navigated away and back. This
-// only ever re-renders the picker's own list — it never bypasses
-// createOrder's/editOrder's own independent canCreateOrderForSite
-// re-check, which already refuses server-side regardless of what this UI
-// happens to be showing.
+// Phase 8D.2 — live site-picker freshness, PLUS (Test 4 fix) live
+// active-site invalidation. The original version of this handler only
+// re-rendered the picker's own LIST, and only while the Worker was actually
+// sitting on the picker screen (siteSelectPanel visible) — that's the case
+// the local multi-tab verification covered, and it worked. A real
+// second-physical-device test found the actual gap: a Worker who had
+// already CHOSEN a site (`selectedSite` set, now on the search/order-form
+// screens with the picker hidden) kept using that site with no visible
+// change after their membership was removed mid-session — nothing here was
+// even looking at `selectedSite` at all, so a Realtime-triggered cache
+// refresh had nothing to react to for that case. Fixed by additionally
+// checking, on every refreshed (authoritative, never the raw Realtime
+// payload) sites cache, whether the Worker's current `selectedSite` is
+// still in their real authorized list — if not, `refreshWorkerView()` (the
+// same full reset `main.js` already uses on ordinary view-entry) closes
+// whatever order/edit context was open and returns them to a freshly
+// re-derived site-selection screen, which itself shows the existing
+// "you haven't been assigned to a site yet" message if none remain. This
+// was always a UI-freshness gap, never a security one — createOrder's/
+// editOrder's own canCreateOrderForSite re-check already refuses
+// server-side regardless of what this UI happens to be showing.
 subscribeSites(() => {
-  if (!siteSelectPanel.hidden) renderSiteSelectList();
+  if (!siteSelectPanel.hidden) {
+    renderSiteSelectList();
+    return;
+  }
+  if (!selectedSite) return;
+  const communityId = getActiveCommunityId();
+  const userId = getCurrentUserId();
+  const stillAuthorized = getActiveSitesForUser(communityId, userId).some(s => s.id === selectedSite.id);
+  if (!stillAuthorized) refreshWorkerView();
 });
