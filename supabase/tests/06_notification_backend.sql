@@ -51,7 +51,7 @@ select throws_ok(
 -- with): a legitimate application action produces the correct notification
 -- ================================================================
 select tests.authenticate_as(:'worker_e');
-select create_order(:'company_e', :'site_e', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as order_result \gset
+select create_order(:'company_e', :'site_e', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_result \gset
 select (:'order_result'::orders).id as order_id \gset
 
 select tests.authenticate_as(:'owner_e');
@@ -196,7 +196,7 @@ select is(
 select tests.authenticate_as(:'owner_e');
 update notification_preferences set approval_updates = false where user_id = :'owner_e';
 select tests.authenticate_as(:'worker_e');
-select create_order(:'company_e', :'site_e', 'p2', 'Timber', '2.4m', 3, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50) as order_result2 \gset
+select create_order(:'company_e', :'site_e', 'p2', 'Timber', '2.4m', 3, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50, null, null) as order_result2 \gset
 select (:'order_result2'::orders).id as order_id2 \gset
 select tests.authenticate_as(:'owner_e');
 select is(

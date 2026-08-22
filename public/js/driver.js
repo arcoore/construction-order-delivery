@@ -4,6 +4,7 @@ import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
+import { formatNeededBy } from './deadline.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -252,6 +253,7 @@ function renderOrderCard(order, pickup) {
         <div class="order-card-main">
           <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
           <span>${order.quantity} × ${order.unit}</span>
+          <span class="order-needed-by">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
         </div>
       </div>
       <div class="driver-route">

@@ -38,14 +38,14 @@ insert into site_memberships (site_id, community_id, user_id, added_by_id) value
 
 -- ---------------------------------------------------- fixture order
 select tests.authenticate_as(:'worker_d');
-select create_order(:'company_d', :'site_d', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as order_result \gset
+select create_order(:'company_d', :'site_d', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_result \gset
 select (:'order_result'::orders).id as order_id \gset
 select (:'order_result'::orders).version as order_version \gset
 
 -- ---------------------------------------------------- 1: unauthorized edit
 select tests.authenticate_as(:'stranger_d');
 select throws_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'order_id', :'order_version', :'site_d'),
   '42501', null,
   'a non-requester cannot edit this order'
@@ -53,7 +53,7 @@ select throws_ok(
 
 -- ---------------------------------------------------- 2: successful edit recomputes total_price server-side
 select tests.authenticate_as(:'worker_d');
-select edit_order(:'order_id', :'order_version', 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, :'site_d', 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as edit_result \gset
+select edit_order(:'order_id', :'order_version', 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, :'site_d', 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as edit_result \gset
 select is( (:'edit_result'::orders).total_price, 60.75::numeric,
   'total_price is server-recomputed as unit_price * new quantity (9 * 6.75), never trusted from the caller' );
 select is( (:'edit_result'::orders).version, (:'order_version'::integer) + 1,
@@ -63,7 +63,7 @@ select is( (:'edit_result'::orders).version, (:'order_version'::integer) + 1,
 select tests.authenticate_as(:'worker_d');
 select (:'edit_result'::orders).version as order_version2 \gset
 select throws_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'order_id', :'order_version2', :'site_d'),
   '22023', null,
   'resubmitting identical values is refused as a no-op edit, matching the prototype editOrder() behavior'
@@ -74,7 +74,7 @@ select tests.authenticate_as(:'owner_d');
 select approve_order(:'order_id');
 select tests.authenticate_as(:'worker_d');
 select (select version from orders where id = :'order_id') as approved_version \gset
-select edit_order(:'order_id', :'approved_version', 'p1', 'Cement', '25kg bag', 12, 'bag', 'SW1A 1AA', null, null, :'site_d', 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as reapprove_result \gset
+select edit_order(:'order_id', :'approved_version', 'p1', 'Cement', '25kg bag', 12, 'bag', 'SW1A 1AA', null, null, :'site_d', 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as reapprove_result \gset
 select is( (:'reapprove_result'::orders).status::text, 'pending_approval',
   'editing an already-approved order resets it to pending_approval' );
 select is( (:'reapprove_result'::orders).approved_by_id, null,
@@ -91,7 +91,7 @@ select ok(
 -- approved Phase 8C architecture plan.
 select tests.authenticate_as(:'worker_d');
 select throws_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 20, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 20, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'order_id', :'order_version', :'site_d'),  -- deliberately the ORIGINAL, now-stale version
   '40001', null,
   'an edit submitted against a stale version is refused, not silently applied over a newer server state'
@@ -101,7 +101,7 @@ select throws_ok(
 select tests.authenticate_as(:'worker_d');
 select (select version from orders where id = :'order_id') as current_version \gset
 select throws_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', -1) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', -1, null, null) $$,
     :'order_id', :'current_version', :'site_d'),
   '23514', null,
   'a negative unit_price is refused by the server-side non-negative check constraint, regardless of what the browser sends'

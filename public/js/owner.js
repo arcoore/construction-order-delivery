@@ -14,6 +14,7 @@ import {
 // creating/editing/archiving/assigning all still happens exclusively in
 // sitesView.js, reached via the sitestock:show-sites event below.
 import { subscribeSites, getActiveSites, getSiteMembers } from './sites.js';
+import { formatNeededBy } from './deadline.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -147,12 +148,18 @@ const EVENT_RENDER = {
       quantity: 'quantity', productName: 'material', variant: 'size', siteName: 'site',
       deliveryPostcode: 'delivery postcode', stockistName: 'stockist',
       unitPrice: 'unit price', totalPrice: 'total price',
+      neededByType: 'needed by',
     };
     // Only the human-readable half of a paired change is shown (e.g.
     // siteName, not the siteId/address/postcode/instructions that changed
     // alongside it) — full detail still exists in meta.changes itself, this
-    // is just the readable summary line.
-    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit']);
+    // is just the readable summary line. neededBy (the raw timestamp) is
+    // skipped the same way in favor of neededByType's plain asap/deadline
+    // label — a formatted "Today, 5:00 PM"-style value isn't meaningful
+    // without knowing "today" relative to when the diff is being read, so
+    // this summary line intentionally stays as simple as siteId/stockistId
+    // already are.
+    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
     const parts = Object.entries(changes)
       .filter(([field]) => !skip.has(field))
       .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
@@ -411,6 +418,7 @@ function renderOrderDetail(order) {
       <div class="product-preview-info">
         <strong>${label}</strong>
         <span>${order.quantity} &times; ${order.unit}${order.totalPrice != null ? ` &middot; ${formatPrice(order.totalPrice)} (${formatPrice(order.unitPrice)} each)` : ''}</span>
+        <span>Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
       </div>
     </div>
 
@@ -558,6 +566,7 @@ function renderOrderCard(order) {
           <span class="owner-product-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</span>
           <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
           <span>${order.quantity} × ${order.unit}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span> (${formatPrice(order.unitPrice)} each)` : ''}</span>
+          <span class="order-needed-by">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
         </div>
         <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
       </div>

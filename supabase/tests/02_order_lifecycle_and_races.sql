@@ -51,14 +51,14 @@ insert into buyer_grants (community_id, user_id, granted_by_id) values (:'compan
 -- ---------------------------------------------------- 9: unauthorized order creation
 select tests.authenticate_as(:'stranger');
 select throws_ok(
-  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'company_c', :'site_c'),
   '42501', null,
   'a stranger with no site membership cannot create an order (item 9)'
 );
 
 select tests.authenticate_as(:'worker_c');
-select create_order(:'company_c', :'site_c', 'p1', 'Cement', '25kg', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as order_result \gset
+select create_order(:'company_c', :'site_c', 'p1', 'Cement', '25kg', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_result \gset
 select ok( (:'order_result') is not null, 'worker C, a real site member, can create an order' );
 select (:'order_result'::orders).id as order_id \gset
 
@@ -99,7 +99,7 @@ insert into site_memberships (site_id, community_id, user_id, added_by_id) value
 insert into buyer_grants (community_id, user_id, granted_by_id) values (:'company_c', :'buyer_c2', :'owner_c');
 
 select tests.authenticate_as(:'worker_c');
-select create_order(:'company_c', :'site_c', 'p2', 'Sand', '25kg', 3, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50) as order2_result \gset
+select create_order(:'company_c', :'site_c', 'p2', 'Sand', '25kg', 3, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50, null, null) as order2_result \gset
 select (:'order2_result'::orders).id as order2_id \gset
 select tests.authenticate_as(:'owner_c');
 select approve_order(:'order2_id');
@@ -149,7 +149,7 @@ select throws_ok(
 
 -- ---------------------------------------------------- 16: cancellation decision vs collection race
 select tests.authenticate_as(:'worker_c');
-select create_order(:'company_c', :'site_c', 'p3', 'Drill', 'Body only', 1, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 89.00) as order3_result \gset
+select create_order(:'company_c', :'site_c', 'p3', 'Drill', 'Body only', 1, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 89.00, null, null) as order3_result \gset
 select (:'order3_result'::orders).id as order3_id \gset
 select tests.authenticate_as(:'owner_c');
 select approve_order(:'order3_id');

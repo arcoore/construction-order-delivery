@@ -28,8 +28,8 @@ select plan(15);
 -- fails loudly as itself, not as a silent false "no anon access" result.
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric)'),
-    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
     ('revert_approval(uuid)'),
@@ -52,8 +52,8 @@ select is(
 -- --------------------------------------------------- A: grant-privilege audit
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric)'),
-    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
     ('revert_approval(uuid)'),
@@ -78,8 +78,8 @@ select is(
 
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric)'),
-    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
     ('revert_approval(uuid)'),
@@ -104,8 +104,8 @@ select is(
 
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric)'),
-    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
     ('revert_approval(uuid)'),
@@ -134,14 +134,14 @@ select is(
 select tests.clear_authentication(); -- sets role = anon
 
 select throws_ok(
-  format($$ select edit_order(%L, 1, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, 1, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     gen_random_uuid(), gen_random_uuid()),
   '42501', null,
   'THE EXPLOIT ITSELF: an anonymous (unauthenticated) caller cannot execute edit_order at all — refused before the function body even runs'
 );
 
 select throws_ok(
-  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     gen_random_uuid(), gen_random_uuid()),
   '42501', null,
   'an anonymous caller cannot execute create_order either — the grant fix covers more than just the one exploited function'
@@ -164,14 +164,14 @@ select set_config('role', 'authenticated', true);
 select set_config('request.jwt.claims', '', true);
 
 select throws_ok(
-  format($$ select edit_order(%L, 1, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, 1, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     gen_random_uuid(), gen_random_uuid()),
   '42501', 'authentication required',
   'DEFENSE IN DEPTH: edit_order refuses a NULL auth.uid() via its own explicit guard, not just via the grant'
 );
 
 select throws_ok(
-  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select create_order(%L, %L, 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'M', 'm.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     gen_random_uuid(), gen_random_uuid()),
   '42501', 'authentication required',
   'DEFENSE IN DEPTH: create_order refuses a NULL auth.uid() via its own explicit guard'
@@ -208,13 +208,13 @@ insert into site_memberships (site_id, community_id, user_id, added_by_id) value
   (:'site_e', :'company_e', :'worker_e_b', :'owner_e');
 
 select tests.authenticate_as(:'worker_e_a');
-select create_order(:'company_e', :'site_e', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) as order_result_e \gset
+select create_order(:'company_e', :'site_e', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_result_e \gset
 select (:'order_result_e'::orders).id as order_id_e \gset
 select (:'order_result_e'::orders).version as order_version_e \gset
 
 select tests.authenticate_as(:'worker_e_b');
 select throws_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'order_id_e', :'order_version_e', :'site_e'),
   '42501', null,
   'a different user with the SAME display name still cannot edit another requester''s order — authorization is by id, not name'
@@ -230,7 +230,7 @@ select throws_ok(
 select tests.authenticate_as(:'worker_e_a');
 select (select version from orders where id = :'order_id_e') as current_version_e \gset
 select lives_ok(
-  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75) $$,
+  format($$ select edit_order(%L, %L, 'p1', 'Cement', '25kg bag', 9, 'bag', 'SW1A 1AA', null, null, %L, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) $$,
     :'order_id_e', :'current_version_e', :'site_e'),
   'the real requester (worker_e_a) can still edit their own order after the hotfix'
 );

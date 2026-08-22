@@ -114,6 +114,12 @@ function mapOrderRow(r) {
     orderCancelledBy: r.order_cancelled_by,
     orderCancelledAt: r.order_cancelled_at ? new Date(r.order_cancelled_at).getTime() : null,
     orderCancellationReason: r.order_cancellation_reason,
+    // Roadmap Step 2 — 'asap' | 'deadline' | null (null = not specified,
+    // historical orders only). neededBy stays null for 'asap' (never
+    // now()) and for null — see deadline.js's header and migration 0019's
+    // orders_needed_by_valid_state constraint for the full semantics.
+    neededByType: r.needed_by_type,
+    neededBy: r.needed_by ? new Date(r.needed_by).getTime() : null,
     version: r.version,
   };
 }
@@ -351,6 +357,11 @@ export async function createOrder(fields) {
     p_stockist_postcode: fields.stockistPostcode ?? null,
     p_pickup_estimate: fields.pickupEstimate ?? null,
     p_unit_price: fields.unitPrice ?? null,
+    // Roadmap Step 2 — fields.neededBy is epoch ms (or null), matching the
+    // exact convention driver.js's deliveryTime already uses; converted to
+    // ISO here, at the RPC boundary, same as every other timestamp field.
+    p_needed_by_type: fields.neededByType ?? null,
+    p_needed_by: fields.neededBy != null ? new Date(fields.neededBy).toISOString() : null,
   });
   if (error) return handleRpcFailure(error);
 
@@ -395,6 +406,12 @@ export async function editOrder(orderId, fields) {
     p_stockist_postcode: fields.stockistPostcode ?? null,
     p_pickup_estimate: fields.pickupEstimate ?? null,
     p_unit_price: fields.unitPrice ?? null,
+    // Roadmap Step 2 — same shape as createOrder above. edit_order only
+    // re-validates "in the future" when this is actually changing from the
+    // order's current stored value, so resubmitting the existing (possibly
+    // now-past) deadline unchanged never blocks an otherwise-unrelated edit.
+    p_needed_by_type: fields.neededByType ?? null,
+    p_needed_by: fields.neededBy != null ? new Date(fields.neededBy).toISOString() : null,
   });
   if (error) return handleRpcFailure(error, { orderId });
 

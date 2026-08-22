@@ -8,6 +8,10 @@ import {
 import { getActiveCommunityId, isApprovalRequired } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
 import { getActiveSitesForUser, subscribeSites } from './sites.js';
+import {
+  todayDeadlineDate, tomorrowDeadlineDate, isTodayDeadlineAvailable, cutoffTimeLabel,
+  datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy,
+} from './deadline.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -196,11 +200,90 @@ function renderVariantStep(product) {
   });
 }
 
+// --- Needed-by control (Roadmap Step 2) --------------------------------
+// One control, one set of rules, shared between the create flow's details
+// step and the edit flow's summary panel — never a second, different
+// deadline UX for editing. onChange always receives the real stored shape
+// ({ type: 'asap'|'deadline'|null, date: Date|null }) that
+// orderLifecycle.js's createOrder/editOrder actually expect — 'today'/
+// 'tomorrow' are UI-only button keys, resolved here into a real Date via
+// deadline.js, and never themselves stored (see that module's header for
+// why: a stored 'tomorrow' would go stale once real time moves past it).
+function renderNeededByControl(current) {
+  const time = cutoffTimeLabel();
+  return `
+    <label class="field-label">Needed by</label>
+    <div class="needed-by-group" id="needed-by-group">
+      <button type="button" class="needed-by-btn" data-needed-by="asap"><span class="needed-by-btn-label">ASAP</span></button>
+      ${isTodayDeadlineAvailable() ? `<button type="button" class="needed-by-btn" data-needed-by="today"><span class="needed-by-btn-label">Today</span><span class="needed-by-btn-time">by ${time}</span></button>` : ''}
+      <button type="button" class="needed-by-btn" data-needed-by="tomorrow"><span class="needed-by-btn-label">Tomorrow</span><span class="needed-by-btn-time">by ${time}</span></button>
+      <button type="button" class="needed-by-btn" data-needed-by="custom"><span class="needed-by-btn-label">Choose date &amp; time</span></button>
+    </div>
+    <div class="needed-by-custom" id="needed-by-custom-form" hidden>
+      <input type="datetime-local" id="needed-by-custom-input" class="text-input" min="${dateToDatetimeLocalValue(new Date())}" value="${current.type === 'deadline' && current.date ? dateToDatetimeLocalValue(current.date) : ''}" />
+    </div>
+    <p id="needed-by-error" class="form-status error" hidden>Please choose when this is needed by.</p>
+  `;
+}
+
+// initialUiKey pre-highlights a button on first render only — 'asap' for an
+// existing ASAP choice, 'custom' for any existing concrete deadline (we
+// can't and don't need to know whether it originally came from Today/
+// Tomorrow/a manual pick — the timestamp is all that's real; see above).
+function wireNeededByControl(root, initialUiKey, onChange) {
+  const group = root.querySelector('#needed-by-group');
+  const customForm = root.querySelector('#needed-by-custom-form');
+  const customInput = root.querySelector('#needed-by-custom-input');
+
+  function setActive(uiKey) {
+    group.querySelectorAll('.needed-by-btn').forEach(b => b.classList.toggle('active', b.dataset.neededBy === uiKey));
+    customForm.hidden = uiKey !== 'custom';
+  }
+  if (initialUiKey) setActive(initialUiKey);
+
+  function clearError() {
+    const errorEl = root.querySelector('#needed-by-error');
+    if (errorEl) errorEl.hidden = true;
+  }
+
+  group.querySelectorAll('.needed-by-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.neededBy;
+      setActive(kind);
+      clearError();
+      if (kind === 'asap') onChange({ type: 'asap', date: null });
+      else if (kind === 'today') onChange({ type: 'deadline', date: todayDeadlineDate() });
+      else if (kind === 'tomorrow') onChange({ type: 'deadline', date: tomorrowDeadlineDate() });
+      else if (kind === 'custom') onChange({ type: customInput.value ? 'deadline' : null, date: datetimeLocalToDate(customInput.value) });
+    });
+  });
+
+  customInput.addEventListener('input', () => {
+    clearError();
+    onChange({ type: customInput.value ? 'deadline' : null, date: datetimeLocalToDate(customInput.value) });
+  });
+}
+
+function neededByUiKeyFor(choice) {
+  if (!choice) return null;
+  if (choice.type === 'asap') return 'asap';
+  if (choice.type === 'deadline') return 'custom';
+  return null;
+}
+
+function isNeededByChoiceValid(choice) {
+  return !!choice && !!choice.type && (choice.type !== 'deadline' || !!choice.date);
+}
+
 function renderDetailsStep(product, variant, prefill = null) {
   setBackAction(
     product.variants ? 'Back to size selection' : 'Back to search',
     product.variants ? () => renderVariantStep(product) : closeOrderForm
   );
+
+  let neededByChoice = prefill && prefill.neededByType
+    ? { type: prefill.neededByType, date: prefill.neededByMs != null ? new Date(prefill.neededByMs) : null }
+    : { type: null, date: null };
 
   orderFormEl.innerHTML = `
     <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
@@ -212,17 +295,27 @@ function renderDetailsStep(product, variant, prefill = null) {
     <label class="field-label" for="postcode-input">Deliver to postcode</label>
     <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${prefill ? prefill.deliveryPostcode : (selectedSite ? selectedSite.postcode : '')}" />
 
+    ${renderNeededByControl(neededByChoice)}
+
     <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order this from</button>
     <p id="order-form-status" class="form-status"></p>
   `;
 
-  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(product, variant));
+  wireNeededByControl(orderFormEl, neededByUiKeyFor(neededByChoice), choice => { neededByChoice = choice; });
+
+  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(product, variant, neededByChoice));
 }
 
-async function goToSourceStep(product, variant) {
+async function goToSourceStep(product, variant, neededByChoice) {
   const statusEl = document.getElementById('order-form-status');
   const qty = Number(document.getElementById('qty-input').value) || 1;
   const postcode = document.getElementById('postcode-input').value.trim();
+
+  if (!isNeededByChoiceValid(neededByChoice)) {
+    const errorEl = document.getElementById('needed-by-error');
+    if (errorEl) errorEl.hidden = false;
+    return;
+  }
 
   if (!postcode) {
     statusEl.textContent = 'Please enter a delivery postcode.';
@@ -247,6 +340,8 @@ async function goToSourceStep(product, variant) {
     deliveryLon: location.lon,
     requestedBy: getCurrentDisplayName() || 'Unknown',
     requestedById: getCurrentUserId(),
+    neededByType: neededByChoice.type,
+    neededBy: neededByChoice.date ? neededByChoice.date.getTime() : null,
   };
 
   renderSourceStep(product, variant, details);
@@ -355,6 +450,7 @@ function renderConfirmStep(product, variant, details, branch) {
     </div>
 
     <p class="hint">Delivering ${details.quantity} &times; ${product.unit} to <strong>${details.deliveryPostcode}</strong>.</p>
+    <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(details.neededByType, details.neededBy)}</p>
 
     <button id="confirm-order-btn" class="btn btn-primary btn-block">Confirm order</button>
   `;
@@ -390,6 +486,8 @@ async function submitOrder(product, variant, details, branch, avail, confirmBtn)
     stockistPostcode: branch.postcode,
     pickupEstimate: avail ? avail.label : null,
     unitPrice: product.unitPrice,
+    neededByType: details.neededByType,
+    neededBy: details.neededBy,
   });
 
   if (!result.ok) {
@@ -660,6 +758,8 @@ function openEditForm(order) {
     stockistPostcode: order.stockistPostcode,
     pickupEstimate: order.pickupEstimate,
     unitPrice: order.unitPrice,
+    neededByType: order.neededByType,
+    neededBy: order.neededBy,
     mode: 'summary',
   };
   siteSelectPanel.hidden = true;
@@ -713,11 +813,19 @@ function renderEditSummary() {
     <label class="field-label" for="edit-postcode-input">Deliver to postcode</label>
     <input type="text" id="edit-postcode-input" class="text-input" value="${s.deliveryPostcode}" />
 
+    ${renderNeededByControl({ type: s.neededByType, date: s.neededBy != null ? new Date(s.neededBy) : null })}
+
     ${willReapprove ? `<p class="hint small-hint edit-reapproval-note">Changing this order will require the Owner to approve it again.</p>` : ''}
 
     <button type="button" id="edit-save-btn" class="btn btn-primary btn-block">Save changes</button>
     <p id="edit-form-status" class="form-status"></p>
   `;
+
+  wireNeededByControl(
+    orderFormEl,
+    neededByUiKeyFor({ type: s.neededByType }),
+    choice => { editState.neededByType = choice.type; editState.neededBy = choice.date ? choice.date.getTime() : null; }
+  );
 
   document.getElementById('edit-change-material-btn').addEventListener('click', () => {
     editState.mode = 'pick-material';
@@ -918,6 +1026,22 @@ async function submitEdit() {
   }
   const deliveryPostcode = postcodeRaw.toUpperCase();
 
+  // Unlike creation, an edit must NOT force a fresh Needed-by choice on
+  // every save — a historical order's untouched null/null (or an
+  // unmodified ASAP/existing deadline) is completely legal to save
+  // straight through, since edit_order's own "only re-validate what's
+  // actually changing" rule already handles that correctly server-side.
+  // The only client-side guard needed here is against a genuinely
+  // inconsistent state (a 'deadline' selection with no timestamp) — which
+  // wireNeededByControl's own custom-input handling already prevents in
+  // practice, but this stays as defense-in-depth against the CHECK
+  // constraint's 23514 rather than a friendly message.
+  if (s.neededByType === 'deadline' && s.neededBy == null) {
+    const errorEl = document.getElementById('needed-by-error');
+    if (errorEl) errorEl.hidden = false;
+    return;
+  }
+
   const fields = {
     productId: s.product.id,
     productName: s.product.name,
@@ -932,6 +1056,8 @@ async function submitEdit() {
     stockistPostcode: s.stockistPostcode,
     pickupEstimate: s.pickupEstimate,
     unitPrice: s.unitPrice,
+    neededByType: s.neededByType,
+    neededBy: s.neededBy,
   };
 
   if (deliveryPostcode !== s.order.deliveryPostcode) {
