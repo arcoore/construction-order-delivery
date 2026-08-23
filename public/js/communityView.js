@@ -2,12 +2,13 @@ import {
   getCommunities, subscribeCommunities,
   createCommunity, requestToJoinByCode, requestToJoin, membershipStatus,
   myCommunities, myPendingRequests, setActiveCommunityId,
+  getPendingJoinCode, clearPendingJoinCode,
 } from './community.js';
 import { getLoggedInAccount, subscribeAuth } from './auth.js';
 import { timeAgo } from './data.js';
 import {
   getCurrentUserId, getCurrentDisplayName,
-  resolveDisplayName, subscribeIdentity,
+  subscribeIdentity,
 } from './identity.js';
 
 const accountStatusBtn = document.getElementById('account-status-btn');
@@ -114,6 +115,37 @@ accountStatusBtn.addEventListener('click', () => {
   }
 });
 
+// Roadmap Step 5 — consumes a held invite-link code, if any, and pre-fills
+// the existing manual-entry field with it. Exported and called explicitly
+// by main.js's showCommunitiesView(), NOT wired into this view's own
+// reactive render() — two real, sequential bugs were found wiring it that
+// way during local verification:
+//   1) this view's own subscribeCommunities(render) fires an immediate
+//      render() the moment this module is first imported (see
+//      subscribeCommunities's own "calls fn() immediately on subscribe"
+//      contract), which happens BEFORE main.js's bootstrap() has even
+//      called consumeJoinIntentFromUrl() yet — a one-time "already tried"
+//      guard flag was being set permanently on that premature no-code call.
+//   2) removing the guard flag fixed the pre-fill itself, but then
+//      main.js's routeFromTop() — which decides whether to route to the
+//      Companies screen at all based on getPendingJoinCode() being
+//      truthy — lost the race against this same reactive render(), which
+//      fires (and clears the code) during bootstrap's own cache-refresh
+//      BEFORE routeFromTop() ever got to check it, so routing silently fell
+//      through to the ordinary community picker instead.
+// The fix for both: exactly one deliberate call site consumes (reads AND
+// clears) the pending code — main.js's showCommunitiesView(), immediately
+// before it calls refreshCommunitiesView() — never an incidental reactive
+// render triggered by an unrelated cache refresh. This only ever pre-fills
+// the field — the user still has to press the existing "Request to join"
+// button themselves; see main.js/community.js for how the code got here.
+export function applyPendingJoinIntent() {
+  const code = getPendingJoinCode();
+  if (!code) return;
+  joinCodeInput.value = code.toUpperCase();
+  clearPendingJoinCode();
+}
+
 function render() {
   renderAccountStatus();
   syncIdentityField();
@@ -180,7 +212,6 @@ function render() {
         <div class="community-card">
           <div class="community-card-info">
             <strong>${c.name}</strong>
-            <span>Owner: ${resolveDisplayName(c.ownerId)}</span>
           </div>
           ${actionHtml}
         </div>

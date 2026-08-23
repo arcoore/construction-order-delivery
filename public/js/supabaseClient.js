@@ -35,10 +35,17 @@ const SUPABASE_URL = window.SITESTOCK_SUPABASE_URL || 'http://127.0.0.1:54321';
 const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
+// detectSessionInUrl is true (Roadmap Step 5) so a Supabase password-recovery
+// link's URL fragment is picked up automatically and fires a real
+// PASSWORD_RECOVERY auth event (see auth.js) — this app has no other
+// URL-fragment/hash usage anywhere to conflict with it. The one other
+// URL-carried signal this phase adds, the invite-link `?join=` query
+// parameter, deliberately uses the query string rather than the fragment for
+// exactly this reason (see community.js's consumeJoinIntentFromUrl).
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
   },
 });

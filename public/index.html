@@ -79,7 +79,29 @@
         <input type="password" id="login-password-input" class="text-input" autocomplete="current-password" />
 
         <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">Log in</button>
+        <button type="button" class="link-btn" id="forgot-password-link">Forgot password?</button>
         <p id="login-status" class="form-status"></p>
+      </form>
+
+      <form id="reset-request-form" class="auth-form" hidden>
+        <button type="button" class="link-btn" id="reset-request-back-btn">&larr; Back to log in</button>
+        <h2>Reset your password</h2>
+        <p class="hint">Enter your account email and we'll send you a link to set a new password.</p>
+        <label class="field-label" for="reset-request-email-input">Email</label>
+        <input type="email" id="reset-request-email-input" class="text-input" autocomplete="email" />
+        <button type="submit" class="btn btn-primary btn-block" id="reset-request-submit-btn">Send reset link</button>
+        <p id="reset-request-status" class="form-status"></p>
+      </form>
+
+      <form id="set-new-password-form" class="auth-form" hidden>
+        <h2>Choose a new password</h2>
+        <p class="hint">You followed a password reset link — set a new password below to finish.</p>
+        <label class="field-label" for="new-password-input">New password</label>
+        <input type="password" id="new-password-input" class="text-input" autocomplete="new-password" />
+        <label class="field-label" for="new-password-confirm-input">Confirm new password</label>
+        <input type="password" id="new-password-confirm-input" class="text-input" autocomplete="new-password" />
+        <button type="submit" class="btn btn-primary btn-block" id="new-password-submit-btn">Set new password</button>
+        <p id="new-password-status" class="form-status"></p>
       </form>
 
       <form id="register-form" class="auth-form" hidden>
@@ -96,14 +118,14 @@
         <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
         <p class="hint small-hint">This is the name others in your community will see &mdash; it can be different from your email.</p>
 
-        <label class="field-label">Are you a worker, driver, buyer, or owner?</label>
+        <label class="field-label">What do you mainly do?</label>
         <div class="role-toggle-group" id="register-role-group">
           <button type="button" class="role-toggle-btn" data-role="worker">🧑&zwj;🔧 Worker</button>
           <button type="button" class="role-toggle-btn" data-role="driver">🚚 Driver</button>
           <button type="button" class="role-toggle-btn" data-role="buyer">🛒 Buyer</button>
           <button type="button" class="role-toggle-btn" data-role="owner">👑 Owner</button>
         </div>
-        <p class="hint small-hint">You'll go straight to this screen when you enter a community. If you create your own community you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
+        <p class="hint small-hint">You can switch later — this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
 
         <button type="submit" class="btn btn-primary btn-block" id="register-submit-btn">Create account</button>
         <p id="register-status" class="form-status"></p>
@@ -115,7 +137,7 @@
   <section id="community-view" class="view">
     <div class="panel">
       <h1>Welcome to SiteStock</h1>
-      <p class="hint">Communities work like servers &mdash; an owner creates one, workers and drivers join it. Head to Communities to create or join one.</p>
+      <p class="hint">Set up your company, then invite your team to join it &mdash; head to Companies to create or join one.</p>
       <button type="button" class="btn btn-secondary" id="account-status-btn">Show profile</button>
       <label class="field-label" for="identity-name-input">Your name</label>
       <input type="text" id="identity-name-input" class="text-input" readonly />
@@ -128,8 +150,8 @@
   <section id="communities-view" class="view">
     <div class="panel">
       <button type="button" class="link-btn" id="communities-back-btn">&larr; Back</button>
-      <h1>Communities</h1>
-      <p class="hint">Create a new community, or join one you've been invited to.</p>
+      <h1>Companies</h1>
+      <p class="hint">Set up a new company, or join one you've been invited to.</p>
     </div>
 
     <div class="panel" id="my-communities-panel" hidden>
@@ -143,11 +165,11 @@
     </div>
 
     <div class="panel" id="create-community-panel" hidden>
-      <h2>Create a community</h2>
+      <h2>Set up your company</h2>
       <p class="hint">You'll be the owner and can approve who joins.</p>
-      <label class="field-label" for="create-community-input">Community name</label>
+      <label class="field-label" for="create-community-input">Company name</label>
       <input type="text" id="create-community-input" class="text-input" placeholder="e.g. Riverside Construction" />
-      <button id="create-community-btn" class="btn btn-primary btn-block">Create community</button>
+      <button id="create-community-btn" class="btn btn-primary btn-block">Create company</button>
       <p id="create-community-status" class="form-status"></p>
     </div>
 
@@ -218,6 +240,32 @@
     <div class="panel">
       <h1 id="dashboard-title">Dashboard</h1>
       <div class="dashboard-stats" id="dashboard-stats"></div>
+    </div>
+
+    <div class="panel" id="owner-setup-checklist-panel" hidden>
+      <h2>Set up your company</h2>
+      <div id="owner-setup-checklist-list" class="activity-list"></div>
+    </div>
+
+    <div class="panel" id="owner-invite-panel">
+      <h2>Invite people</h2>
+      <p class="hint">Share this link or code with your team — they'll still need your approval before they can see anything.</p>
+      <div class="invite-link-row">
+        <input type="text" id="owner-invite-link-input" class="text-input" readonly />
+        <button type="button" class="btn btn-secondary" id="owner-copy-invite-link-btn">Copy link</button>
+      </div>
+      <p class="hint small-hint">Invite code: <strong id="owner-invite-code-text"></strong></p>
+      <p id="owner-copy-invite-status" class="form-status" aria-live="polite"></p>
+      <label class="checkbox-field">
+        <input type="checkbox" id="discoverable-toggle" />
+        <span>Let people find this company by searching SiteStock</span>
+      </label>
+      <p class="hint small-hint">Off by default — most companies only need the invite link/code above. Turn this on only if you want strangers to be able to find and request to join without one.</p>
+    </div>
+
+    <div class="panel" id="owner-people-panel" hidden>
+      <h2>People needing attention</h2>
+      <div id="owner-people-list" class="activity-list"></div>
     </div>
 
     <div class="panel" id="owner-sites-summary-panel">

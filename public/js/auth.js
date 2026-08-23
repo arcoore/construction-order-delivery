@@ -25,6 +25,32 @@ export function subscribeAuth(fn) {
   return () => listeners.delete(fn);
 }
 
+// Roadmap Step 5 — password recovery. Supabase-js fires a real
+// PASSWORD_RECOVERY auth event (distinct from SIGNED_IN) when it detects a
+// recovery link's URL fragment on load (detectSessionInUrl: true, set in
+// supabaseClient.js). A recovery link DOES establish a real, usable session
+// — so isAuthenticated() would already be true the moment that happens,
+// which would otherwise make main.js's ordinary bootstrap route straight
+// into the community picker before the user ever gets to set a new
+// password. inPasswordRecoveryContext() is the explicit gate main.js's
+// routeFromTop() checks first, before anything else, to prevent exactly
+// that (see main.js).
+//
+// The initial value below is a synchronous, best-effort check of the URL
+// hash itself (the same `type=recovery` marker Supabase's own link uses) —
+// needed because there's no strict ordering guarantee between authReady's
+// getSession() resolving and onAuthStateChange's first PASSWORD_RECOVERY
+// event actually firing; both are driven by the same underlying
+// detectSessionInUrl processing, but relying on event-firing order alone
+// would be a real, if narrow, race. This never parses or extracts the
+// token itself — that's entirely supabase-js's job — it only reads a
+// public, non-secret marker to decide whether to gate routing, and the
+// authoritative PASSWORD_RECOVERY event (below) confirms/extends it.
+let inPasswordRecovery = /type=recovery/.test(window.location.hash);
+export function inPasswordRecoveryContext() {
+  return inPasswordRecovery;
+}
+
 // main.js's bootstrap awaits this before the first route happens — nothing
 // ever renders a role view off an unknown/uninitialized auth state.
 export const authReady = supabase.auth.getSession().then(({ data }) => {
@@ -32,11 +58,12 @@ export const authReady = supabase.auth.getSession().then(({ data }) => {
   notify();
 });
 
-// Fires on every sign-in/sign-out/token-refresh, including the initial
-// resolution above and a cross-tab session change — this is the one place
-// currentSession is ever written after bootstrap.
-supabase.auth.onAuthStateChange((_event, session) => {
+// Fires on every sign-in/sign-out/token-refresh/password-recovery,
+// including the initial resolution above and a cross-tab session change —
+// this is the one place currentSession is ever written after bootstrap.
+supabase.auth.onAuthStateChange((event, session) => {
   currentSession = session;
+  if (event === 'PASSWORD_RECOVERY') inPasswordRecovery = true;
   notify();
 });
 
@@ -111,4 +138,40 @@ export async function logout() {
   await supabase.auth.signOut();
   currentSession = null;
   notify();
+}
+
+// Roadmap Step 5 — password reset. Always returns the same generic success
+// shape regardless of whether the email is actually registered — this is
+// Supabase's own resetPasswordForEmail behavior already (it never reveals
+// account existence), and the caller (authView.js) must not undermine that
+// by branching UI copy on anything this returns beyond a real network
+// failure. redirectTo is computed from window.location at call time (never
+// hardcoded) so the same code works unmodified on localhost, GitHub Pages,
+// or any future host — matching env.js's existing "no build-time env
+// injection, read the actual runtime location" approach.
+export async function requestPasswordReset(email) {
+  email = (email || '').trim();
+  if (!email) return { error: 'Please enter your email.' };
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  // A real send failure (bad request, rate limit, network) is shown as an
+  // error; anything else — including "no such account" — must never be
+  // distinguishable from success, so only a genuine `error` from the call
+  // itself is ever surfaced here.
+  if (error) return { error: friendlyAuthError(error) };
+  return { ok: true };
+}
+
+// Only callable meaningfully while inPasswordRecoveryContext() is true (a
+// real recovery session is active) — updateUser on that session both
+// changes the password and leaves the user authenticated, no separate
+// re-login step needed. Clears the recovery gate on success so main.js's
+// routeFromTop() resumes normal routing immediately afterward.
+export async function completePasswordReset(newPassword) {
+  if (!newPassword) return { error: 'Please enter a new password.' };
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) return { error: friendlyAuthError(error) };
+  inPasswordRecovery = false;
+  notify();
+  return { ok: true };
 }

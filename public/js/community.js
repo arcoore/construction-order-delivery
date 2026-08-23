@@ -109,6 +109,7 @@ function mapCommunity(r) {
     code: r.invite_code,
     ownerId: r.owner_id,
     requireOwnerApproval: r.require_owner_approval,
+    discoverable: r.discoverable,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
@@ -364,16 +365,94 @@ export async function requestToJoin(communityId, userId) {
   return request;
 }
 
+// Roadmap Step 5 — rewritten to call the server-authoritative
+// request_join_by_invite_code RPC instead of scanning the client-side
+// `cache.communities` array. That client-side scan only ever worked because
+// every community used to be SELECTable by every authenticated user
+// (communities_select_any); since migration 0021 scopes SELECT to
+// owner/member/pending-requester/discoverable=true, a private community the
+// caller isn't already related to is no longer in that cache at all, so the
+// old scan would silently never find it. The RPC resolves the code with
+// elevated privilege server-side and returns only the one matched
+// community's id/name plus the caller's own resulting status — never a
+// list, never enabling enumeration. Same external return shape as before
+// (`{ error }` / `{ community, alreadyMember: true }` /
+// `{ community, alreadyPending: true }` / `{ community, requested: true }`)
+// so every existing call site (communityView.js) needed zero changes.
+// Refreshes the full community cache on success so the newly-visible
+// community/membership row are both reflected immediately, exactly like
+// every other mutating function in this file already does.
 export async function requestToJoinByCode(code, userId) {
-  const community = cache.communities.find(c => c.code.toUpperCase() === code.trim().toUpperCase());
-  if (!community) return { error: 'No community found with that invite code.' };
-  const status = membershipStatus(community.id, userId);
-  if (status === 'owner') return { error: `You're already the owner of "${community.name}".` };
-  if (status === 'approved') return { community, alreadyMember: true };
-  if (status === 'pending') return { community, alreadyPending: true };
-  const result = await requestToJoin(community.id, userId);
-  if (result.error) return { error: result.error };
+  const { data, error } = await supabase.rpc('request_join_by_invite_code', { p_code: code.trim() });
+  if (error) return { error: error.message };
+  if (!data.ok) return { error: 'No community found with that invite code.' };
+
+  const community = { id: data.communityId, name: data.communityName };
+  if (data.status === 'owner') return { error: `You're already the owner of "${community.name}".` };
+  if (data.status === 'approved') return { community, alreadyMember: true };
+  // justCreated distinguishes a genuinely fresh pending row from one that
+  // already existed — both carry status 'pending' with nothing else to
+  // tell them apart (found live: without this check, a real first-time
+  // joiner incorrectly saw "Already requested" instead of "Request sent").
+  if (data.status === 'pending' && !data.justCreated) return { community, alreadyPending: true };
+
+  await refreshCommunityCache();
   return { community, requested: true };
+}
+
+// --- Roadmap Step 5: discoverability + shareable invite links ---------
+
+// Plain client-side update, exactly like setApprovalRequired below —
+// communities_update_owner_only RLS already scopes this to is_owner, no new
+// RPC needed for a single-column owner-settable toggle.
+export async function setDiscoverable(communityId, value) {
+  const { data, error } = await supabase.from('communities')
+    .update({ discoverable: !!value })
+    .eq('id', communityId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const idx = cache.communities.findIndex(c => c.id === communityId);
+  if (idx !== -1) cache.communities[idx] = mapCommunity(data);
+  notify();
+  return { ok: true };
+}
+
+// The invite link is a pure wrapper around the existing invite code — no
+// new invite mechanism, just a URL that pre-fills the join form so someone
+// doesn't have to type 6 characters correctly. Query string, not hash — the
+// hash is reserved for Supabase's own password-recovery link (see
+// supabaseClient.js/auth.js).
+export function buildInviteLink(code) {
+  return `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(code)}`;
+}
+
+// Held in memory only (never localStorage) — a one-time intent for this
+// page load, not session state. Read once at bootstrap (main.js), stripped
+// from the URL immediately via history.replaceState so refreshing/sharing
+// the resulting tab doesn't repeat the join prompt, then carried in memory
+// across whatever signup/login happens before it's actually consumed.
+let pendingJoinCode = null;
+
+export function consumeJoinIntentFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('join');
+  if (code) {
+    pendingJoinCode = code;
+    params.delete('join');
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+    window.history.replaceState(null, '', newUrl);
+  }
+  return pendingJoinCode;
+}
+
+export function getPendingJoinCode() {
+  return pendingJoinCode;
+}
+
+export function clearPendingJoinCode() {
+  pendingJoinCode = null;
 }
 
 export async function decideJoinRequest(requestId, decision, decidedById) {

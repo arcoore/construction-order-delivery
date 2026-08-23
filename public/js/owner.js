@@ -1,10 +1,10 @@
 import { formatPrice, getInitials, getCategoryIcon, timeAgo } from './data.js';
 import { getProduct } from './products.js';
 import {
-  getActiveCommunityId, getJoinRequests, decideJoinRequest, subscribeCommunities,
+  getActiveCommunityId, getActiveCommunity, getJoinRequests, decideJoinRequest, subscribeCommunities,
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
-  isApprovalRequired, setApprovalRequired,
+  isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink,
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
@@ -15,7 +15,9 @@ import {
 // dashboard's Sites summary card. No site CRUD/permission logic lives here;
 // creating/editing/archiving/assigning all still happens exclusively in
 // sitesView.js, reached via the sitestock:show-sites event below.
-import { subscribeSites, getActiveSites, getSiteMembers } from './sites.js';
+// Roadmap Step 5 adds one real write, addSiteMember, reused as-is (not
+// reimplemented) for the optional "assign a site at approval time" flow.
+import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent } from './orderStatus.js';
 
@@ -37,6 +39,16 @@ const approvalToggle = document.getElementById('approval-required-toggle');
 const sitesSummaryListEl = document.getElementById('owner-sites-summary-list');
 const newSiteBtn = document.getElementById('owner-new-site-btn');
 const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
+const setupChecklistPanel = document.getElementById('owner-setup-checklist-panel');
+const setupChecklistList = document.getElementById('owner-setup-checklist-list');
+const invitePanel = document.getElementById('owner-invite-panel');
+const inviteLinkInput = document.getElementById('owner-invite-link-input');
+const copyInviteLinkBtn = document.getElementById('owner-copy-invite-link-btn');
+const inviteCodeText = document.getElementById('owner-invite-code-text');
+const copyInviteStatus = document.getElementById('owner-copy-invite-status');
+const discoverableToggle = document.getElementById('discoverable-toggle');
+const peoplePanel = document.getElementById('owner-people-panel');
+const peopleList = document.getElementById('owner-people-list');
 
 // Groups the existing order.status values into the tabs an owner actually
 // needs to scan for "what needs attention" — no new statuses, this is a
@@ -207,6 +219,159 @@ function renderApprovalSetting(communityId) {
   approvalToggle.checked = isApprovalRequired(communityId);
 }
 
+// --- Roadmap Step 5: Owner setup checklist -----------------------------
+// Every item is a live boolean derived from data this file (and sites.js)
+// already reads elsewhere on this same render pass — never a stored "done"
+// flag, so there's no second, parallel completion state to keep in sync or
+// let go stale. See CLAUDE.md's Roadmap Step 5 entry for the full rationale
+// behind each condition, including why "invite your team"/"approve people"
+// deliberately don't invent a persisted "have I ever invited anyone" flag.
+
+function ownerNonOwnerApprovedMembers(communityId) {
+  const ownerId = currentOwnerId();
+  return approvedMembers(communityId).filter(id => id !== ownerId);
+}
+
+function memberHasSiteInCommunity(memberId, communityId) {
+  return getSitesForMember(memberId).some(s => s.communityId === communityId);
+}
+
+function computeChecklistItems(communityId) {
+  const members = ownerNonOwnerApprovedMembers(communityId);
+  const everHadJoinRequest = getJoinRequests().some(r => r.communityId === communityId);
+  const pendingJoins = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
+
+  const hasSite = getActiveSites(communityId).length > 0;
+  const hasInvitedSomeone = members.length > 0 || everHadJoinRequest;
+  const approvedEveryone = everHadJoinRequest && pendingJoins === 0;
+  const everyoneAssigned = members.length > 0 && members.every(id => memberHasSiteInCommunity(id, communityId));
+
+  return [
+    { key: 'created', label: 'Company created', done: true, cta: null },
+    { key: 'site', label: 'Add your first site', done: hasSite, cta: 'Add a site' },
+    { key: 'invite', label: 'Invite your team', done: hasInvitedSomeone, cta: 'Copy invite link' },
+    { key: 'approve', label: 'Approve people', done: approvedEveryone, cta: 'Review requests' },
+    { key: 'assign', label: 'Assign workers to sites', done: everyoneAssigned, cta: 'Assign sites' },
+    { key: 'ready', label: 'Ready to place orders', done: hasSite && hasInvitedSomeone && approvedEveryone && everyoneAssigned, cta: null },
+  ];
+}
+
+function renderSetupChecklist(communityId) {
+  const items = computeChecklistItems(communityId);
+  const allDone = items.every(i => i.done);
+
+  // Collapses to one compact line once everything's done, rather than
+  // disappearing outright — an Owner who later adds a 4th site or a 7th
+  // employee shouldn't see a checklist silently reappear as if something
+  // regressed (see the design report's "checklist becoming stale" risk).
+  if (allDone) {
+    setupChecklistPanel.hidden = false;
+    setupChecklistList.innerHTML = `<div class="activity-item"><span class="activity-icon" aria-hidden="true">✅</span><span class="activity-text">Company set up — you're ready to place orders.</span></div>`;
+    return;
+  }
+
+  setupChecklistPanel.hidden = false;
+  setupChecklistList.innerHTML = items.map(item => `
+    <div class="activity-item checklist-item${item.done ? ' checklist-item-done' : ''}">
+      <span class="activity-icon" aria-hidden="true">${item.done ? '✅' : '○'}</span>
+      <span class="activity-text">${item.label}</span>
+      ${!item.done && item.cta ? `<button type="button" class="link-btn" data-checklist-cta="${item.key}">${item.cta}</button>` : ''}
+    </div>
+  `).join('');
+
+  setupChecklistList.querySelectorAll('[data-checklist-cta]').forEach(btn => {
+    btn.addEventListener('click', () => handleChecklistCta(btn.dataset.checklistCta));
+  });
+}
+
+function handleChecklistCta(key) {
+  if (key === 'site') {
+    window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+  } else if (key === 'invite') {
+    copyInviteLinkBtn.click();
+  } else if (key === 'approve') {
+    joinRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (key === 'assign') {
+    window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+  }
+}
+
+// --- Roadmap Step 5: invite link + discoverability ----------------------
+
+function renderInvitePanel(communityId) {
+  const community = getActiveCommunity();
+  if (!community) return;
+  inviteLinkInput.value = buildInviteLink(community.code);
+  inviteCodeText.textContent = community.code;
+  discoverableToggle.checked = !!community.discoverable;
+}
+
+copyInviteLinkBtn.addEventListener('click', async () => {
+  inviteLinkInput.select();
+  try {
+    await navigator.clipboard.writeText(inviteLinkInput.value);
+    copyInviteStatus.textContent = 'Link copied.';
+  } catch {
+    // Clipboard API can be unavailable (older browsers, insecure context) —
+    // the input is already selected above as a manual-copy fallback.
+    copyInviteStatus.textContent = 'Select the link above and copy it manually.';
+  }
+  setTimeout(() => { copyInviteStatus.textContent = ''; }, 3000);
+});
+
+discoverableToggle.addEventListener('change', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  discoverableToggle.disabled = true;
+  await setDiscoverable(communityId, discoverableToggle.checked);
+  discoverableToggle.disabled = false;
+});
+
+// --- Roadmap Step 5: consolidated "people needing attention" panel ------
+// Summarizes three already-existing data sources into one glance — never a
+// second management surface. Each row navigates to (or reuses) the exact
+// existing panel/action; nothing here approves/assigns anything itself.
+
+function renderPeoplePanel(communityId) {
+  const pendingJoins = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
+  const pendingBuyer = getBuyerRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
+  const membersNeedingSite = ownerNonOwnerApprovedMembers(communityId)
+    .filter(id => !memberHasSiteInCommunity(id, communityId)).length;
+
+  const rows = [
+    pendingJoins > 0 ? { key: 'joins', text: `${pendingJoins} waiting to join` } : null,
+    pendingBuyer > 0 ? { key: 'buyer', text: `${pendingBuyer} Buyer access request${pendingBuyer === 1 ? '' : 's'}` } : null,
+    membersNeedingSite > 0 ? { key: 'sites', text: `${membersNeedingSite} Worker${membersNeedingSite === 1 ? '' : 's'} need${membersNeedingSite === 1 ? 's' : ''} a site` } : null,
+  ].filter(Boolean);
+
+  // Nothing needing attention is a genuinely good state, not an empty
+  // management card begging to be filled — hide the panel entirely rather
+  // than showing a useless "no pending items" row (see the design report's
+  // empty-states table).
+  if (rows.length === 0) {
+    peoplePanel.hidden = true;
+    return;
+  }
+
+  peoplePanel.hidden = false;
+  peopleList.innerHTML = rows.map(r => `
+    <div class="activity-item">
+      <span class="activity-icon" aria-hidden="true">🔔</span>
+      <span class="activity-text">${r.text}</span>
+      <button type="button" class="link-btn" data-people-cta="${r.key}">Review &rarr;</button>
+    </div>
+  `).join('');
+
+  peopleList.querySelectorAll('[data-people-cta]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.peopleCta;
+      if (key === 'joins') joinRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else if (key === 'buyer') buyerRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else if (key === 'sites') window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+    });
+  });
+}
+
 function renderTeam(communityId) {
   const userId = currentOwnerId();
   if (!isOwner(communityId, userId)) {
@@ -270,6 +435,9 @@ function render() {
   renderJoinRequests(communityId);
   renderBuyerRequests(communityId);
   renderApprovalSetting(communityId);
+  renderSetupChecklist(communityId);
+  renderInvitePanel(communityId);
+  renderPeoplePanel(communityId);
 
   const inCommunity = latestOrders.filter(o => o.communityId === communityId);
 
@@ -403,13 +571,36 @@ function renderOrderDetail(order) {
   `;
 }
 
+// Roadmap Step 5 — an Owner can optionally assign a new Worker to one or
+// more sites in the SAME interaction as approving them, removing an
+// otherwise-unnecessary second trip to Sites management. Purely additive:
+// assignment is always optional (approving with nothing checked behaves
+// exactly as before), zero-site membership and multi-site membership both
+// remain fully legal, and this reuses sites.js's existing addSiteMember —
+// no new permission path, no change to what decideJoinRequest itself
+// authorizes. Assignment is attempted only AFTER the approval itself
+// succeeds, and any assignment failure is reported on its own rather than
+// making a successful approval look like it failed.
 function renderJoinRequests(communityId) {
   const pending = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending');
   joinRequestsPanel.hidden = pending.length === 0;
   if (pending.length === 0) return;
 
+  const activeSites = getActiveSites(communityId);
+
   joinRequestsList.innerHTML = pending.map(r => {
     const displayName = resolveDisplayName(r.userId);
+    const siteCheckboxes = activeSites.length === 0 ? '' : `
+      <div class="site-assign-group">
+        <span class="field-label">Assign to (optional):</span>
+        ${activeSites.map(s => `
+          <label class="checkbox-field checkbox-field-inline">
+            <input type="checkbox" data-assign-site="${s.id}" data-assign-for="${r.id}" />
+            <span>${s.name}</span>
+          </label>
+        `).join('')}
+      </div>
+    `;
     return `
     <div class="order-card">
       <div class="request-header">
@@ -421,6 +612,7 @@ function renderJoinRequests(communityId) {
           <strong>Wants to join this community</strong>
         </div>
       </div>
+      ${siteCheckboxes}
       <div class="owner-actions">
         <button class="btn btn-secondary" data-join-action="decline" data-join-id="${r.id}">Decline</button>
         <button class="btn btn-primary" data-join-action="approve" data-join-id="${r.id}">Approve</button>
@@ -430,9 +622,28 @@ function renderJoinRequests(communityId) {
   }).join('');
 
   joinRequestsList.querySelectorAll('[data-join-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const decision = btn.dataset.joinAction === 'approve' ? 'approved' : 'declined';
-      decideJoinRequest(btn.dataset.joinId, decision, currentOwnerId());
+      const requestId = btn.dataset.joinId;
+      const ownerId = currentOwnerId();
+
+      const checkedSiteIds = decision === 'approved'
+        ? Array.from(joinRequestsList.querySelectorAll(`[data-assign-for="${requestId}"]:checked`)).map(cb => cb.dataset.assignSite)
+        : [];
+
+      const memberUserId = pending.find(r => r.id === requestId)?.userId;
+      await decideJoinRequest(requestId, decision, ownerId);
+
+      if (checkedSiteIds.length > 0 && memberUserId) {
+        const failures = [];
+        for (const siteId of checkedSiteIds) {
+          const result = await addSiteMember(siteId, memberUserId, ownerId);
+          if (!result.ok) failures.push(result.error || 'unknown error');
+        }
+        if (failures.length > 0) {
+          alert(`Approved, but couldn't assign every site: ${failures.join('; ')}`);
+        }
+      }
     });
   });
 }

@@ -1,11 +1,11 @@
 import './authView.js';
-import { refreshCommunitiesView } from './communityView.js';
+import { refreshCommunitiesView, applyPendingJoinIntent } from './communityView.js';
 import { refreshWorkerView } from './site.js';
 import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -14,6 +14,7 @@ import {
   getActiveRole, setActiveRole, eligibleRoles, resolveEntryRole, subscribeCommunities,
   getCommunities, findUnseenGrantFor, markGrantSeen,
   buyerRequestStatus, requestBuyerRole, refreshCommunityCache,
+  consumeJoinIntentFromUrl, getPendingJoinCode,
 } from './community.js';
 import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
@@ -169,6 +170,11 @@ async function showCommunitiesView() {
   communityIndicator.textContent = 'Orders & Deliveries';
   updateTopRightPills();
   await refreshDataCaches();
+  // Roadmap Step 5 — the one deliberate place a held invite-link code is
+  // actually consumed (read + cleared) — see communityView.js's
+  // applyPendingJoinIntent header for why this must NOT be wired into that
+  // view's own reactive render() instead.
+  applyPendingJoinIntent();
   refreshCommunitiesView();
 }
 
@@ -418,8 +424,28 @@ function enterCommunityApp() {
 }
 
 function routeFromTop() {
+  // Roadmap Step 5 — a password-recovery link establishes a real, usable
+  // session (so isAuthenticated() below would already be true), but the
+  // user must land on the set-new-password form, not the community picker,
+  // until they've actually finished resetting it. This check runs before
+  // the authenticated check for exactly that reason — see auth.js's
+  // inPasswordRecoveryContext header for the full race-condition rationale.
+  if (inPasswordRecoveryContext()) {
+    showAuth();
+    return;
+  }
   if (!isAuthenticated()) {
     showAuth();
+    return;
+  }
+  // Roadmap Step 5 — a shareable invite link (`?join=CODE`) is consumed once
+  // at bootstrap (see below) and held in memory until it's actually used.
+  // An authenticated user with a pending join code is routed straight to
+  // the Companies screen, whose join-code panel pre-fills from it — this is
+  // navigation-only, never an implicit join: the existing "Request to join"
+  // button still requires an explicit tap (see communityView.js).
+  if (getPendingJoinCode()) {
+    showCommunitiesView();
     return;
   }
   if (getActiveCommunityId()) {
@@ -753,6 +779,15 @@ notifPrefsCancelBtn.addEventListener('click', () => {
 // cache, and no stale pre-login screen flashes before the real route is
 // known.
 async function bootstrap() {
+  // Roadmap Step 5 — read the invite-link query param (if any) exactly
+  // once, before the very first route, and strip it from the URL
+  // immediately (history.replaceState, inside consumeJoinIntentFromUrl)
+  // so refreshing or re-sharing the resulting tab doesn't repeat the
+  // prompt. Safe to call unconditionally, logged in or not — routeFromTop()
+  // is what actually decides what to do with a held code once auth state is
+  // known, including the logged-out case (showAuth() first, then this same
+  // routeFromTop() logic re-runs after 'sitestock:logged-in').
+  consumeJoinIntentFromUrl();
   await authReady;
   await Promise.all([loadAllProfiles(), refreshDataCaches()]);
   // Phase 8D.2 — covers session restore (a page load with an existing
