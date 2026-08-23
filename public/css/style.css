@@ -1105,6 +1105,41 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   font-weight: 500;
 }
 
+/* Roadmap Step 4 — order operations & status clarity. */
+
+.order-next-action {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--navy-light);
+}
+
+/* Applied alongside .order-needed-by as a modifier — subtle emphasis only,
+   matching the brief's "no huge warning banners" instruction. 'future' and
+   'none' urgency keys deliberately have no class at all (deadline.js's
+   urgencyLabel returns null for them), leaving the existing plain styling
+   untouched for the common case. */
+.urgency-overdue { color: var(--red); font-weight: 700; }
+.urgency-asap { color: var(--orange-dark); font-weight: 700; }
+.urgency-today { color: var(--orange-dark); font-weight: 600; }
+.urgency-tomorrow { color: var(--navy-light); font-weight: 600; }
+
+/* The Worker's inline expandable order history — reuses .link-btn's
+   existing color/hover behavior via a shared class on the button, this
+   class only adds the 44px tap target .link-btn doesn't itself guarantee
+   (same convention as .needed-by-btn's own min-height, Roadmap Step 2). */
+.order-history-toggle {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.order-history {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
 .role-select-info {
   flex: 1 1 auto;
   display: flex;

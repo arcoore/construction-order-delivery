@@ -5,7 +5,8 @@ import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
-import { formatNeededBy } from './deadline.js';
+import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
+import { statusLabel, nextActionFor, urgencyComparator } from './orderStatus.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -151,11 +152,29 @@ function render() {
 
   const withDistance = filtered.map(o => ({ order: o, pickup: resolvePickup(o, driverPos) }));
 
+  // Roadmap Step 4, Section 11 override — distance stays the PRIMARY sort
+  // whenever a real pickup distance is available (the one trusted, honest
+  // ranking signal this app has always had here); urgency is only ever a
+  // secondary tie-break in that case, so a distant ASAP order never jumps
+  // ahead of a genuinely nearby one. Only when there's no driver location
+  // at all (nothing to rank distance by) does urgency become the primary
+  // signal, with request age as the final tie-break either way.
   if (activeTab === 'available') {
     if (driverPos) {
-      withDistance.sort((a, b) => (a.pickup?.distanceKm ?? Infinity) - (b.pickup?.distanceKm ?? Infinity));
+      withDistance.sort((a, b) => {
+        const distA = a.pickup?.distanceKm ?? Infinity;
+        const distB = b.pickup?.distanceKm ?? Infinity;
+        if (distA !== distB) return distA - distB;
+        const urgencyDiff = urgencyComparator(a.order, b.order);
+        if (urgencyDiff !== 0) return urgencyDiff;
+        return a.order.createdAt - b.order.createdAt;
+      });
     } else {
-      withDistance.sort((a, b) => a.order.createdAt - b.order.createdAt);
+      withDistance.sort((a, b) => {
+        const urgencyDiff = urgencyComparator(a.order, b.order);
+        if (urgencyDiff !== 0) return urgencyDiff;
+        return a.order.createdAt - b.order.createdAt;
+      });
     }
   }
 
@@ -174,13 +193,6 @@ function render() {
   const deliveryLocationInput = listEl.querySelector('#delivery-location-input');
   if (deliveryLocationInput) deliveryLocationInput.focus();
 }
-
-const STATUS_LABELS = {
-  purchased: 'Ready for pickup',
-  claimed: 'Claimed by you',
-  collected: 'Collected — in transit',
-  delivered: 'Delivered',
-};
 
 function renderOrderCard(order, pickup) {
   const branch = pickup?.branch;
@@ -243,6 +255,9 @@ function renderOrderCard(order, pickup) {
   }
 
   const requesterName = order.requestedBy || 'Unknown';
+  const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
+  const urgencyWord = urgencyLabel(urgency);
+  const nextAction = nextActionFor(order, 'driver');
 
   return `
     <div class="order-card driver-card status-${order.status}" data-order-id="${order.id}">
@@ -254,7 +269,7 @@ function renderOrderCard(order, pickup) {
         <div class="order-card-main">
           <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
           <span>${order.quantity} × ${order.unit}</span>
-          <span class="order-needed-by">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
+          <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         </div>
       </div>
       <div class="driver-route">
@@ -274,7 +289,8 @@ function renderOrderCard(order, pickup) {
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
         </div>
       </div>
-      <span class="status-badge status-${order.status}">${STATUS_LABELS[order.status] || order.status}</span>
+      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'driver')}</span>
+      ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
         ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
       ${actionHtml}

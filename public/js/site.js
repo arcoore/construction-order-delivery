@@ -5,14 +5,16 @@ import { geocodePostcode, distanceKm } from './geo.js';
 import {
   subscribe, createOrder, editOrder, cancelOrderDirect, requestCancellation,
   getPendingCancellationRequestForOrder, getCancellationRequestsForOrder, subscribeCancellationRequests,
+  getOrderEvents, subscribeOrderEvents,
 } from './orderLifecycle.js';
 import { getActiveCommunityId, isApprovalRequired } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName } from './identity.js';
 import { getActiveSitesForUser, subscribeSites } from './sites.js';
 import {
   todayDeadlineDate, tomorrowDeadlineDate, isTodayDeadlineAvailable, cutoffTimeLabel,
-  datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy,
+  datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy, neededByUrgency, urgencyLabel,
 } from './deadline.js';
+import { statusLabel, nextActionFor, describeEvent } from './orderStatus.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -520,17 +522,11 @@ function closeOrderForm() {
   resultsEl.innerHTML = '';
 }
 
-const STATUS_LABELS = {
-  pending_approval: 'Awaiting owner approval',
-  rejected: 'Rejected by owner',
-  pending_purchase: 'Waiting for a buyer to purchase',
-  purchase_in_progress: 'Buyer confirming purchase…',
-  purchased: 'Purchased — waiting for a driver',
-  claimed: 'Driver assigned',
-  collected: 'Collected — in transit',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
-};
+// Roadmap Step 4 — which of the Worker's own order cards currently has its
+// inline history/timeline expanded. Purely UI state, like editState/
+// cancellingOrderId above — never touches the guarded lifecycle functions,
+// and is reset (along with them) whenever the Worker view is refreshed.
+let expandedHistoryIds = new Set();
 
 // --- Phase 7C: Worker corrections & cancellation UI -------------------
 
@@ -1102,24 +1098,40 @@ function renderSiteOrders() {
     siteOrdersList.innerHTML = '<p class="empty-hint">No orders placed yet.</p>';
     return;
   }
-  siteOrdersList.innerHTML = sorted.map(o => `
+  siteOrdersList.innerHTML = sorted.map(o => {
+    const isOwn = o.requestedById === getCurrentUserId();
+    const urgency = neededByUrgency(o.neededByType, o.neededBy, o.status);
+    const urgencyWord = urgencyLabel(urgency);
+    const pendingCancellation = !!getPendingCancellationRequestForOrder(o.id);
+    const nextAction = nextActionFor(o, 'worker', { pendingCancellationRequest: pendingCancellation });
+
+    return `
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
         <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} × ${o.unit} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
         ${o.stockistName ? `<span>From ${o.stockistName} (${o.stockistWebsite})</span>` : ''}
+        <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${o.rejectionReason}</span>` : ''}
         ${o.status === 'cancelled' ? `<span class="rejection-reason">Cancelled by ${o.orderCancelledBy || 'you'}${o.orderCancellationReason ? `: ${o.orderCancellationReason}` : ''}</span>` : ''}
         ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${o.deliveryLocation} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
       </div>
-      <span class="status-badge status-${o.status}">${STATUS_LABELS[o.status] || o.status}</span>
+      <span class="status-badge status-${o.status}">${statusLabel(o.status, 'worker')}</span>
+      ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${cancellationStateHint(o)}
+      ${isOwn ? renderHistoryToggle(o) : ''}
+      ${isOwn && expandedHistoryIds.has(o.id) ? renderOrderHistory(o) : ''}
       ${renderWorkerActions(o)}
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   siteOrdersList.querySelectorAll('[data-worker-action]').forEach(btn => {
     btn.addEventListener('click', () => handleWorkerAction(btn.dataset.workerAction, btn.dataset.id));
+  });
+
+  siteOrdersList.querySelectorAll('[data-history-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => toggleHistory(btn.dataset.historyToggle));
   });
 
   if (cancellingOrderId) wireCancelHoldButton(cancellingOrderId);
@@ -1128,11 +1140,49 @@ function renderSiteOrders() {
   if (reasonInput) reasonInput.focus();
 }
 
+// --- Roadmap Step 4: Worker's own-order inline history ------------------
+// Reuses orderStatus.js's describeEvent (the exact same icon/text map
+// owner.js's dashboard activity feed and order-detail timeline already use)
+// and the existing .activity-list/.activity-item CSS — no new timeline
+// rendering system, no new event data, no new panel/route.
+
+function renderHistoryToggle(order) {
+  const expanded = expandedHistoryIds.has(order.id);
+  return `<button type="button" class="link-btn order-history-toggle" data-history-toggle="${order.id}">${expanded ? 'Hide history' : 'Show history'}</button>`;
+}
+
+function renderOrderHistory(order) {
+  const label = `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
+  const events = getOrderEvents(order.id);
+  if (events.length === 0) return '<div class="order-history"><p class="empty-hint">No events recorded.</p></div>';
+  return `
+    <div class="order-history activity-list">
+      ${events.map(e => {
+        const { icon, text } = describeEvent(e, label);
+        return `
+          <div class="activity-item">
+            <span class="activity-icon" aria-hidden="true">${icon}</span>
+            <span class="activity-text">${text}</span>
+            <span class="activity-time">${new Date(e.createdAt).toLocaleString()}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function toggleHistory(orderId) {
+  if (expandedHistoryIds.has(orderId)) expandedHistoryIds.delete(orderId);
+  else expandedHistoryIds.add(orderId);
+  renderSiteOrders();
+}
+
 export function refreshWorkerView() {
   closeOrderForm();
   editState = null;
   cancellingOrderId = null;
   requestingCancelOrderId = null;
+  expandedHistoryIds = new Set();
   showSiteSelect();
   renderSiteOrders();
 }
@@ -1143,6 +1193,14 @@ subscribe(orders => {
 });
 
 subscribeCancellationRequests(renderSiteOrders);
+
+// Roadmap Step 4 — keeps an expanded history panel live: order_events isn't
+// itself in the Realtime publication, but refreshOrderCache() always
+// refetches orders/order_events/cancellation_requests together (see
+// orderLifecycle.js), so any orders-table change (which every event-producing
+// RPC also makes, in the same transaction) already re-populates the event
+// cache too — this just re-renders off it, no new subscription needed.
+subscribeOrderEvents(renderSiteOrders);
 
 // Phase 8D.2 — live site-picker freshness, PLUS (Test 4 fix) live
 // active-site invalidation. The original version of this handler only

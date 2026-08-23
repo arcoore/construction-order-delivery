@@ -9,13 +9,15 @@ import {
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
   subscribe, approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
+  getPendingCancellationRequestForOrder, subscribeCancellationRequests,
 } from './orderLifecycle.js';
 // Phase 8E — read-only reuse of sites.js's existing data functions for the
 // dashboard's Sites summary card. No site CRUD/permission logic lives here;
 // creating/editing/archiving/assigning all still happens exclusively in
 // sitesView.js, reached via the sitestock:show-sites event below.
 import { subscribeSites, getActiveSites, getSiteMembers } from './sites.js';
-import { formatNeededBy } from './deadline.js';
+import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
+import { statusLabel, nextActionFor, urgencyComparator, describeEvent } from './orderStatus.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -52,18 +54,6 @@ const TAB_GROUPS = {
   // money was spent. Same accountability distinction the rest of Phase 7
   // preserves.
   cancelled: ['cancelled'],
-};
-
-const DETAIL_STATUS_LABELS = {
-  pending_approval: 'Awaiting owner approval',
-  rejected: 'Rejected',
-  pending_purchase: 'Waiting for a buyer to purchase',
-  purchase_in_progress: 'Buyer confirming purchase…',
-  purchased: 'Purchased — waiting for a driver',
-  claimed: 'Driver assigned',
-  collected: 'Collected — in transit',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
 };
 
 let activeTab = 'awaiting';
@@ -129,59 +119,6 @@ approvalToggle.addEventListener('change', () => {
   setApprovalRequired(communityId, approvalToggle.checked);
 });
 
-const EVENT_RENDER = {
-  order_created: (e, label) => ({ icon: '📝', text: `${e.actorName || 'Someone'} requested ${label}` }),
-  approved: (e, label) => ({ icon: '✅', text: `${e.actorName || 'Owner'} approved ${label}` }),
-  rejected: (e, label) => ({ icon: '🚫', text: `${e.actorName || 'Owner'} rejected ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
-  approval_reverted: (e, label) => ({ icon: '↩️', text: `${e.actorName || 'Owner'} reverted the decision on ${label}` }),
-  purchase_started: (e, label) => ({ icon: '🛒', text: `${e.actorName || 'A buyer'} started purchasing ${label}` }),
-  purchase_abandoned: (e, label) => ({ icon: '↩️', text: `${e.actorName || 'A buyer'} released ${label} back to the purchase queue` }),
-  purchased: (e, label) => ({ icon: '💳', text: `${e.actorName || 'A buyer'} purchased ${label}` }),
-  delivery_claimed: (e, label) => ({ icon: '🚚', text: `${e.actorName || 'A driver'} claimed ${label}` }),
-  delivery_cancelled: (e, label) => ({ icon: '⚠️', text: `${e.actorName || 'A driver'} cancelled ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
-  delivery_returned_to_pool: (e, label) => ({ icon: '🔁', text: `${label} is back in the driver pool` }),
-  collected: (e, label) => ({ icon: '📦', text: `${e.actorName || 'Driver'} collected ${label}` }),
-  delivered: (e, label) => ({ icon: '🏁', text: `${label} delivered to ${e.meta?.deliveryLocation || 'site'}` }),
-  // Phase 7B/7C — Worker corrections & cancellation.
-  order_edited: (e, label) => {
-    const changes = e.meta?.changes || {};
-    const fieldLabels = {
-      quantity: 'quantity', productName: 'material', variant: 'size', siteName: 'site',
-      deliveryPostcode: 'delivery postcode', stockistName: 'stockist',
-      unitPrice: 'unit price', totalPrice: 'total price',
-      neededByType: 'needed by',
-    };
-    // Only the human-readable half of a paired change is shown (e.g.
-    // siteName, not the siteId/address/postcode/instructions that changed
-    // alongside it) — full detail still exists in meta.changes itself, this
-    // is just the readable summary line. neededBy (the raw timestamp) is
-    // skipped the same way in favor of neededByType's plain asap/deadline
-    // label — a formatted "Today, 5:00 PM"-style value isn't meaningful
-    // without knowing "today" relative to when the diff is being read, so
-    // this summary line intentionally stays as simple as siteId/stockistId
-    // already are.
-    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
-    const parts = Object.entries(changes)
-      .filter(([field]) => !skip.has(field))
-      .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
-    return { icon: '✏️', text: `${e.actorName || 'The worker'} edited ${label}${parts.length ? ` — ${parts.join(', ')}` : ''}` };
-  },
-  order_cancelled: (e, label) => ({
-    icon: '❌',
-    text: `${e.actorName || 'Someone'} cancelled ${label}${e.reason ? ` — ${e.reason}` : ''}`,
-  }),
-  cancellation_requested: (e, label) => ({
-    icon: '🙋',
-    text: `${e.actorName || 'The worker'} requested to cancel ${label}${e.reason ? `: ${e.reason}` : ''}`,
-  }),
-  cancellation_rejected: (e, label) => {
-    if (e.meta?.autoClosed) {
-      return { icon: '⏱️', text: `The cancellation request for ${label} could no longer be decided${e.reason ? ` — ${e.reason}` : ''}` };
-    }
-    return { icon: '🚫', text: `${e.actorName || 'The buyer'} rejected the cancellation request for ${label}${e.reason ? `: ${e.reason}` : ''}` };
-  },
-};
-
 function renderDashboard(inCommunity, communityId) {
   const pendingJoinCount = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
   const awaitingApproval = inCommunity.filter(o => o.status === 'pending_approval').length;
@@ -213,8 +150,7 @@ function renderDashboard(inCommunity, communityId) {
     : events.slice(0, 8).map(e => {
       const order = inCommunity.find(o => o.id === e.orderId);
       const label = order ? `${order.productName}${order.variant ? ` (${order.variant})` : ''}` : 'an order';
-      const render = EVENT_RENDER[e.type];
-      const { icon, text } = render ? render(e, label) : { icon: '•', text: `${e.type} on ${label}` };
+      const { icon, text } = describeEvent(e, label);
       return `
         <div class="activity-item">
           <span class="activity-icon" aria-hidden="true">${icon}</span>
@@ -354,7 +290,15 @@ function render() {
   const statuses = TAB_GROUPS[activeTab] || [];
   let filtered = inCommunity.filter(o => statuses.includes(o.status));
 
-  filtered = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+  // Roadmap Step 4 — only the two tabs something is genuinely waiting on
+  // (awaiting Owner approval, waiting for a buyer to purchase) get
+  // urgency-first ordering; every other tab is tracking/history, where
+  // newest-first is still the more useful read (unchanged from before).
+  filtered = [...filtered].sort(
+    activeTab === 'awaiting' || activeTab === 'purchase'
+      ? urgencyComparator
+      : (a, b) => b.createdAt - a.createdAt
+  );
 
   if (filtered.length === 0) {
     listEl.innerHTML = '<p class="empty-hint">Nothing here right now.</p>';
@@ -410,16 +354,22 @@ function renderOrderDetail(order) {
     order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${order.orderCancelledBy}${order.orderCancellationReason ? ` — ${order.orderCancellationReason}` : ''}</p>` : '',
   ].filter(Boolean).join('');
 
+  const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
+  const nextAction = nextActionFor(order, 'owner', { pendingCancellationRequest: pendingCancellation });
+  const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
+  const urgencyWord = urgencyLabel(urgency);
+
   orderDetailEl.innerHTML = `
     <h1>${label}</h1>
-    <span class="status-badge status-${order.status}">${DETAIL_STATUS_LABELS[order.status] || order.status}</span>
+    <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner')}</span>
+    ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
 
     <div class="product-preview">
       <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
       <div class="product-preview-info">
         <strong>${label}</strong>
         <span>${order.quantity} &times; ${order.unit}${order.totalPrice != null ? ` &middot; ${formatPrice(order.totalPrice)} (${formatPrice(order.unitPrice)} each)` : ''}</span>
-        <span>Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
+        <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
       </div>
     </div>
 
@@ -440,8 +390,7 @@ function renderOrderDetail(order) {
     <h2>Timeline</h2>
     <div class="activity-list">
       ${events.length === 0 ? '<p class="empty-hint">No events recorded.</p>' : events.map(e => {
-        const renderFn = EVENT_RENDER[e.type];
-        const { icon, text } = renderFn ? renderFn(e, label) : { icon: '•', text: `${e.type} on ${label}` };
+        const { icon, text } = describeEvent(e, label);
         return `
           <div class="activity-item">
             <span class="activity-icon" aria-hidden="true">${icon}</span>
@@ -524,6 +473,10 @@ function renderBuyerRequests(communityId) {
 function renderOrderCard(order) {
   const requesterName = order.requestedBy || 'Unknown';
   const product = getProduct(order.productId);
+  const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
+  const nextAction = nextActionFor(order, 'owner', { pendingCancellationRequest: pendingCancellation });
+  const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
+  const urgencyWord = urgencyLabel(urgency);
 
   let actionHtml = '';
   if (order.status === 'pending_approval') {
@@ -567,10 +520,12 @@ function renderOrderCard(order) {
           <span class="owner-product-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</span>
           <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
           <span>${order.quantity} × ${order.unit}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span> (${formatPrice(order.unitPrice)} each)` : ''}</span>
-          <span class="order-needed-by">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}</span>
+          <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         </div>
         <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
       </div>
+      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner')}</span>
+      ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       <div class="driver-route">
         <div class="route-step">
           <span class="route-label">Buy from</span>
@@ -666,6 +621,10 @@ subscribe(orders => {
 subscribeCommunities(render);
 subscribeOrderEvents(render);
 subscribeSites(render);
+// Roadmap Step 4 — a pending cancellation request now feeds the card's
+// next-action line (getPendingCancellationRequestForOrder), so a live
+// approve/reject/new-request change needs to re-render this view too.
+subscribeCancellationRequests(render);
 
 // Keep the revert countdowns ticking even when nothing else changes — only
 // the tabs whose orders can actually show a live countdown (pending_purchase

@@ -95,3 +95,52 @@ export function formatNeededBy(neededByType, neededByMs) {
   const datePart = d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
   return `${datePart}, ${time}`;
 }
+
+// Roadmap Step 4 — deterministic urgency classification, the extension
+// point this file's own header always reserved ("no overdue/at-risk wording
+// or styling this phase" — this is that later phase). Computed fresh every
+// call from the same trusted needed_by_type/needed_by fields formatNeededBy
+// already uses — never stored, never predictive. 'overdue' is a pure
+// current-time-vs-timestamp comparison, not a supplier-ETA guess: no
+// "at risk"/"likely late" category exists or is ever returned.
+//
+// orderStatus is the order's own lifecycle status (order_status enum,
+// e.g. 'delivered'/'rejected'/'cancelled') — passing it lets a resolved
+// order's now-past historical Needed-by correctly report 'none' rather than
+// 'overdue': a delivered order isn't "overdue," it's finished, regardless of
+// when its deadline was relative to when it actually got delivered.
+const RESOLVED_ORDER_STATUSES = new Set(['delivered', 'rejected', 'cancelled']);
+
+export function neededByUrgency(neededByType, neededByMs, orderStatus) {
+  if (orderStatus && RESOLVED_ORDER_STATUSES.has(orderStatus)) return 'none';
+  if (neededByType === 'asap') return 'asap';
+  if (neededByType !== 'deadline' || neededByMs == null) return 'none';
+  if (neededByMs <= Date.now()) return 'overdue';
+
+  const d = new Date(neededByMs);
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (isSameLocalDay(d, now)) return 'today';
+  if (isSameLocalDay(d, tomorrow)) return 'tomorrow';
+  return 'future';
+}
+
+// Short badge word for the urgency key above — 'future'/'none' intentionally
+// return null (no extra word, the existing plain "Needed by: …" line is
+// already the whole story for those, matching the brief's "no huge warning
+// banners" / "future orders stay normal" instruction). 'asap' ALSO returns
+// null — found during live verification: formatNeededBy(...) already prints
+// "ASAP" as the entire Needed-by line for that type, so appending the same
+// word again read as "Needed by: ASAP · ASAP". The urgency-asap CSS class
+// still applies wherever a caller checks the raw urgency key (giving ASAP
+// orders the same visual emphasis as Overdue/Today), this only suppresses
+// the redundant duplicate text.
+export function urgencyLabel(key) {
+  switch (key) {
+    case 'overdue': return 'Overdue';
+    case 'today': return 'Due today';
+    case 'tomorrow': return 'Due tomorrow';
+    default: return null;
+  }
+}

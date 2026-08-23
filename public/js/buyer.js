@@ -7,7 +7,8 @@ import {
   getCancellationRequests, subscribeCancellationRequests,
 } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
-import { formatNeededBy } from './deadline.js';
+import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
+import { urgencyComparator } from './orderStatus.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -233,9 +234,13 @@ function highlightCancellationRequestForOrder(orderId) {
 
 function render() {
   const communityId = getActiveCommunityId();
+  // Roadmap Step 4 — urgency-first (overdue/ASAP/today/tomorrow/future,
+  // oldest-request tie-break within a tier), replacing the old plain
+  // "oldest request first" order — see orderStatus.js's urgencyComparator
+  // for the exact deterministic tier rule.
   const pending = latestOrders
     .filter(o => o.communityId === communityId && o.status === 'pending_purchase' && visibleToCurrentBuyer(o))
-    .sort((a, b) => a.createdAt - b.createdAt);
+    .sort(urgencyComparator);
 
   if (!detailPanel.hidden && selectedOrderId) {
     const stillPending = latestOrders.find(
@@ -256,13 +261,17 @@ function render() {
     return;
   }
 
-  listEl.innerHTML = pending.map(o => `
+  listEl.innerHTML = pending.map(o => {
+    const urgency = neededByUrgency(o.neededByType, o.neededBy, o.status);
+    const urgencyWord = urgencyLabel(urgency);
+    return `
     <button class="result-card" data-id="${o.id}">
       <span class="result-name">${o.productName}${o.variant ? ` (${o.variant})` : ''}</span>
       <span class="result-meta">${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} &times; ${o.unit} &middot; ${formatPrice(o.totalPrice)} &middot; from ${o.stockistName || 'Unknown'}</span>
-      <span class="result-meta order-needed-by">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}</span>
+      <span class="result-meta order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
     </button>
-  `).join('');
+  `;
+  }).join('');
 
   listEl.querySelectorAll('.result-card').forEach(btn => {
     btn.addEventListener('click', () => showDetail(btn.dataset.id));
@@ -278,6 +287,8 @@ function renderDetail() {
 
   const websiteUrl = order.stockistWebsite ? `https://${order.stockistWebsite}` : null;
   const product = getProduct(order.productId);
+  const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
+  const urgencyWord = urgencyLabel(urgency);
 
   detailEl.innerHTML = `
     <h1>Review this order</h1>
@@ -289,7 +300,7 @@ function renderDetail() {
         <span class="product-preview-price">${formatPrice(order.unitPrice)} per ${order.unit} &middot; ${formatPrice(order.totalPrice)} total</span>
       </div>
     </div>
-    <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(order.neededByType, order.neededBy)}</p>
+    <p class="hint${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}"><strong>Needed by:</strong> ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</p>
     <div class="confirm-source-card">
       <div class="confirm-source-row">
         <span class="source-name">${order.stockistName || 'Unknown stockist'}</span>
