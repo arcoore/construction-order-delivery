@@ -1,4 +1,5 @@
-import { formatPrice, getInitials, getCategoryIcon, getProduct, timeAgo } from './data.js';
+import { formatPrice, getInitials, getCategoryIcon, timeAgo } from './data.js';
+import { getProduct } from './products.js';
 import {
   getActiveCommunityId, getJoinRequests, decideJoinRequest, subscribeCommunities,
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,

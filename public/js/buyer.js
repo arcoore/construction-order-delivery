@@ -1,4 +1,5 @@
-import { formatPrice, getCategoryIcon, getProduct } from './data.js';
+import { formatPrice, getCategoryIcon } from './data.js';
+import { getProduct } from './products.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import {

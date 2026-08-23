@@ -22,15 +22,15 @@
 //
 // EXTERNAL ID CONTRACT — the `id` this module exposes on every branch
 // object is the STABLE catalogue key (e.g. 'b1'), the exact same string
-// PRODUCTS[].branchIds (data.js) and every existing order's stockist_id
-// column already use — never the new supplier_branches UUID primary key,
-// which stays purely internal to this module's own Supabase queries. This
-// is what makes the move off data.js's hardcoded BRANCHES a drop-in
-// replacement: nothing downstream (site.js's Phase A distance ranking,
-// driver.js's pickup-location lookup, order creation/snapshot) had to
-// change its own identifier handling at all — a branch object here has the
-// exact same shape (`id`, `name`, `website`, `postcode`, `lat`, `lon`)
-// data.js's BRANCHES entries always did.
+// products.branch_ids (Roadmap Step 3, see products.js) and every existing
+// order's stockist_id column already use — never the new supplier_branches
+// UUID primary key, which stays purely internal to this module's own
+// Supabase queries. This is what makes the move off data.js's hardcoded
+// BRANCHES a drop-in replacement: nothing downstream (site.js's Phase A
+// distance ranking, driver.js's pickup-location lookup, order
+// creation/snapshot) had to change its own identifier handling at all — a
+// branch object here has the exact same shape (`id`, `name`, `website`,
+// `postcode`, `lat`, `lon`) data.js's BRANCHES entries always did.
 import { getCurrentUserId } from './identity.js';
 import { subscribeAuth } from './auth.js';
 import { supabase } from './supabaseClient.js';
@@ -135,8 +135,8 @@ export function getBranch(catalogueKey) {
 // Called synchronously from site.js's Worker order-creation/edit flows —
 // must stay sync, cache-backed. Mirrors data.js's old getBranchesForProduct
 // exactly: maps product.branchIds (still the same catalogue-key strings,
-// data.js's PRODUCTS fixture is unchanged) to full branch records,
-// filtering out any that don't resolve.
+// now products.branch_ids — see Roadmap Step 3's products.js) to full
+// branch records, filtering out any that don't resolve.
 export function getBranchesForProduct(product) {
   return product.branchIds.map(id => getBranch(id)).filter(Boolean);
 }

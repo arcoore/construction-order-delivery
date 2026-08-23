@@ -1,4 +1,5 @@
-import { searchProducts, getAvailability, getCategoryIcon, formatPrice, getProduct } from './data.js';
+import { getAvailability, getCategoryIcon, formatPrice } from './data.js';
+import { searchProducts, getProduct } from './products.js';
 import { getBranchesForProduct } from './suppliers.js';
 import { geocodePostcode, distanceKm } from './geo.js';
 import {

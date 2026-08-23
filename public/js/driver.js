@@ -1,4 +1,5 @@
-import { getProduct, getInitials } from './data.js';
+import { getInitials } from './data.js';
+import { getProduct } from './products.js';
 import { getBranch } from './suppliers.js';
 import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
 import { getActiveCommunityId } from './community.js';
