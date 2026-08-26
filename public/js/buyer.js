@@ -63,6 +63,24 @@ function holdInProgress() {
   return holdPhase !== 'idle';
 }
 
+// 'done' is the one terminal hold phase nothing else ever resets — unlike
+// 'idle' (the resting state) or 'abandoning'/error paths (which always
+// resolve back to 'idle' themselves), a successfully completed hold has no
+// pending timer or RPC left to wait on, but was never being cleared either.
+// Left alone, begin()'s own `if (holdPhase !== 'idle') return;` guard then
+// permanently blocks every future hold for the rest of the page session,
+// on any order — a real bug found via live QA, confirmed by a controlled
+// reproduction (a second, fresh order's genuine >=3s hold produced zero
+// RPC calls after an earlier purchase had completed). Safe to clear here
+// specifically because 'done' has already fully settled server-side by the
+// time it's reached — there's nothing in flight this could race with.
+function clearCompletedHold() {
+  if (holdPhase === 'done') {
+    holdPhase = 'idle';
+    holdOrderId = null;
+  }
+}
+
 backBtn.addEventListener('click', async () => {
   // releaseHoldIfAny() itself is phase-aware: it's a genuine, awaited
   // abandonPurchase call only when a hold is actively 'holding'; for
@@ -80,6 +98,7 @@ function currentBuyerId() {
 function showList() {
   selectedOrderId = null;
   holdGeneration++; // invalidates any in-flight hold's DOM-touching continuation
+  clearCompletedHold();
   detailPanel.hidden = true;
   listPanel.hidden = false;
   render();
@@ -483,6 +502,7 @@ async function releaseHoldIfAny() {
     releaseRequestedDuringStart = true;
     return;
   }
+  clearCompletedHold();
   if (holdPhase !== 'holding') return;
   const orderId = holdOrderId;
   holdPhase = 'abandoning';
