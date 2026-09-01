@@ -31,6 +31,18 @@ const browseSearchInput = document.getElementById('browse-communities-search');
 
 browseSearchInput.addEventListener('input', render);
 
+// Tracks which community joinCodeStatus's current message is actually
+// about, whenever that message asserts a 'pending' state ("Request sent…"/
+// "Already requested…"). render() re-validates this against the live
+// membership status on every reactive call (Realtime, focus, view-entry —
+// whatever triggered it) and clears the message the moment that community
+// is no longer pending, instead of leaving a one-time action message frozen
+// in the DOM after the real state has since moved on. null whenever
+// joinCodeStatus holds anything else (an error, "Checking…", or an
+// already-member message), so a later render never wrongly re-validates a
+// stale id against an unrelated message.
+let joinCodePendingCommunityId = null;
+
 // The identity field is always read-only now — Phase 8B removed guest mode,
 // so display name always comes from the real Supabase account and can only
 // be set at signup (no editing UI exists for it yet).
@@ -71,10 +83,12 @@ joinCodeBtn.addEventListener('click', async () => {
   const userId = getCurrentUserId();
   const code = joinCodeInput.value.trim();
   if (!code) {
+    joinCodePendingCommunityId = null;
     setStatus(joinCodeStatus, 'Enter an invite code.', 'error');
     return;
   }
   joinCodeBtn.disabled = true;
+  joinCodePendingCommunityId = null;
   setStatus(joinCodeStatus, 'Checking…', '');
   try {
     const result = await requestToJoinByCode(code, userId);
@@ -88,10 +102,12 @@ joinCodeBtn.addEventListener('click', async () => {
       return;
     }
     if (result.alreadyPending) {
+      joinCodePendingCommunityId = result.community.id;
       setStatus(joinCodeStatus, `Already requested to join "${result.community.name}" — waiting for approval.`, '');
       return;
     }
     joinCodeInput.value = '';
+    joinCodePendingCommunityId = result.community.id;
     setStatus(joinCodeStatus, `Request sent to "${result.community.name}" — waiting for the owner to approve it.`, 'success');
   } finally {
     joinCodeBtn.disabled = false;
@@ -151,6 +167,19 @@ function render() {
   syncIdentityField();
 
   const userId = getCurrentUserId();
+
+  // Re-validate any "waiting for approval" message still on screen against
+  // the actual current membership status, every time this reactive render
+  // runs (Realtime, window focus, or view-entry — whichever triggered it).
+  // A one-time action message is otherwise never revisited once written, so
+  // it can end up frozen on screen long after the real status has already
+  // moved to approved/declined elsewhere — exactly the contradiction found
+  // live (the community correctly appeared under "Your communities" while
+  // this message still said "waiting for the owner to approve it").
+  if (joinCodePendingCommunityId && membershipStatus(joinCodePendingCommunityId, userId) !== 'pending') {
+    joinCodePendingCommunityId = null;
+    setStatus(joinCodeStatus, '', '');
+  }
 
   const mine = myCommunities(userId);
   myCommunitiesPanel.hidden = mine.length === 0;
@@ -247,5 +276,6 @@ subscribeIdentity(render);
 export function refreshCommunitiesView() {
   setStatus(createStatus, '', '');
   setStatus(joinCodeStatus, '', '');
+  joinCodePendingCommunityId = null;
   render();
 }
