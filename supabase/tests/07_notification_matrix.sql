@@ -30,8 +30,11 @@ insert into community_memberships (community_id, user_id, status) values (:'comp
 select tests.authenticate_as(:'buyer2_f');
 insert into community_memberships (community_id, user_id, status) values (:'company_f', :'buyer2_f', 'pending');
 
+select tests.set_membership_status(:'company_f', :'worker_f', 'approved', :'owner_f');
+select tests.set_membership_status(:'company_f', :'buyer_f', 'approved', :'owner_f');
+select tests.set_membership_status(:'company_f', :'driver_f', 'approved', :'owner_f');
+select tests.set_membership_status(:'company_f', :'buyer2_f', 'approved', :'owner_f');
 select tests.authenticate_as(:'owner_f');
-update community_memberships set status = 'approved', decided_by_id = :'owner_f' where community_id = :'company_f';
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_f', :'company_f', :'worker_f', :'owner_f');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_f', :'company_f', :'buyer_f', :'owner_f');
 insert into buyer_grants (community_id, user_id, granted_by_id) values (:'company_f', :'buyer_f', :'owner_f');

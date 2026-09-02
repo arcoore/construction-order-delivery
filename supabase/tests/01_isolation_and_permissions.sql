@@ -25,8 +25,7 @@ insert into communities (name, invite_code, owner_id) values ('Company B', 'BBBB
 -- worker_a requests + gets approved into Company A only.
 select tests.authenticate_as(:'worker_a');
 insert into community_memberships (community_id, user_id, status) values (:'company_a', :'worker_a', 'pending');
-select tests.authenticate_as(:'owner_a');
-update community_memberships set status = 'approved', decided_by_id = :'owner_a' where community_id = :'company_a' and user_id = :'worker_a';
+select tests.set_membership_status(:'company_a', :'worker_a', 'approved', :'owner_a');
 
 select tests.authenticate_as(:'owner_a');
 insert into sites (community_id, name, created_by_id) values (:'company_a', 'Site Alpha', :'owner_a') returning id as site_a \gset
@@ -100,14 +99,12 @@ select ok( not can_access_site(:'site_b', :'company_b', :'owner_a'),
   'owner A''s company-wide bypass does not extend into company B (item 8)');
 
 -- ---------------------------------------------------- 17: revoked membership fails next action
-select tests.authenticate_as(:'owner_a');
-update community_memberships set status = 'declined' where community_id = :'company_a' and user_id = :'worker_a';
+select tests.set_membership_status(:'company_a', :'worker_a', 'declined');
 select tests.authenticate_as(:'worker_a');
 select ok( not is_approved_member(:'company_a', :'worker_a'),
   'worker A''s next permission check reflects the revocation immediately (item 17)');
 -- restore for later tests in this file
-select tests.authenticate_as(:'owner_a');
-update community_memberships set status = 'approved' where community_id = :'company_a' and user_id = :'worker_a';
+select tests.set_membership_status(:'company_a', :'worker_a', 'approved');
 
 -- ---------------------------------------------------- 20: knowing a UUID grants nothing
 select tests.authenticate_as(:'outsider');

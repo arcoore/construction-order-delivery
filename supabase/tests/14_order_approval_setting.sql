@@ -21,16 +21,20 @@ insert into communities (name, invite_code, owner_id) values ('Company G', 'GGGG
 insert into sites (community_id, name, created_by_id) values (:'company_g', 'Site G', :'owner_g') returning id as site_g \gset
 
 -- community_memberships only allows a user to insert their OWN pending row
--- (community_memberships_insert_self_pending) — approval is a separate
--- owner-side UPDATE, the same two-step real join/approve flow the app uses.
+-- (community_memberships_insert_self_pending). Approval itself now goes
+-- through decide_join_request (migration 0022) in real usage — its own
+-- behavior is covered by 15_join_request_decision.sql; this fixture uses
+-- the plain tests.set_membership_status bypass helper instead, since this
+-- file is testing the approval-setting/order-creation interaction, not the
+-- join-decision RPC itself.
 select tests.authenticate_as(:'worker_g');
 insert into community_memberships (community_id, user_id, status) values (:'company_g', :'worker_g', 'pending');
 select tests.authenticate_as(:'buyer_g');
 insert into community_memberships (community_id, user_id, status) values (:'company_g', :'buyer_g', 'pending');
 
+select tests.set_membership_status(:'company_g', :'worker_g', 'approved', :'owner_g');
+select tests.set_membership_status(:'company_g', :'buyer_g', 'approved', :'owner_g');
 select tests.authenticate_as(:'owner_g');
-update community_memberships set status = 'approved', decided_at = now(), decided_by_id = :'owner_g'
-  where community_id = :'company_g' and user_id in (:'worker_g', :'buyer_g');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_g', :'company_g', :'worker_g', :'owner_g');
 insert into buyer_grants (community_id, user_id, granted_by_id) values (:'company_g', :'buyer_g', :'owner_g');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_g', :'company_g', :'buyer_g', :'owner_g');

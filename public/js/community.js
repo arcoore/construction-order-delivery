@@ -455,12 +455,22 @@ export function clearPendingJoinCode() {
   pendingJoinCode = null;
 }
 
+// Roadmap Step 5 follow-up — rewritten to call the guarded decide_join_request
+// RPC instead of a plain client update. Closes a real gap: the old direct
+// update had no state-machine guard (a double-click, a replay, or two
+// competing owner sessions could all re-decide the same request with no
+// refusal) and could never have notified the applicant either way, since
+// notifications has no INSERT grant for `authenticated` at all. The RPC
+// now derives the acting owner from auth.uid() server-side, same as every
+// other rewritten write in this codebase — decidedById is kept as a
+// parameter purely so this function's external signature (and therefore
+// every existing call site, e.g. owner.js) needs zero changes; it's no
+// longer read or trusted.
 export async function decideJoinRequest(requestId, decision, decidedById) {
-  const { data, error } = await supabase.from('community_memberships')
-    .update({ status: decision, decided_at: new Date().toISOString(), decided_by_id: decidedById })
-    .eq('id', requestId)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc('decide_join_request', {
+    p_request_id: requestId,
+    p_decision: decision,
+  });
   if (error) return { ok: false, error: error.message };
   const mapped = mapMembership(data);
   const idx = cache.memberships.findIndex(r => r.id === requestId);

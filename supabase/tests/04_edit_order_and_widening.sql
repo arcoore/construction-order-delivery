@@ -29,9 +29,8 @@ insert into sites (community_id, name, created_by_id) values (:'company_d', 'Sit
 
 select tests.authenticate_as(:'worker_d');
 insert into community_memberships (community_id, user_id, status) values (:'company_d', :'worker_d', 'pending');
+select tests.set_membership_status(:'company_d', :'worker_d', 'approved', :'owner_d');
 select tests.authenticate_as(:'owner_d');
-update community_memberships set status = 'approved', decided_by_id = :'owner_d'
-  where community_id = :'company_d' and user_id = :'worker_d';
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values
   (:'site_d', :'company_d', :'worker_d', :'owner_d'),
   (:'site_d2', :'company_d', :'worker_d', :'owner_d');

@@ -200,9 +200,9 @@ select tests.authenticate_as(:'worker_e_a');
 insert into community_memberships (community_id, user_id, status) values (:'company_e', :'worker_e_a', 'pending');
 select tests.authenticate_as(:'worker_e_b');
 insert into community_memberships (community_id, user_id, status) values (:'company_e', :'worker_e_b', 'pending');
+select tests.set_membership_status(:'company_e', :'worker_e_a', 'approved', :'owner_e');
+select tests.set_membership_status(:'company_e', :'worker_e_b', 'approved', :'owner_e');
 select tests.authenticate_as(:'owner_e');
-update community_memberships set status = 'approved', decided_by_id = :'owner_e'
-  where community_id = :'company_e' and user_id in (:'worker_e_a', :'worker_e_b');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values
   (:'site_e', :'company_e', :'worker_e_a', :'owner_e'),
   (:'site_e', :'company_e', :'worker_e_b', :'owner_e');

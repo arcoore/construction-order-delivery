@@ -39,10 +39,11 @@ insert into community_memberships (community_id, user_id, status) values (:'comp
 select tests.authenticate_as(:'driver_2');
 insert into community_memberships (community_id, user_id, status) values (:'company_c', :'driver_2', 'pending');
 
-select tests.authenticate_as(:'owner_c');
-update community_memberships set status = 'approved', decided_by_id = :'owner_c'
-  where community_id = :'company_c' and user_id in (:'worker_c', :'driver_1', :'driver_2');
+select tests.set_membership_status(:'company_c', :'worker_c', 'approved', :'owner_c');
+select tests.set_membership_status(:'company_c', :'driver_1', 'approved', :'owner_c');
+select tests.set_membership_status(:'company_c', :'driver_2', 'approved', :'owner_c');
 
+select tests.authenticate_as(:'owner_c');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values
   (:'site_c', :'company_c', :'worker_c', :'owner_c'),
   (:'site_c', :'company_c', :'buyer_c', :'owner_c');
@@ -92,9 +93,8 @@ select is( (select status from orders where id = :'order_id')::text, 'purchased'
 select tests.create_user('buyer-c2@test.local', 'Buyer C2') as buyer_c2 \gset
 select tests.authenticate_as(:'buyer_c2');
 insert into community_memberships (community_id, user_id, status) values (:'company_c', :'buyer_c2', 'pending');
+select tests.set_membership_status(:'company_c', :'buyer_c2', 'approved', :'owner_c');
 select tests.authenticate_as(:'owner_c');
-update community_memberships set status = 'approved', decided_by_id = :'owner_c'
-  where community_id = :'company_c' and user_id = :'buyer_c2';
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_c', :'company_c', :'buyer_c2', :'owner_c');
 insert into buyer_grants (community_id, user_id, granted_by_id) values (:'company_c', :'buyer_c2', :'owner_c');
 

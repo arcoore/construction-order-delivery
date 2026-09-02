@@ -57,10 +57,39 @@ begin
 end;
 $$;
 
+-- Added alongside migration 0022, which drops
+-- community_memberships_decide_owner_only (the old direct-UPDATE policy)
+-- once decide_join_request became the sole authoritative decision path.
+-- Several existing test files' fixture setup (not the thing actually under
+-- test in those files — e.g. "get this worker approved so we can test
+-- order creation") used to rely on that policy to flip a membership's
+-- status directly, as the owner. Routing every one of those fixture
+-- shortcuts through the real decide_join_request RPC instead would work
+-- for a plain pending->approved setup, but not for 01_isolation_and_
+-- permissions.sql's item 17, which deliberately simulates an already-
+-- decided membership being changed again (a hypothetical revoke-style
+-- status flip that isn't itself a join decision, and which the real RPC's
+-- own state-machine guard would now correctly refuse to replay) — so a
+-- genuine RLS-bypassing test-only helper is the right tool here, the exact
+-- same category tests.create_user already is for auth.users, not a sign
+-- that the underlying RLS closure was wrong.
+create or replace function tests.set_membership_status(p_community_id uuid, p_user_id uuid, p_status membership_status, p_decided_by_id uuid default null)
+returns void
+language plpgsql security definer as $$
+begin
+  update community_memberships set
+    status = p_status,
+    decided_at = case when p_status = 'pending' then null else now() end,
+    decided_by_id = p_decided_by_id
+  where community_id = p_community_id and user_id = p_user_id;
+end;
+$$;
+
 grant usage on schema tests to authenticated, anon;
 grant execute on function tests.create_user(text, text) to authenticated, anon;
 grant execute on function tests.authenticate_as(uuid) to authenticated, anon;
 grant execute on function tests.clear_authentication() to authenticated, anon;
+grant execute on function tests.set_membership_status(uuid, uuid, membership_status, uuid) to authenticated, anon;
 
 -- This file is pure setup (schema + helper functions), not a real test —
 -- but `supabase test db` runs every .sql file in this directory through
