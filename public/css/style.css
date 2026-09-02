@@ -31,6 +31,11 @@ body {
   background: var(--navy);
   color: white;
   padding: 14px 20px;
+  /* Positioning context for .notif-panel: it is anchored here (full viewport
+     width) rather than to .notif-wrap, so the dropdown can be clamped inside
+     the viewport gutters regardless of where .notif-wrap lands when the
+     topbar wraps onto multiple rows. */
+  position: relative;
 }
 
 .brand {
@@ -192,7 +197,8 @@ body {
 }
 
 .notif-wrap {
-  position: relative;
+  /* Deliberately NOT a positioning context — see .notif-panel / .topbar. */
+  position: static;
 }
 
 .notif-wrap[hidden] {
@@ -202,6 +208,9 @@ body {
 .circle-btn-notif {
   background: var(--navy-light);
   font-size: 1.1rem;
+  /* Anchor .notif-badge (a child of this button) to the bell itself, now that
+     .notif-wrap is no longer a positioning context. */
+  position: relative;
 }
 
 .notif-badge {
@@ -228,15 +237,23 @@ body {
 }
 
 .notif-panel {
+  /* Anchored to .topbar, not .notif-wrap (see .topbar). left + right are both
+     pinned to the topbar's own horizontal padding (20px), so the panel's
+     available band is always the full viewport minus those gutters; max-width
+     then caps it at 340px and margin-left:auto pushes it to the right gutter.
+     Result: panelLeft >= 20 and panelRight <= viewportWidth - 20 at every
+     width, with no 100vw math and no overflow hacks. */
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  left: 20px;
+  right: 20px;
+  width: auto;
+  max-width: 340px;
+  margin-left: auto;
   background: white;
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(15, 37, 64, 0.18);
-  width: 340px;
-  max-width: 90vw;
   z-index: 10;
   overflow: hidden;
 }

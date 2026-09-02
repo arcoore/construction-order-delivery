@@ -632,7 +632,11 @@ function renderJoinRequests(communityId) {
         : [];
 
       const memberUserId = pending.find(r => r.id === requestId)?.userId;
-      await decideJoinRequest(requestId, decision, ownerId);
+      const decideResult = await decideJoinRequest(requestId, decision, ownerId);
+      if (!decideResult.ok) {
+        alert(decideResult.error);
+        return;
+      }
 
       if (checkedSiteIds.length > 0 && memberUserId) {
         const failures = [];
