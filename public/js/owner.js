@@ -632,8 +632,18 @@ function renderJoinRequests(communityId) {
         : [];
 
       const memberUserId = pending.find(r => r.id === requestId)?.userId;
+
+      // In-flight guard: a rapid second click would otherwise fire a second
+      // decide_join_request on an already-decided row and surface its raw
+      // 40001 error in an alert. Disable both actions on this card for the
+      // duration — a successful decision re-renders the panel (buttons gone),
+      // a failure re-enables them. Same pattern as site.js's confirmBtn.
+      const cardBtns = joinRequestsList.querySelectorAll(`[data-join-id="${requestId}"]`);
+      cardBtns.forEach(b => { b.disabled = true; });
+
       const decideResult = await decideJoinRequest(requestId, decision, ownerId);
       if (!decideResult.ok) {
+        cardBtns.forEach(b => { b.disabled = false; });
         alert(decideResult.error);
         return;
       }
