@@ -1179,6 +1179,16 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   white-space: nowrap;
 }
 
+.community-status-declined {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8a2c2c;
+  background: #fbe4e4;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

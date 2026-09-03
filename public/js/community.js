@@ -354,7 +354,17 @@ export function isApprovedMember(communityId, userId) {
 
 export async function requestToJoin(communityId, userId) {
   const existing = cache.memberships.find(r => r.communityId === communityId && r.userId === userId);
-  if (existing) return existing;
+  if (existing) {
+    // A prior decision row already exists. The browse-list button that
+    // reaches this only renders for status 'none' or 'declined', so in
+    // practice this is the declined case — return it discriminated so the
+    // caller can show honest feedback instead of a silent no-op that
+    // leaves the button stuck on "Requesting…". Re-requesting after a
+    // decline is not a capability yet (needs an owner-facing product
+    // decision + its own guarded RPC — community_memberships has had no
+    // client UPDATE path since migration 0022).
+    return { declined: existing.status === 'declined', status: existing.status };
+  }
   const { data, error } = await supabase.from('community_memberships').insert({
     community_id: communityId, user_id: userId, status: 'pending',
   }).select().single();
@@ -395,6 +405,11 @@ export async function requestToJoinByCode(code, userId) {
   // tell them apart (found live: without this check, a real first-time
   // joiner incorrectly saw "Already requested" instead of "Request sent").
   if (data.status === 'pending' && !data.justCreated) return { community, alreadyPending: true };
+  // A prior 'declined' row: the RPC returns it unchanged (no new pending
+  // request is created — see 0021's header comment). Surface that honestly
+  // rather than falling through to the "requested: true" success below,
+  // which would tell the user their request was sent when nothing happened.
+  if (data.status === 'declined') return { community, declined: true };
 
   await refreshCommunityCache();
   return { community, requested: true };
