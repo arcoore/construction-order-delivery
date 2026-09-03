@@ -10,7 +10,7 @@
 -- was run separately (raw psql), matching this project's precedent for
 -- start_purchase / claim_delivery / decide_join_request.
 begin;
-select plan(57);
+select plan(58);
 
 select tests.create_user('wf-creator@test.local', 'WF Creator')   as creator \gset
 select tests.create_user('wf-owner2@test.local',  'WF Owner Two')  as owner2 \gset
@@ -94,7 +94,8 @@ select tests.authenticate_as(:'buyer');
 select is((select count(*) from notifications where recipient_user_id = :'buyer' and type = 'membership_suspended')::int, 1,
   'item 10: exactly one membership_suspended notification');
 select is((select message from notifications where recipient_user_id = :'buyer' and type = 'membership_suspended'),
-  'Your access to WF Co has been suspended.', 'item 11: suspension notification wording');
+  E'Your access to WF Co has been suspended.\nReason: perf review',
+  'item 11: suspension notification wording includes the given reason (member-visible)');
 
 select tests.authenticate_as(:'owner2');
 select throws_ok(format($$ select suspend_member(%L) $$, :'m_creator'), '42501', null,
@@ -149,7 +150,8 @@ select tests.authenticate_as(:'buyer');
 select is((select count(*) from notifications where recipient_user_id = :'buyer' and type = 'membership_removed')::int, 1,
   'item 30: exactly one membership_removed notification');
 select is((select message from notifications where recipient_user_id = :'buyer' and type = 'membership_removed'),
-  'You have been removed from WF Co.', 'item 31: removal notification wording');
+  E'You have been removed from WF Co.\nReason: left IRL',
+  'item 31: removal notification wording includes the given reason (member-visible)');
 select tests.authenticate_as(:'creator');
 select is((select (meta->>'buyerGrantRevoked')::boolean from community_membership_events where membership_id = :'m_buyer' and type = 'member_removed'), true,
   'item 32: the member_removed event meta records the buyer grant was revoked');
@@ -157,11 +159,16 @@ select is((select (meta->>'buyerGrantRevoked')::boolean from community_membershi
 -- post-update 'removed'. buyer was 'approved' at removal (restored earlier).
 select is((select from_status from community_membership_events where membership_id = :'m_buyer' and type = 'member_removed'), 'approved',
   'item 33a: approved -> removed logs from_status = approved (not removed)');
--- and a genuine suspended -> removed path via m_extra
+-- and a genuine suspended -> removed path via m_extra (no reason given)
 select suspend_member(:'m_extra', 'temp');
 select is((remove_member(:'m_extra')).status, 'removed', 'item 33b: a suspended member can be removed');
 select is((select from_status from community_membership_events where membership_id = :'m_extra' and type = 'member_removed'), 'suspended',
   'item 33c: suspended -> removed logs from_status = suspended (not removed)');
+select tests.authenticate_as(:'extra');
+select is((select message from notifications where recipient_user_id = :'extra' and type = 'membership_removed'),
+  'You have been removed from WF Co.',
+  'item 33d: a removal with no reason has no "Reason:" line');
+select tests.authenticate_as(:'creator');
 select throws_ok(format($$ select remove_member(%L) $$, :'m_stranger'), '40001', null,
   'item 33: removing an already-declined membership is refused (state guard)');
 

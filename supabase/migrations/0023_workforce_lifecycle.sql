@@ -347,9 +347,15 @@ begin
 
   perform _log_membership_event(v_m.id, v_m.community_id, 'member_suspended', 'approved', 'suspended', p_reason, null);
 
+  -- The optional reason is NOT owner-private: if one was given, it is baked
+  -- into the message the member receives (frozen at creation, like every
+  -- other notification in this codebase). status_reason is also independently
+  -- member-readable via RLS for the live "why am I suspended" surface.
   insert into notifications (recipient_user_id, type, category, title, message, community_id, actor_id, actor_name, navigation_target)
   select v_m.user_id, 'membership_suspended', 'roleUpdates', 'Access suspended',
-    format('Your access to %s has been suspended.', (select name from communities where id = v_m.community_id)),
+    format('Your access to %s has been suspended.%s',
+      (select name from communities where id = v_m.community_id),
+      case when p_reason is not null and btrim(p_reason) <> '' then E'\nReason: ' || btrim(p_reason) else '' end),
     v_m.community_id, auth.uid(), coalesce(nullif(_current_display_name(), ''), 'An owner'),
     jsonb_build_object('communityId', v_m.community_id, 'view', 'profile')
   where v_m.user_id is distinct from auth.uid();
@@ -469,9 +475,13 @@ begin
     jsonb_build_object('ownerGrantRevoked', v_had_owner_grant, 'buyerGrantRevoked', v_had_buyer_grant, 'siteMembershipsRemoved', v_sites_removed)
   );
 
+  -- Optional reason is NOT owner-private — baked into the member's message
+  -- if given (see suspend_member's note above).
   insert into notifications (recipient_user_id, type, category, title, message, community_id, actor_id, actor_name, navigation_target)
   select v_m.user_id, 'membership_removed', 'roleUpdates', 'Removed from company',
-    format('You have been removed from %s.', (select name from communities where id = v_m.community_id)),
+    format('You have been removed from %s.%s',
+      (select name from communities where id = v_m.community_id),
+      case when p_reason is not null and btrim(p_reason) <> '' then E'\nReason: ' || btrim(p_reason) else '' end),
     v_m.community_id, auth.uid(), coalesce(nullif(_current_display_name(), ''), 'An owner'),
     jsonb_build_object('communityId', v_m.community_id, 'view', 'profile')
   where v_m.user_id is distinct from auth.uid();

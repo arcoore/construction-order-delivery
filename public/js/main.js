@@ -7,14 +7,15 @@ import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
 import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
-import { getCurrentUserId, getCurrentDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
+import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
   getActiveCommunityId, getActiveCommunity,
-  isApprovedMember, isOwner, setActiveCommunityId, membershipStatus, myCommunities,
+  isApprovedMember, isOwner, isCreator, setActiveCommunityId, membershipStatus, myCommunities,
   getActiveRole, setActiveRole, eligibleRoles, resolveEntryRole, subscribeCommunities,
   getCommunities, findUnseenGrantFor, markGrantSeen,
   buyerRequestStatus, requestBuyerRole, refreshCommunityCache,
   consumeJoinIntentFromUrl, getPendingJoinCode,
+  leaveCommunity, mySuspendedMemberships,
 } from './community.js';
 import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
@@ -113,6 +114,12 @@ const NOTIF_ICONS = {
   site_member_added: '📍',
   site_member_removed: '➖',
   site_archived: '🗄️',
+  membership_approved: '✅',
+  membership_declined: '🚫',
+  membership_suspended: '⏸️',
+  membership_restored: '▶️',
+  membership_removed: '⛔',
+  member_left: '👋',
 };
 
 const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
@@ -199,8 +206,22 @@ async function showProfile() {
     id: c.id,
     name: c.name,
     role: membershipStatus(c.id, userId) === 'owner' ? 'Owner' : 'Member',
+    isCreator: isCreator(c.id, userId),
     buyerStatus: buyerRequestStatus(c.id, userId),
   }));
+
+  // Migration 0023 — a suspended member can still see the company row
+  // (communities_select_scoped includes 'suspended') and their own
+  // membership row (with the reason). Surface it so they know why they've
+  // lost access and can't get back in until an owner restores them.
+  const suspended = mySuspendedMemberships(userId).map(m => {
+    const c = getCommunities().find(x => x.id === m.communityId);
+    return {
+      name: c ? c.name : 'a company',
+      reason: m.statusReason,
+      by: m.statusChangedById ? resolveDisplayName(m.statusChangedById) : null,
+    };
+  });
 
   profileDetails.innerHTML = `
     <div class="profile-field">
@@ -218,24 +239,58 @@ async function showProfile() {
       </div>
     ` : ''}
     <div class="profile-field">
-      <span class="profile-label">Communities (${memberships.length})</span>
+      <span class="profile-label">Companies (${memberships.length})</span>
       <div class="profile-communities">
         ${memberships.length === 0
-          ? '<span class="profile-value">Not in any communities yet</span>'
+          ? '<span class="profile-value">Not in any companies yet</span>'
           : memberships.map(m => `
             <div class="profile-community-row">
               <strong>${m.name}</strong>
               <span class="status-badge status-pending">${m.role}</span>
               ${renderBuyerBadge(m)}
+              ${m.isCreator ? '' : `<button type="button" class="link-btn link-btn-danger" data-leave-company="${m.id}" data-company-name="${m.name}">Leave this company</button>`}
             </div>
           `).join('')}
       </div>
     </div>
+    ${suspended.length ? `
+      <div class="profile-field">
+        <span class="profile-label">Suspended</span>
+        <div class="profile-communities">
+          ${suspended.map(s => `
+            <div class="profile-community-row profile-community-suspended">
+              <strong>${s.name}</strong>
+              <span class="status-badge status-suspended">Suspended</span>
+              <span class="profile-value">${s.reason ? `Reason: ${s.reason}` : 'Your access here is paused'}${s.by ? ` — by ${s.by}` : ''}. Ask an owner to restore your access.</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
     <button type="button" class="btn btn-secondary btn-block" id="profile-logout-btn">Log out</button>
   `;
 
   document.getElementById('profile-logout-btn').addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('sitestock:logout'));
+  });
+
+  profileDetails.querySelectorAll('[data-leave-company]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const communityId = btn.dataset.leaveCompany;
+      const name = btn.dataset.companyName;
+      if (!window.confirm(`Leave "${name}"? You lose access and any owner or buyer access and site assignments. You can ask to rejoin later.`)) return;
+      btn.disabled = true;
+      const result = await leaveCommunity(communityId);
+      if (!result.ok) {
+        btn.disabled = false;
+        alert(result.error);
+        return;
+      }
+      // If the company they just left is the active one, route out of it;
+      // otherwise just re-render the profile (the row is now gone).
+      if (getActiveCommunityId() === communityId) setActiveCommunityId(null);
+      showProfile();
+    });
   });
 
   profileDetails.querySelectorAll('[data-request-buyer]').forEach(btn => {
@@ -594,6 +649,14 @@ subscribeCommunities(() => {
   const community = getActiveCommunity();
   const userId = getCurrentUserId();
   if (!community || !isApprovedMember(community.id, userId)) {
+    // Access to the active company was lost mid-session (suspended /
+    // removed / left, or an owner grant went dormant). Migration 0023
+    // makes isOwner/isApprovedMember reflect that after the Realtime-
+    // triggered cache refresh; clear the now-invalid active company and
+    // route to the picker. The membership_suspended/removed notification
+    // (also just arrived via Realtime) explains why; a suspended user
+    // additionally sees a "Suspended" section on their Profile.
+    setActiveCommunityId(null);
     showCommunityPicker();
     return;
   }

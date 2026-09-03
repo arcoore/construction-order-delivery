@@ -5,6 +5,7 @@ import {
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink,
+  teamMemberships, suspendMember, restoreMember, removeMember,
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
@@ -17,7 +18,7 @@ import {
 // sitesView.js, reached via the sitestock:show-sites event below.
 // Roadmap Step 5 adds one real write, addSiteMember, reused as-is (not
 // reimplemented) for the optional "assign a site at approval time" flow.
-import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember } from './sites.js';
+import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent } from './orderStatus.js';
 
@@ -72,6 +73,10 @@ let activeTab = 'awaiting';
 let latestOrders = [];
 let rejectingId = null;
 let selectedOrderId = null;
+// Team panel — which member row (by membership id) is showing its inline
+// suspend/remove confirm+reason sub-form, and which action. Same shape as
+// rejectingId above.
+let teamActionState = null; // { membershipId, action: 'suspend' | 'remove' }
 
 function getDecisionTime(order) {
   return order.approvedAt || order.rejectedAt || null;
@@ -380,7 +385,9 @@ function renderTeam(communityId) {
   }
   const viewerIsCreator = isCreator(communityId, userId);
 
-  const members = approvedMembers(communityId).filter(id => id !== userId);
+  // Migration 0023 — the Team panel now lists suspended members too (so the
+  // owner can Restore them), not just approved ones.
+  const members = teamMemberships(communityId, userId);
   teamPanel.hidden = false;
 
   if (members.length === 0) {
@@ -388,11 +395,58 @@ function renderTeam(communityId) {
     return;
   }
 
-  teamList.innerHTML = members.map(memberId => {
+  teamList.innerHTML = members.map(m => {
+    const memberId = m.userId;
     const displayName = resolveDisplayName(memberId);
     const ownerGranted = hasOwnerGrant(communityId, memberId);
     const buyerGranted = hasBuyerGrant(communityId, memberId);
-    const badges = [ownerGranted ? 'Owner access' : null, buyerGranted ? 'Buyer access' : null].filter(Boolean);
+    const suspended = m.status === 'suspended';
+    // "Creator-only for owner targets" gate — mirrors suspend_member /
+    // remove_member server-side (which use a direct owner_grants existence
+    // check, covering a dormant grant on an already-suspended owner too).
+    const canLifecycle = viewerIsCreator || !ownerGranted;
+    const badges = suspended
+      ? '<span class="status-badge status-suspended">Suspended</span>'
+      : (ownerGranted || buyerGranted
+        ? [ownerGranted ? 'Owner access' : null, buyerGranted ? 'Buyer access' : null].filter(Boolean).join(' + ')
+        : 'Member');
+
+    let actionsHtml;
+    if (suspended) {
+      actionsHtml = `
+        <div class="owner-actions">
+          <button class="btn btn-primary" data-team-action="restore" data-team-mid="${m.id}">Restore access</button>
+          ${canLifecycle ? `<button class="btn btn-secondary" data-team-action="remove-start" data-team-mid="${m.id}">Remove from company</button>` : ''}
+        </div>`;
+    } else if (teamActionState && teamActionState.membershipId === m.id) {
+      const isRemove = teamActionState.action === 'remove';
+      actionsHtml = `
+        <div class="reject-form">
+          <p class="field-hint">${isRemove
+            ? `Remove <strong>${displayName}</strong> from this company? This also removes their owner and buyer access and every site assignment. They can ask to rejoin later.`
+            : `Suspend <strong>${displayName}</strong>? They lose all access until you restore them. Their owner/buyer access and site assignments are kept.`}</p>
+          <label class="field-label" for="team-reason-input">Reason (optional — the member can see this)</label>
+          <input type="text" id="team-reason-input" class="text-input" maxlength="300" placeholder="e.g. left the company, on leave, performance review" />
+          <div class="reject-form-actions">
+            <button class="btn btn-secondary" data-team-action="cancel" data-team-mid="${m.id}">Cancel</button>
+            <button class="btn ${isRemove ? 'btn-danger' : 'btn-primary'}" data-team-action="${isRemove ? 'remove-confirm' : 'suspend-confirm'}" data-team-mid="${m.id}">${isRemove ? 'Remove member' : 'Suspend member'}</button>
+          </div>
+        </div>`;
+    } else {
+      actionsHtml = `
+        <div class="owner-actions">
+          ${viewerIsCreator ? (ownerGranted
+            ? `<button class="btn btn-secondary" data-team-action="revoke-owner" data-team-id="${memberId}">Revoke owner access</button>`
+            : `<button class="btn btn-primary" data-team-action="grant-owner" data-team-id="${memberId}">Give owner access</button>`) : ''}
+          ${buyerGranted
+            ? `<button class="btn btn-secondary" data-team-action="revoke-buyer" data-team-id="${memberId}">Revoke buyer access</button>`
+            : `<button class="btn btn-primary" data-team-action="grant-buyer" data-team-id="${memberId}">Give buyer access</button>`}
+          ${canLifecycle ? `
+            <button class="btn btn-secondary" data-team-action="suspend-start" data-team-mid="${m.id}">Suspend</button>
+            <button class="btn btn-secondary" data-team-action="remove-start" data-team-mid="${m.id}">Remove</button>` : ''}
+        </div>`;
+    }
+
     return `
       <div class="order-card">
         <div class="request-header">
@@ -401,29 +455,53 @@ function renderTeam(communityId) {
             <span class="requester-name">${displayName}</span>
           </div>
           <div class="order-card-main">
-            <strong>${badges.length ? badges.join(' + ') : 'Member'}</strong>
+            <strong>${badges}</strong>
+            ${suspended && m.statusReason ? `<span class="field-hint">Reason: ${m.statusReason}</span>` : ''}
           </div>
         </div>
-        <div class="owner-actions">
-          ${viewerIsCreator ? (ownerGranted
-            ? `<button class="btn btn-secondary" data-team-action="revoke-owner" data-team-id="${memberId}">Revoke owner access</button>`
-            : `<button class="btn btn-primary" data-team-action="grant-owner" data-team-id="${memberId}">Give owner access</button>`) : ''}
-          ${buyerGranted
-            ? `<button class="btn btn-secondary" data-team-action="revoke-buyer" data-team-id="${memberId}">Revoke buyer access</button>`
-            : `<button class="btn btn-primary" data-team-action="grant-buyer" data-team-id="${memberId}">Give buyer access</button>`}
-        </div>
+        ${actionsHtml}
       </div>
     `;
   }).join('');
 
   teamList.querySelectorAll('[data-team-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const memberId = btn.dataset.teamId;
+    btn.addEventListener('click', async () => {
       const action = btn.dataset.teamAction;
-      if (action === 'grant-owner') grantOwnerAccess(communityId, memberId, userId);
-      else if (action === 'revoke-owner') revokeOwnerAccess(communityId, memberId);
-      else if (action === 'grant-buyer') grantBuyerAccess(communityId, memberId, userId);
-      else if (action === 'revoke-buyer') revokeBuyerAccess(communityId, memberId, userId);
+      const memberId = btn.dataset.teamId;
+      const mid = btn.dataset.teamMid;
+
+      if (action === 'suspend-start') { teamActionState = { membershipId: mid, action: 'suspend' }; render(); return; }
+      if (action === 'remove-start') { teamActionState = { membershipId: mid, action: 'remove' }; render(); return; }
+      if (action === 'cancel') { teamActionState = null; render(); return; }
+
+      if (action === 'grant-owner') { grantOwnerAccess(communityId, memberId, userId); return; }
+      if (action === 'revoke-owner') { revokeOwnerAccess(communityId, memberId); return; }
+      if (action === 'grant-buyer') { grantBuyerAccess(communityId, memberId, userId); return; }
+      if (action === 'revoke-buyer') { revokeBuyerAccess(communityId, memberId, userId); return; }
+
+      // Lifecycle actions — disable every team button while the RPC is in
+      // flight (double-click guard, same as the join Approve/Decline fix).
+      const reasonInput = teamList.querySelector('#team-reason-input');
+      const reason = reasonInput ? reasonInput.value : '';
+      teamList.querySelectorAll('[data-team-action]').forEach(b => { b.disabled = true; });
+
+      let result;
+      if (action === 'restore') result = await restoreMember(mid);
+      else if (action === 'suspend-confirm') result = await suspendMember(mid, reason);
+      else if (action === 'remove-confirm') result = await removeMember(mid, reason);
+      else { teamList.querySelectorAll('[data-team-action]').forEach(b => { b.disabled = false; }); return; }
+
+      if (!result.ok) {
+        teamList.querySelectorAll('[data-team-action]').forEach(b => { b.disabled = false; });
+        alert(result.error);
+        return;
+      }
+      teamActionState = null;
+      // On success community.js already fired notify() -> render(); if a
+      // site membership was stripped by removeMember, refresh that cache too
+      // so the Sites summary/detail reflect it without waiting for Realtime.
+      await refreshSitesCache();
+      render();
     });
   });
 }

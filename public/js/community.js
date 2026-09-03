@@ -122,6 +122,13 @@ function mapMembership(r) {
     requestedAt: new Date(r.requested_at).getTime(),
     decidedAt: r.decided_at ? new Date(r.decided_at).getTime() : null,
     decidedById: r.decided_by_id,
+    // Migration 0023 (Workforce Lifecycle) — who changed the status last,
+    // when, and the optional reason (NOT owner-private; the member can see
+    // it — surfaced on the Profile screen and baked into the
+    // membership_suspended/removed notification server-side).
+    statusChangedAt: r.status_changed_at ? new Date(r.status_changed_at).getTime() : null,
+    statusChangedById: r.status_changed_by_id || null,
+    statusReason: r.status_reason || null,
   };
 }
 function mapGrant(r) {
@@ -181,7 +188,7 @@ export async function refreshCommunityCache() {
   // someone the profile cache hasn't seen yet.
   const ids = new Set();
   cache.communities.forEach(c => ids.add(c.ownerId));
-  cache.memberships.forEach(m => ids.add(m.userId));
+  cache.memberships.forEach(m => { ids.add(m.userId); if (m.statusChangedById) ids.add(m.statusChangedById); });
   cache.ownerGrants.forEach(g => { ids.add(g.userId); ids.add(g.grantedById); });
   cache.buyerGrants.forEach(g => { ids.add(g.userId); ids.add(g.grantedById); });
   cache.buyerRequests.forEach(r => ids.add(r.userId));
@@ -273,13 +280,35 @@ export function getOwnerGrants() {
   return cache.ownerGrants;
 }
 
+// PURE "is there an owner_grants row" check — deliberately NOT membership-
+// status-aware, so the Team panel can still show a suspended member's
+// dormant owner grant (badge + Revoke). The membership gate lives in
+// isOwner below, mirroring migration 0023's server-side has_owner_grant
+// (which IS the gated one: exists(grant) AND NOT exists(membership row
+// whose status != 'approved')).
 export function hasOwnerGrant(communityId, userId) {
   return cache.ownerGrants.some(g => g.communityId === communityId && g.userId === userId);
 }
 
-// Owner-level access: the creator, or anyone the creator has granted access to.
+// True when this user has a community_memberships row here whose status is
+// anything other than 'approved' (suspended / removed / left / pending /
+// declined) — the exact condition migration 0023 uses to make an owner or
+// buyer grant dormant. A user with NO membership row is not "non-approved"
+// here (a bare granted owner keeps their grant — unchanged behaviour,
+// flagged server-side as a separate future question).
+function membershipBlocksGrant(communityId, userId) {
+  return cache.memberships.some(
+    m => m.communityId === communityId && m.userId === userId && m.status !== 'approved'
+  );
+}
+
+// Owner-level access: the creator, or a granted owner whose membership is
+// still 'approved'. Mirrors 0023's is_owner = is_creator OR has_owner_grant
+// exactly, so a suspended granted owner is correctly no longer an owner in
+// the UI (and the main.js reactive handler then routes them out).
 export function isOwner(communityId, userId) {
-  return isCreator(communityId, userId) || hasOwnerGrant(communityId, userId);
+  if (isCreator(communityId, userId)) return true;
+  return hasOwnerGrant(communityId, userId) && !membershipBlocksGrant(communityId, userId);
 }
 
 // Every user id currently holding owner access in this community (creator +
@@ -355,15 +384,12 @@ export function isApprovedMember(communityId, userId) {
 export async function requestToJoin(communityId, userId) {
   const existing = cache.memberships.find(r => r.communityId === communityId && r.userId === userId);
   if (existing) {
-    // A prior decision row already exists. The browse-list button that
-    // reaches this only renders for status 'none' or 'declined', so in
-    // practice this is the declined case — return it discriminated so the
-    // caller can show honest feedback instead of a silent no-op that
-    // leaves the button stuck on "Requesting…". Re-requesting after a
-    // decline is not a capability yet (needs an owner-facing product
-    // decision + its own guarded RPC — community_memberships has had no
-    // client UPDATE path since migration 0022).
-    return { declined: existing.status === 'declined', status: existing.status };
+    // The browse-list "Request to join" button only renders for status
+    // 'none' (no row) — a prior declined/left/removed row uses the separate
+    // "Request again" button -> rerequestMembership() instead. So this
+    // branch is unreachable from the UI; return a clear refusal rather
+    // than a silent no-op if it's ever hit another way.
+    return { ok: false, error: 'You already have a membership record for this company.' };
   }
   const { data, error } = await supabase.from('community_memberships').insert({
     community_id: communityId, user_id: userId, status: 'pending',
@@ -405,11 +431,10 @@ export async function requestToJoinByCode(code, userId) {
   // tell them apart (found live: without this check, a real first-time
   // joiner incorrectly saw "Already requested" instead of "Request sent").
   if (data.status === 'pending' && !data.justCreated) return { community, alreadyPending: true };
-  // A prior 'declined' row: the RPC returns it unchanged (no new pending
-  // request is created — see 0021's header comment). Surface that honestly
-  // rather than falling through to the "requested: true" success below,
-  // which would tell the user their request was sent when nothing happened.
-  if (data.status === 'declined') return { community, declined: true };
+  // A prior declined/left/removed row: migration 0023's recreated
+  // request_join_by_invite_code resets it to 'pending' and returns
+  // justCreated:true, so it falls through to the "requested" success below
+  // exactly like a brand-new request — no special-casing needed.
 
   await refreshCommunityCache();
   return { community, requested: true };
@@ -494,6 +519,96 @@ export async function decideJoinRequest(requestId, decision, decidedById) {
   return { ok: true };
 }
 
+// --- Workforce lifecycle (migration 0023) -----------------------------
+// Thin wrappers over the five guarded SECURITY DEFINER RPCs. Same shape as
+// decideJoinRequest / revokeBuyerAccess: return { ok } / { ok:false, error },
+// update the local cache from the server's own returned row (never an
+// optimistic guess), and — for the two that cascade server-side (remove,
+// leave) — mirror that cascade in cache.ownerGrants / cache.buyerGrants /
+// cache.buyerRequests so the owner's Team panel reflects it immediately.
+// site_memberships live in sites.js's cache; the caller (owner.js) refreshes
+// that, and Realtime does too — see the Phase C notes in CLAUDE.md.
+
+function applyMembershipRow(row) {
+  const mapped = mapMembership(row);
+  const idx = cache.memberships.findIndex(r => r.id === mapped.id);
+  if (idx === -1) cache.memberships.push(mapped); else cache.memberships[idx] = mapped;
+  return mapped;
+}
+
+function stripGrantsFor(communityId, userId) {
+  cache.ownerGrants = cache.ownerGrants.filter(g => !(g.communityId === communityId && g.userId === userId));
+  cache.buyerGrants = cache.buyerGrants.filter(g => !(g.communityId === communityId && g.userId === userId));
+  cache.buyerRequests = cache.buyerRequests.filter(r => !(r.communityId === communityId && r.userId === userId));
+}
+
+export async function suspendMember(membershipId, reason) {
+  const { data, error } = await supabase.rpc('suspend_member', {
+    p_membership_id: membershipId,
+    p_reason: reason && reason.trim() ? reason.trim() : null,
+  });
+  if (error) return { ok: false, error: error.message };
+  applyMembershipRow(data);
+  notify();
+  return { ok: true };
+}
+
+export async function restoreMember(membershipId) {
+  const { data, error } = await supabase.rpc('restore_member', { p_membership_id: membershipId });
+  if (error) return { ok: false, error: error.message };
+  applyMembershipRow(data);
+  notify();
+  return { ok: true };
+}
+
+export async function removeMember(membershipId, reason) {
+  const { data, error } = await supabase.rpc('remove_member', {
+    p_membership_id: membershipId,
+    p_reason: reason && reason.trim() ? reason.trim() : null,
+  });
+  if (error) return { ok: false, error: error.message };
+  const mapped = applyMembershipRow(data);
+  stripGrantsFor(mapped.communityId, mapped.userId);
+  notify();
+  return { ok: true };
+}
+
+export async function leaveCommunity(communityId) {
+  const { data, error } = await supabase.rpc('leave_community', { p_community_id: communityId });
+  if (error) return { ok: false, error: error.message };
+  const mapped = applyMembershipRow(data);
+  stripGrantsFor(mapped.communityId, mapped.userId);
+  notify();
+  return { ok: true };
+}
+
+export async function rerequestMembership(communityId) {
+  const { data, error } = await supabase.rpc('rerequest_membership', { p_community_id: communityId });
+  if (error) return { ok: false, error: error.message };
+  applyMembershipRow(data);
+  notify();
+  return { ok: true };
+}
+
+// Every membership row this cache holds for a community (any status), for
+// the owner Team panel — which must show suspended members (to Restore
+// them), not just approved ones. Excludes the caller and pure pending/
+// declined join requests (those live in the Join-requests panel).
+export function teamMemberships(communityId, viewerId) {
+  return cache.memberships.filter(
+    m => m.communityId === communityId
+      && m.userId !== viewerId
+      && (m.status === 'approved' || m.status === 'suspended')
+  );
+}
+
+// The current user's suspended memberships — surfaced on the Profile screen
+// so a suspended user can see which company and why.
+export function mySuspendedMemberships(userId) {
+  if (!userId) return [];
+  return cache.memberships.filter(m => m.userId === userId && m.status === 'suspended');
+}
+
 export function approvedMemberCount(communityId) {
   const approved = cache.memberships.filter(r => r.communityId === communityId && r.status === 'approved').length;
   return approved + 1; // +1 for the owner, who isn't a membership row
@@ -531,12 +646,17 @@ export function getBuyerGrants() {
   return cache.buyerGrants;
 }
 
+// PURE grant-row check (see hasOwnerGrant's note) — the Team panel uses
+// this to show a suspended member's dormant buyer grant.
 export function hasBuyerGrant(communityId, userId) {
   return cache.buyerGrants.some(g => g.communityId === communityId && g.userId === userId);
 }
 
+// The buyer ROLE is only active while the holder is an approved member —
+// mirrors 0023's can_purchase_for_site, which now also requires
+// is_approved_member. A suspended member's buyer grant is dormant.
 export function isBuyer(communityId, userId) {
-  return hasBuyerGrant(communityId, userId);
+  return hasBuyerGrant(communityId, userId) && isApprovedMember(communityId, userId);
 }
 
 // Called synchronously from orderLifecycle.js — must stay sync, cache-backed.

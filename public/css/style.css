@@ -324,6 +324,9 @@ body {
 .notif-row-body span {
   font-size: 0.8rem;
   color: var(--text-muted);
+  /* Some messages carry an explicit second line, e.g. a suspension/removal
+     "\nReason: …" (migration 0023) — render it as a real line break. */
+  white-space: pre-line;
 }
 
 .notif-row-time {
@@ -807,6 +810,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 .status-pending { border-left-color: #d9a441; }
 .status-pending.status-badge { background: #fdf1dd; color: #8a5b00; }
 
+/* Workforce lifecycle (migration 0023) — suspended member state */
+.status-suspended.status-badge { background: #fbe4e4; color: #8a2c2c; }
+
 .status-pending_purchase { border-left-color: #d9a441; }
 .status-pending_purchase.status-badge { background: #fdf1dd; color: #8a5b00; }
 
@@ -886,6 +892,20 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
+
+/* Small explanatory line, e.g. above the Team suspend/remove reason field
+   and under a suspended member's badge. */
+.field-hint {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--text-muted, #5a6b7d);
+  margin: 2px 0 6px;
+  line-height: 1.35;
+}
+
+.btn-danger { background: #a32828; color: white; }
+
+.link-btn-danger { color: #a32828; }
 
 .reject-form-actions {
   display: flex;
@@ -1184,6 +1204,16 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   font-weight: 700;
   color: #8a2c2c;
   background: #fbe4e4;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.community-status-suspended {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8a5b00;
+  background: #fdf1dd;
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;

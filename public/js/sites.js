@@ -326,8 +326,12 @@ export function canCreateOrderForSite(siteId, communityId, userId) {
 }
 
 // Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
+// Mirrors migration 0023's can_purchase_for_site: the non-owner branch also
+// requires an approved membership, so a suspended member's dormant buyer
+// grant can't purchase. (isBuyer already folds in isApprovedMember since
+// Phase C, so this is belt-and-braces + explicit.)
 export function canPurchaseForSite(siteId, communityId, userId) {
   if (!siteBelongsToCommunity(siteId, communityId)) return false;
   if (isOwner(communityId, userId)) return true;
-  return isBuyer(communityId, userId) && isSiteMember(siteId, userId);
+  return isApprovedMember(communityId, userId) && isBuyer(communityId, userId) && isSiteMember(siteId, userId);
 }

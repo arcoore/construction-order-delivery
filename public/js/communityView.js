@@ -1,6 +1,6 @@
 import {
   getCommunities, subscribeCommunities,
-  createCommunity, requestToJoinByCode, requestToJoin, membershipStatus,
+  createCommunity, requestToJoinByCode, requestToJoin, rerequestMembership, membershipStatus,
   myCommunities, myPendingRequests, setActiveCommunityId,
   getPendingJoinCode, clearPendingJoinCode,
 } from './community.js';
@@ -104,10 +104,6 @@ joinCodeBtn.addEventListener('click', async () => {
     if (result.alreadyPending) {
       joinCodePendingCommunityId = result.community.id;
       setStatus(joinCodeStatus, `Already requested to join "${result.community.name}" — waiting for approval.`, '');
-      return;
-    }
-    if (result.declined) {
-      setStatus(joinCodeStatus, `Your earlier request to join "${result.community.name}" was declined. Ask the owner to invite you.`, 'error');
       return;
     }
     joinCodeInput.value = '';
@@ -238,8 +234,13 @@ function render() {
         actionHtml = `<button class="btn btn-primary" data-enter="${c.id}">Enter</button>`;
       } else if (status === 'pending') {
         actionHtml = `<span class="community-status-pending">Requested</span>`;
-      } else if (status === 'declined') {
-        actionHtml = `<span class="community-status-declined">Request declined</span>`;
+      } else if (status === 'suspended') {
+        // Migration 0023 — a suspended member is still a member; they can't
+        // re-request, only wait for an owner to restore them.
+        actionHtml = `<span class="community-status-suspended">Suspended</span>`;
+      } else if (status === 'declined' || status === 'removed' || status === 'left') {
+        // 0023 lets a declined/removed/left person ask again (-> pending).
+        actionHtml = `<button class="btn btn-secondary" data-rerequest="${c.id}">Request again</button>`;
       } else {
         actionHtml = `<button class="btn btn-secondary" data-request="${c.id}">Request to join</button>`;
       }
@@ -261,10 +262,8 @@ function render() {
       btn.disabled = true;
       btn.textContent = 'Requesting…';
       const result = await requestToJoin(btn.dataset.request, getCurrentUserId());
-      if (result && (result.error || result.declined)) {
-        alert(result.declined
-          ? 'Your earlier request to join was declined. Ask the owner to invite you.'
-          : result.error);
+      if (result && result.error) {
+        alert(result.error);
         btn.disabled = false;
         btn.textContent = 'Request to join';
         return;
@@ -272,6 +271,20 @@ function render() {
       // On success the community.js write already fired notify(), which
       // re-runs render() and replaces this button with the "Requested"
       // pending state — no manual re-enable needed on the happy path.
+    });
+  });
+  browseList.querySelectorAll('[data-rerequest]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Requesting…';
+      const result = await rerequestMembership(btn.dataset.rerequest);
+      if (!result.ok) {
+        alert(result.error);
+        btn.disabled = false;
+        btn.textContent = 'Request again';
+        return;
+      }
+      // notify() -> render() replaces this with the "Requested" chip.
     });
   });
 }
