@@ -130,10 +130,57 @@ create policy communities_select_scoped on communities
   );
 
 -- ================================================================
--- 4. can_purchase_for_site — close the latent gap: a buyer must also be an
---    approved community member (matching can_create_order_for_site).
---    Without this, a suspended member holding a dormant buyer grant +
---    site membership could still purchase.
+-- 4. Permission-function hardening.
+--
+-- 4a. has_owner_grant — a NON-CREATOR owner grant is only active while
+--     the holder's community membership is 'approved'. Suspending a
+--     granted owner (which leaves the owner_grants row physically present,
+--     dormant) must actually strip their owner powers everywhere — and
+--     since every owner-authorization path funnels through is_owner ->
+--     has_owner_grant, fixing it here fixes all ~49 call sites at once
+--     (RLS policies, order-lifecycle RPCs, the notify_* / revoke_* RPCs,
+--     decide_join_request, and 0023's own suspend/restore/remove RPCs).
+--
+--     Behaviour (approved 2026-09-03):
+--       * creator: unaffected — is_creator() (communities.owner_id) is
+--         the source of truth and the creator can't be suspended.
+--       * granted owner, membership 'approved'      -> grant ACTIVE
+--       * granted owner, membership 'suspended'     -> grant DORMANT
+--         (is_owner false, is_approved_member false)
+--       * restore membership -> 'approved'          -> grant re-activates
+--         automatically (the owner_grants row was never deleted)
+--       * removed / left: the lifecycle RPCs already DELETE the grant, so
+--         this is belt-and-braces (status is also != 'approved')
+--       * grant row present, NO membership row at all -> grant ACTIVE,
+--         i.e. UNCHANGED from today. Deliberately not touched here —
+--         recorded as a separate future hardening question (should a
+--         granted owner be required to hold a membership row at all?).
+--
+--     Safe re: RLS recursion — has_owner_grant is SECURITY DEFINER, owned
+--     by postgres (no FORCE ROW LEVEL SECURITY), so its internal
+--     community_memberships read bypasses RLS exactly like is_approved_member
+--     already does from inside RLS policies.
+-- ================================================================
+create or replace function has_owner_grant(p_community_id uuid, p_user_id uuid)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from owner_grants
+    where community_id = p_community_id and user_id = p_user_id
+  ) and not exists (
+    select 1 from community_memberships
+    where community_id = p_community_id and user_id = p_user_id
+      and status is distinct from 'approved'
+  );
+$$;
+
+-- ================================================================
+-- 4b. can_purchase_for_site — close the latent gap: a buyer must also be
+--     an approved community member (matching can_create_order_for_site).
+--     Without this, a suspended member holding a dormant buyer grant +
+--     site membership could still purchase. (Also covered transitively by
+--     4a once is_owner is fixed, but the buyer branch here is independent
+--     of is_owner, so it needs its own explicit is_approved_member gate.)
 -- ================================================================
 create or replace function can_purchase_for_site(p_site_id uuid, p_community_id uuid, p_user_id uuid)
 returns boolean
@@ -280,7 +327,11 @@ begin
   if is_creator(v_m.community_id, v_m.user_id) then
     raise exception 'the company creator cannot be suspended' using errcode = '42501';
   end if;
-  v_target_is_owner := has_owner_grant(v_m.community_id, v_m.user_id);
+  -- Deliberately a direct owner_grants existence check, NOT has_owner_grant:
+  -- the "creator-only for owner targets" gate must cover a target whose
+  -- grant is currently dormant (e.g. already suspended) too, so a
+  -- non-creator owner can't escalate a creator's suspension.
+  v_target_is_owner := exists (select 1 from owner_grants where community_id = v_m.community_id and user_id = v_m.user_id);
   if v_target_is_owner and not is_creator(v_m.community_id, auth.uid()) then
     raise exception 'only the company creator may suspend another owner' using errcode = '42501';
   end if;
@@ -363,6 +414,7 @@ returns community_memberships
 language plpgsql security definer set search_path = public as $$
 declare
   v_m community_memberships%rowtype;
+  v_from text;
   v_target_is_owner boolean;
   v_sites_removed int;
   v_had_owner_grant boolean;
@@ -382,10 +434,18 @@ begin
   if is_creator(v_m.community_id, v_m.user_id) then
     raise exception 'the company creator cannot be removed' using errcode = '42501';
   end if;
-  v_target_is_owner := has_owner_grant(v_m.community_id, v_m.user_id);
+  -- Direct owner_grants check (see suspend_member) — covers a target whose
+  -- grant is currently dormant (already suspended) so a non-creator owner
+  -- can't turn a creator's suspension into a full removal + grant strip.
+  v_target_is_owner := exists (select 1 from owner_grants where community_id = v_m.community_id and user_id = v_m.user_id);
   if v_target_is_owner and not is_creator(v_m.community_id, auth.uid()) then
     raise exception 'only the company creator may remove another owner' using errcode = '42501';
   end if;
+
+  -- Capture the real prior status BEFORE the UPDATE overwrites v_m — the
+  -- `returning * into v_m` below sets v_m.status = 'removed', so the audit
+  -- event must use v_from (approved | suspended), not v_m.status.
+  v_from := v_m.status;
 
   update community_memberships set
     status = 'removed',
@@ -405,7 +465,7 @@ begin
   delete from buyer_requests where community_id = v_m.community_id and user_id = v_m.user_id;
 
   perform _log_membership_event(
-    v_m.id, v_m.community_id, 'member_removed', v_m.status, 'removed', p_reason,
+    v_m.id, v_m.community_id, 'member_removed', v_from, 'removed', p_reason,
     jsonb_build_object('ownerGrantRevoked', v_had_owner_grant, 'buyerGrantRevoked', v_had_buyer_grant, 'siteMembershipsRemoved', v_sites_removed)
   );
 
@@ -518,6 +578,17 @@ $$;
 --    old dead-end status. An 'approved'/'pending'/'owner' relationship is
 --    returned unchanged, exactly as before. Everything else about this
 --    function (0021) is preserved.
+--
+--    CONCURRENCY (hardened): the existing-membership branch now locks the
+--    row `for update` and the re-request UPDATE carries its own
+--    `and status in ('declined','left','removed')` guard + a FOUND check,
+--    identical discipline to rerequest_membership and decide_join_request.
+--    Two simultaneous invite-code submissions for the same declined row
+--    can therefore only produce ONE 'member_rerequested' audit event and
+--    one pending row — the second call, once it acquires the lock, re-reads
+--    status = 'pending' and returns the unchanged {status:'pending',
+--    justCreated:false} shape (which the frontend maps to "Already
+--    requested"). The API return shape is unchanged.
 -- ================================================================
 create or replace function request_join_by_invite_code(p_code text)
 returns jsonb
@@ -526,6 +597,7 @@ declare
   v_community communities%rowtype;
   v_existing community_memberships%rowtype;
   v_user_id uuid := auth.uid();
+  v_rerequested boolean;
 begin
   if v_user_id is null then
     raise exception 'authentication required' using errcode = '42501';
@@ -542,16 +614,23 @@ begin
   end if;
 
   select * into v_existing from community_memberships
-  where community_id = v_community.id and user_id = v_user_id;
+  where community_id = v_community.id and user_id = v_user_id
+  for update;
 
   if found then
     if v_existing.status in ('declined', 'left', 'removed') then
       update community_memberships set
         status = 'pending', requested_at = now(), decided_at = null, decided_by_id = null,
         status_changed_at = now(), status_changed_by_id = v_user_id, status_reason = null
-      where id = v_existing.id;
-      perform _log_membership_event(v_existing.id, v_community.id, 'member_rerequested', v_existing.status, 'pending', null, null);
-      return jsonb_build_object('ok', true, 'status', 'pending', 'justCreated', true,
+      where id = v_existing.id and status in ('declined', 'left', 'removed');
+      v_rerequested := found;
+      if v_rerequested then
+        perform _log_membership_event(v_existing.id, v_community.id, 'member_rerequested', v_existing.status, 'pending', null, null);
+        return jsonb_build_object('ok', true, 'status', 'pending', 'justCreated', true,
+          'communityId', v_community.id, 'communityName', v_community.name);
+      end if;
+      -- lost a concurrent race — the row is already pending now.
+      return jsonb_build_object('ok', true, 'status', 'pending', 'justCreated', false,
         'communityId', v_community.id, 'communityName', v_community.name);
     end if;
     return jsonb_build_object('ok', true, 'status', v_existing.status, 'justCreated', false,
