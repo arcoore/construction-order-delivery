@@ -38,10 +38,15 @@ select tests.authenticate_as(:'driver_1');
 insert into community_memberships (community_id, user_id, status) values (:'company_c', :'driver_1', 'pending');
 select tests.authenticate_as(:'driver_2');
 insert into community_memberships (community_id, user_id, status) values (:'company_c', :'driver_2', 'pending');
+select tests.authenticate_as(:'buyer_c');
+insert into community_memberships (community_id, user_id, status) values (:'company_c', :'buyer_c', 'pending');
 
 select tests.set_membership_status(:'company_c', :'worker_c', 'approved', :'owner_c');
 select tests.set_membership_status(:'company_c', :'driver_1', 'approved', :'owner_c');
 select tests.set_membership_status(:'company_c', :'driver_2', 'approved', :'owner_c');
+-- buyer_c must also be an approved member — can_purchase_for_site requires
+-- it since migration 0023 (matching can_create_order_for_site).
+select tests.set_membership_status(:'company_c', :'buyer_c', 'approved', :'owner_c');
 
 select tests.authenticate_as(:'owner_c');
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values

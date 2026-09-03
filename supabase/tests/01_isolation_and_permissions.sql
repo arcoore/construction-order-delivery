@@ -31,9 +31,14 @@ select tests.authenticate_as(:'owner_a');
 insert into sites (community_id, name, created_by_id) values (:'company_a', 'Site Alpha', :'owner_a') returning id as site_a \gset
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site_a', :'company_a', :'worker_a', :'owner_a');
 
+select tests.authenticate_as(:'buyer_a');
+insert into community_memberships (community_id, user_id, status) values (:'company_a', :'buyer_a', 'pending');
+select tests.set_membership_status(:'company_a', :'buyer_a', 'approved', :'owner_a');
 select tests.authenticate_as(:'owner_a');
 insert into buyer_grants (community_id, user_id, granted_by_id) values (:'company_a', :'buyer_a', :'owner_a');
--- buyer_a is NOT a site member yet — item 6 needs both.
+-- buyer_a is an approved member with a buyer grant, but NOT a site member
+-- yet — item 6 needs all three (membership is required by can_purchase_for_site
+-- since migration 0023, matching can_create_order_for_site).
 
 -- ---------------------------------------------------- 1/2: cross-company read
 -- NOTE: `communities` itself is deliberately world-readable to any
