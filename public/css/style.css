@@ -874,6 +874,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .owner-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
