@@ -5,7 +5,7 @@ import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount, requestEmailChange } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -69,6 +69,7 @@ const profilePillBtn = document.getElementById('profile-pill-btn');
 const profileBackBtn = document.getElementById('profile-back-btn');
 const profileDetails = document.getElementById('profile-details');
 let confirmingDeleteAccount = false;
+let changingEmail = false;
 const communityCircleBtn = document.getElementById('community-circle-btn');
 const accountCircleBtn = document.getElementById('account-circle-btn');
 const accountMenu = document.getElementById('account-menu');
@@ -233,6 +234,18 @@ async function showProfile() {
       <div class="profile-field">
         <span class="profile-label">Email</span>
         <span class="profile-value">${account.email}</span>
+        ${changingEmail ? `
+          <div class="reject-form">
+            <label class="field-label" for="change-email-input">New email address</label>
+            <input type="email" id="change-email-input" class="text-input" placeholder="you@example.com" />
+            <p class="hint small-hint">We'll send a confirmation link to the new address — the change only takes effect once you follow it.</p>
+            <div class="reject-form-actions">
+              <button class="btn btn-secondary" id="change-email-cancel-btn">Cancel</button>
+              <button class="btn btn-primary" id="change-email-confirm-btn">Send confirmation</button>
+            </div>
+            <p id="change-email-status" class="form-status"></p>
+          </div>
+        ` : `<button type="button" class="link-btn" id="profile-change-email-btn">Change email</button>`}
       </div>
       <div class="profile-field">
         <span class="profile-label">Account created</span>
@@ -285,6 +298,38 @@ async function showProfile() {
   document.getElementById('profile-logout-btn').addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('sitestock:logout'));
   });
+
+  const changeEmailStartBtn = document.getElementById('profile-change-email-btn');
+  if (changeEmailStartBtn) {
+    changeEmailStartBtn.addEventListener('click', () => {
+      changingEmail = true;
+      showProfile();
+    });
+  }
+  const changeEmailCancelBtn = document.getElementById('change-email-cancel-btn');
+  if (changeEmailCancelBtn) {
+    changeEmailCancelBtn.addEventListener('click', () => {
+      changingEmail = false;
+      showProfile();
+    });
+  }
+  const changeEmailConfirmBtn = document.getElementById('change-email-confirm-btn');
+  if (changeEmailConfirmBtn) {
+    changeEmailConfirmBtn.addEventListener('click', async () => {
+      const input = document.getElementById('change-email-input');
+      const statusEl = document.getElementById('change-email-status');
+      changeEmailConfirmBtn.disabled = true;
+      const result = await requestEmailChange(input.value);
+      changeEmailConfirmBtn.disabled = false;
+      if (result.error) {
+        statusEl.textContent = result.error;
+        statusEl.className = 'form-status error';
+        return;
+      }
+      statusEl.textContent = 'Confirmation link sent. Check your new inbox — your email changes once you follow it.';
+      statusEl.className = 'form-status success';
+    });
+  }
 
   const deleteStartBtn = document.getElementById('profile-delete-account-btn');
   if (deleteStartBtn) {

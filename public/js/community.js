@@ -345,6 +345,20 @@ export async function revokeOwnerAccess(communityId, userId) {
   return { ok: true };
 }
 
+// Migration 0028 — hand the company over. Only the true creator can call
+// this (the RPC re-checks server-side). On success the caller keeps
+// owner-level access via a new owner_grant, and the new owner's own grant
+// (if they had one) is cleared as redundant. A full cache refresh follows
+// so isCreator/isOwner/getOwnerIds all reflect the new reality immediately.
+export async function transferOwnership(communityId, newOwnerId) {
+  const { data, error } = await supabase.rpc('transfer_ownership', {
+    p_community_id: communityId, p_new_owner_id: newOwnerId,
+  });
+  if (error) return { ok: false, error: error.message };
+  await refreshCommunityCache();
+  return { ok: true, community: mapCommunity(data) };
+}
+
 export function approvedMembers(communityId) {
   const ids = cache.memberships
     .filter(r => r.communityId === communityId && r.status === 'approved')

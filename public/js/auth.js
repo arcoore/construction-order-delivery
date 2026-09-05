@@ -209,3 +209,22 @@ export async function completePasswordReset(newPassword) {
   notify();
   return { ok: true };
 }
+
+// Self-service email change (product-audit gap fix). Supabase Auth's own
+// secure-email-change flow: updateUser({ email }) sends a confirmation link
+// to the NEW address (and, depending on the project's Auth settings, also
+// to the old one) — the change only takes effect once that link is
+// followed. detectSessionInUrl is already true (set for password recovery),
+// so the confirmation link is picked up automatically when the user returns.
+// This function just kicks it off; it never changes the email directly.
+// display_name / user_metadata are untouched, and auth.uid() — the only
+// identity anything actually depends on — never changes.
+export async function requestEmailChange(newEmail) {
+  newEmail = (newEmail || '').trim();
+  if (!newEmail) return { error: 'Please enter your new email address.' };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail)) return { error: 'That doesn\'t look like a valid email address.' };
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabase.auth.updateUser({ email: newEmail }, { emailRedirectTo: redirectTo });
+  if (error) return { error: friendlyAuthError(error) };
+  return { ok: true };
+}

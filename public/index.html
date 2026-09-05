@@ -248,7 +248,9 @@
     </div>
 
     <div class="panel" id="owner-invite-panel">
-      <h2>Invite people</h2>
+      <h2>Company settings</h2>
+
+      <h3 class="settings-subhead">Invite people</h3>
       <p class="hint">Share this link or code with your team — they'll still need your approval before they can see anything.</p>
       <div class="invite-link-row">
         <input type="text" id="owner-invite-link-input" class="text-input" readonly />
@@ -261,6 +263,13 @@
         <span>Let people find this company by searching SiteStock</span>
       </label>
       <p class="hint small-hint">Off by default — most companies only need the invite link/code above. Turn this on only if you want strangers to be able to find and request to join without one.</p>
+
+      <h3 class="settings-subhead">Order approval</h3>
+      <label class="checkbox-field">
+        <input type="checkbox" id="approval-required-toggle" checked />
+        <span>Require owner approval before new orders go to a buyer</span>
+      </label>
+      <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool — existing orders keep whatever setting applied when they were created.</p>
     </div>
 
     <div class="panel" id="owner-people-panel" hidden>
@@ -281,15 +290,6 @@
     <div class="panel">
       <h2>Recent activity</h2>
       <div id="dashboard-activity" class="activity-list"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Order approval</h2>
-      <label class="checkbox-field">
-        <input type="checkbox" id="approval-required-toggle" checked />
-        <span>Require owner approval before new orders go to a buyer</span>
-      </label>
-      <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool — existing orders keep whatever setting applied when they were created.</p>
     </div>
 
     <div class="panel" id="owner-join-requests-panel" hidden>
@@ -350,6 +350,12 @@
         <input type="date" id="site-start-date-input" class="text-input" />
         <label class="field-label" for="site-end-date-input">Project end date (optional)</label>
         <input type="date" id="site-end-date-input" class="text-input" />
+        <label class="field-label" for="site-contact-name-input">Site contact (optional)</label>
+        <input type="text" id="site-contact-name-input" class="text-input" placeholder="e.g. Dave — site manager" />
+        <label class="field-label" for="site-contact-phone-input">Contact phone (optional)</label>
+        <input type="tel" id="site-contact-phone-input" class="text-input" placeholder="e.g. 07700 900123" />
+        <label class="field-label" for="site-access-notes-input">Access notes (optional)</label>
+        <input type="text" id="site-access-notes-input" class="text-input" placeholder="e.g. Gate code 1234, deliveries before 3pm" />
         <button type="button" id="create-site-btn" class="btn btn-primary btn-block">Create site</button>
         <p id="create-site-status" class="form-status"></p>
       </div>
@@ -357,6 +363,8 @@
       <div class="panel">
         <div class="driver-tabs" id="sites-tabs">
           <button class="tab-btn active" data-sites-tab="active">Active</button>
+          <button class="tab-btn" data-sites-tab="paused">Paused</button>
+          <button class="tab-btn" data-sites-tab="completed">Completed</button>
           <button class="tab-btn" data-sites-tab="archived">Archived</button>
         </div>
         <div id="sites-list" class="community-list"></div>

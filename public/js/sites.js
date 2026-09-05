@@ -56,6 +56,10 @@ function mapSite(r) {
     // default behavior for every site created before this existed.
     projectStartDate: r.project_start_date,
     projectEndDate: r.project_end_date,
+    // Migration 0027 — site contact + access info, display-only.
+    siteContactName: r.site_contact_name || '',
+    siteContactPhone: r.site_contact_phone || '',
+    accessNotes: r.access_notes || '',
   };
 }
 
@@ -151,6 +155,9 @@ export async function createSite(communityId, fields, actorId) {
     created_by_id: actorId,
     project_start_date: fields.projectStartDate || null,
     project_end_date: fields.projectEndDate || null,
+    site_contact_name: (fields.siteContactName || '').trim() || null,
+    site_contact_phone: (fields.siteContactPhone || '').trim() || null,
+    access_notes: (fields.accessNotes || '').trim() || null,
   }).select().single();
   if (error) return { ok: false, error: error.message };
   const site = mapSite(data);
@@ -176,6 +183,9 @@ export async function updateSite(siteId, patch, actorId) {
   if (patch.deliveryInstructions !== undefined) updates.delivery_instructions = (patch.deliveryInstructions || '').trim();
   if (patch.projectStartDate !== undefined) updates.project_start_date = patch.projectStartDate || null;
   if (patch.projectEndDate !== undefined) updates.project_end_date = patch.projectEndDate || null;
+  if (patch.siteContactName !== undefined) updates.site_contact_name = (patch.siteContactName || '').trim() || null;
+  if (patch.siteContactPhone !== undefined) updates.site_contact_phone = (patch.siteContactPhone || '').trim() || null;
+  if (patch.accessNotes !== undefined) updates.access_notes = (patch.accessNotes || '').trim() || null;
 
   const { data, error } = await supabase.from('sites').update(updates).eq('id', siteId).select().single();
   if (error) return { ok: false, error: error.message };
@@ -186,11 +196,14 @@ export async function updateSite(siteId, patch, actorId) {
   return { ok: true, site: mapped };
 }
 
+const SITE_STATUSES = ['active', 'paused', 'completed', 'archived'];
+
 async function setSiteStatus(siteId, status, actorId) {
   const site = getSite(siteId);
   if (!site) return { ok: false, error: 'Site not found.' };
+  if (!SITE_STATUSES.includes(status)) return { ok: false, error: 'Unknown site status.' };
   if (!isOwner(site.communityId, actorId)) {
-    return { ok: false, error: 'Only the owner can archive or restore sites.' };
+    return { ok: false, error: 'Only the owner can change a site\'s status.' };
   }
   const nowIso = new Date().toISOString();
   const updates = {
@@ -222,6 +235,16 @@ export async function archiveSite(siteId, actorId) {
 
 export async function restoreSite(siteId, actorId) {
   return setSiteStatus(siteId, 'active', actorId);
+}
+
+// Migration 0027 — 'paused' (temporarily on hold) and 'completed' (project
+// finished) both behave exactly like 'archived' for ordering: getActiveSites
+// (and everything that builds on it — the worker site picker, order
+// creation) only ever returns status === 'active'. These just give an owner
+// a truthful label instead of forcing every non-active site to read as
+// "archived". No order lifecycle is affected, same as archive/restore.
+export async function changeSiteStatus(siteId, status, actorId) {
+  return setSiteStatus(siteId, status, actorId);
 }
 
 // --- Membership ---------------------------------------------------------

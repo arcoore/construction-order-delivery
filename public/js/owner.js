@@ -2,7 +2,7 @@ import { formatPrice, getInitials, getCategoryIcon, timeAgo } from './data.js';
 import { getProduct } from './products.js';
 import {
   getActiveCommunityId, getActiveCommunity, getJoinRequests, decideJoinRequest, subscribeCommunities,
-  approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess,
+  approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess, transferOwnership,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink,
   teamMemberships, suspendMember, restoreMember, removeMember,
@@ -418,6 +418,16 @@ function renderTeam(communityId) {
           <button class="btn btn-primary" data-team-action="restore" data-team-mid="${m.id}">Restore access</button>
           ${canLifecycle ? `<button class="btn btn-secondary" data-team-action="remove-start" data-team-mid="${m.id}">Remove from company</button>` : ''}
         </div>`;
+    } else if (teamActionState && teamActionState.membershipId === m.id && teamActionState.action === 'transfer') {
+      actionsHtml = `
+        <div class="reject-form">
+          <p class="field-hint">Make <strong>${displayName}</strong> the owner of this company? They take full control. You stay on as an owner-level member, but only they can transfer it again after this.</p>
+          <div class="reject-form-actions">
+            <button class="btn btn-secondary" data-team-action="cancel" data-team-mid="${m.id}">Cancel</button>
+            <button class="btn btn-primary" data-team-action="transfer-confirm" data-team-id="${memberId}" data-team-mid="${m.id}">Transfer ownership</button>
+          </div>
+          <p id="team-transfer-status" class="form-status"></p>
+        </div>`;
     } else if (teamActionState && teamActionState.membershipId === m.id) {
       const isRemove = teamActionState.action === 'remove';
       actionsHtml = `
@@ -444,6 +454,7 @@ function renderTeam(communityId) {
           ${canLifecycle ? `
             <button class="btn btn-secondary" data-team-action="suspend-start" data-team-mid="${m.id}">Suspend</button>
             <button class="btn btn-secondary" data-team-action="remove-start" data-team-mid="${m.id}">Remove</button>` : ''}
+          ${viewerIsCreator ? `<button class="btn btn-secondary" data-team-action="transfer-start" data-team-mid="${m.id}">Make owner</button>` : ''}
         </div>`;
     }
 
@@ -472,7 +483,22 @@ function renderTeam(communityId) {
 
       if (action === 'suspend-start') { teamActionState = { membershipId: mid, action: 'suspend' }; render(); return; }
       if (action === 'remove-start') { teamActionState = { membershipId: mid, action: 'remove' }; render(); return; }
+      if (action === 'transfer-start') { teamActionState = { membershipId: mid, action: 'transfer' }; render(); return; }
       if (action === 'cancel') { teamActionState = null; render(); return; }
+
+      if (action === 'transfer-confirm') {
+        teamList.querySelectorAll('[data-team-action]').forEach(b => { b.disabled = true; });
+        const result = await transferOwnership(communityId, memberId);
+        if (!result.ok) {
+          teamList.querySelectorAll('[data-team-action]').forEach(b => { b.disabled = false; });
+          const statusEl = document.getElementById('team-transfer-status');
+          if (statusEl) { statusEl.textContent = result.error; statusEl.className = 'form-status error'; }
+          return;
+        }
+        teamActionState = null;
+        render();
+        return;
+      }
 
       if (action === 'grant-owner') { grantOwnerAccess(communityId, memberId, userId); return; }
       if (action === 'revoke-owner') { revokeOwnerAccess(communityId, memberId); return; }

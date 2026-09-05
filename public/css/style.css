@@ -372,6 +372,18 @@ main#app {
   margin-bottom: 18px;
 }
 
+.settings-subhead {
+  font-size: 0.95rem;
+  margin: 22px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.settings-subhead:first-of-type {
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: none;
+}
+
 h1 { font-size: 1.4rem; margin: 0 0 6px; }
 h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
@@ -1462,6 +1474,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 .route-sub { font-size: 0.78rem; color: var(--text-muted); }
 .route-pickup-estimate { color: var(--green); font-weight: 700; }
 .route-dist { font-size: 0.78rem; color: var(--orange-dark); font-weight: 600; }
+.route-maps-link { display: inline-block; margin-top: 4px; font-size: 0.8rem; color: var(--navy-light); text-decoration: none; min-height: 44px; line-height: 44px; }
 
 .route-arrow { color: var(--text-muted); font-size: 1.2rem; }
 

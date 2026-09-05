@@ -199,6 +199,16 @@ function render() {
   if (deliveryLocationInput) deliveryLocationInput.focus();
 }
 
+// A plain Google Maps "search" link — opens in the browser or hands off to
+// the Maps app on a phone. No API key, no embed, no tracking beyond the
+// query itself. Only rendered when there's a real postcode/address to point
+// at, never a broken link.
+function mapsLink(query, label) {
+  const q = (query || '').trim();
+  if (!q) return '';
+  return `<a class="route-maps-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">${label} &nearr;</a>`;
+}
+
 function renderOrderCard(order, pickup) {
   const branch = pickup?.branch;
   const dist = pickup?.distanceKm;
@@ -284,6 +294,7 @@ function renderOrderCard(order, pickup) {
           ${buyFromSub ? `<span class="route-sub">${buyFromSub}</span>` : ''}
           ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
           ${Number.isFinite(dist) ? `<span class="route-dist">${dist.toFixed(1)} km from you</span>` : ''}
+          ${mapsLink(branch ? branch.postcode : order.stockistPostcode, 'Open pickup in Maps')}
         </div>
         <div class="route-arrow">&rarr;</div>
         <div class="route-step">
@@ -292,6 +303,7 @@ function renderOrderCard(order, pickup) {
           ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
           ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${order.siteDeliveryInstructions}</span>` : ''}
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
+          ${mapsLink([order.siteAddress, order.sitePostcode].filter(Boolean).join(', ') || order.deliveryPostcode, 'Open delivery in Maps')}
         </div>
       </div>
       <span class="status-badge status-${order.status}">${statusLabel(order.status, 'driver', order.deliveryMethod)}</span>

@@ -2,7 +2,7 @@ import { getInitials, formatPrice, timeAgo } from './data.js';
 import { subscribe } from './orderLifecycle.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
-  archiveSite, restoreSite, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
+  archiveSite, changeSiteStatus, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
 } from './sites.js';
 import { getActiveCommunityId, approvedMembers, subscribeCommunities } from './community.js';
 import { getCurrentUserId, resolveDisplayName } from './identity.js';
@@ -16,6 +16,9 @@ const createPostcodeInput = document.getElementById('site-postcode-input');
 const createInstructionsInput = document.getElementById('site-instructions-input');
 const createStartDateInput = document.getElementById('site-start-date-input');
 const createEndDateInput = document.getElementById('site-end-date-input');
+const createContactNameInput = document.getElementById('site-contact-name-input');
+const createContactPhoneInput = document.getElementById('site-contact-phone-input');
+const createAccessNotesInput = document.getElementById('site-access-notes-input');
 const createBtn = document.getElementById('create-site-btn');
 const createStatusEl = document.getElementById('create-site-status');
 const detailPanel = document.getElementById('site-detail-panel');
@@ -74,6 +77,9 @@ createBtn.addEventListener('click', async () => {
       deliveryInstructions: createInstructionsInput.value,
       projectStartDate: createStartDateInput.value,
       projectEndDate: createEndDateInput.value,
+      siteContactName: createContactNameInput.value,
+      siteContactPhone: createContactPhoneInput.value,
+      accessNotes: createAccessNotesInput.value,
     }, currentActorId());
 
     if (!result.ok) {
@@ -87,6 +93,9 @@ createBtn.addEventListener('click', async () => {
     createInstructionsInput.value = '';
     createStartDateInput.value = '';
     createEndDateInput.value = '';
+    createContactNameInput.value = '';
+    createContactPhoneInput.value = '';
+    createAccessNotesInput.value = '';
     createStatusEl.textContent = `"${result.site.name}" created.`;
     createStatusEl.className = 'form-status success';
   } finally {
@@ -118,7 +127,13 @@ function renderList() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (sites.length === 0) {
-    listEl.innerHTML = `<p class="empty-hint">${activeTab === 'active' ? 'No sites yet — create one above.' : 'No archived sites.'}</p>`;
+    const emptyMsg = {
+      active: 'No sites yet — create one above.',
+      paused: 'No paused sites.',
+      completed: 'No completed sites.',
+      archived: 'No archived sites.',
+    }[activeTab] || 'Nothing here.';
+    listEl.innerHTML = `<p class="empty-hint">${emptyMsg}</p>`;
     return;
   }
 
@@ -150,6 +165,30 @@ const STATUS_LABELS = {
   cancelled: 'Cancelled',
 };
 
+const SITE_STATUS_LABEL = {
+  active: 'Active',
+  paused: 'Paused',
+  completed: 'Completed',
+  archived: 'Archived',
+};
+
+// Only 'active' accepts new orders (see sites.js's changeSiteStatus).
+// Buttons offer the sensible next moves from each status.
+function siteStatusButtons(site) {
+  const btn = (status, label, primary) =>
+    `<button class="btn btn-${primary ? 'primary' : 'secondary'}" data-site-status="${status}">${label}</button>`;
+  if (site.status === 'active') {
+    return btn('paused', 'Pause') + btn('completed', 'Mark complete') + btn('archived', 'Archive');
+  }
+  if (site.status === 'paused') {
+    return btn('active', 'Reactivate', true) + btn('completed', 'Mark complete') + btn('archived', 'Archive');
+  }
+  if (site.status === 'completed') {
+    return btn('active', 'Reopen', true) + btn('archived', 'Archive');
+  }
+  return btn('active', 'Restore', true);
+}
+
 function renderSiteInfo(site) {
   if (editingSite) {
     return `
@@ -166,6 +205,12 @@ function renderSiteInfo(site) {
         <input type="date" id="site-edit-start-date-input" class="text-input" value="${site.projectStartDate || ''}" />
         <label class="field-label" for="site-edit-end-date-input">Project end date</label>
         <input type="date" id="site-edit-end-date-input" class="text-input" value="${site.projectEndDate || ''}" />
+        <label class="field-label" for="site-edit-contact-name-input">Site contact</label>
+        <input type="text" id="site-edit-contact-name-input" class="text-input" value="${site.siteContactName || ''}" />
+        <label class="field-label" for="site-edit-contact-phone-input">Contact phone</label>
+        <input type="tel" id="site-edit-contact-phone-input" class="text-input" value="${site.siteContactPhone || ''}" />
+        <label class="field-label" for="site-edit-access-notes-input">Access notes</label>
+        <input type="text" id="site-edit-access-notes-input" class="text-input" value="${site.accessNotes || ''}" />
         <p id="site-edit-status" class="form-status"></p>
         <div class="reject-form-actions">
           <button class="btn btn-secondary" id="site-edit-cancel-btn">Cancel</button>
@@ -193,14 +238,23 @@ function renderSiteInfo(site) {
       <span class="profile-label">Project dates</span>
       <span class="profile-value">${site.projectStartDate || 'Not set'} &ndash; ${site.projectEndDate || 'ongoing'}</span>
     </div>` : ''}
-    ${site.status === 'archived'
-      ? `<p class="hint small-hint">Archived ${timeAgo(site.archivedAt)} by ${site.archivedById ? resolveDisplayName(site.archivedById) : 'the owner'}.</p>`
-      : ''}
+    ${site.siteContactName || site.siteContactPhone ? `
+    <div class="profile-field">
+      <span class="profile-label">Site contact</span>
+      <span class="profile-value">${[site.siteContactName, site.siteContactPhone].filter(Boolean).join(' · ')}</span>
+    </div>` : ''}
+    ${site.accessNotes ? `
+    <div class="profile-field">
+      <span class="profile-label">Access notes</span>
+      <span class="profile-value">${site.accessNotes}</span>
+    </div>` : ''}
+    <div class="profile-field">
+      <span class="profile-label">Status</span>
+      <span class="profile-value">${SITE_STATUS_LABEL[site.status] || site.status}${site.status === 'archived' && site.archivedAt ? ` — ${timeAgo(site.archivedAt)} by ${site.archivedById ? resolveDisplayName(site.archivedById) : 'the owner'}` : ''}</span>
+    </div>
     <div class="owner-actions">
       <button class="btn btn-secondary" id="site-edit-btn">Edit</button>
-      ${site.status === 'active'
-        ? `<button class="btn btn-secondary" id="site-archive-btn">Archive site</button>`
-        : `<button class="btn btn-primary" id="site-restore-btn">Restore site</button>`}
+      ${siteStatusButtons(site)}
     </div>
   `;
 }
@@ -277,7 +331,7 @@ function renderDetail() {
   }
 
   detailEl.innerHTML = `
-    <h1>${site.name}${site.status === 'archived' ? ' <span class="status-badge status-rejected">Archived</span>' : ''}</h1>
+    <h1>${site.name}${site.status !== 'active' ? ` <span class="status-badge status-rejected">${SITE_STATUS_LABEL[site.status] || site.status}</span>` : ''}</h1>
     ${renderSiteInfo(site)}
     <h2>Employees</h2>
     <div class="orders-list">${renderMembers(site)}</div>
@@ -297,33 +351,23 @@ function wireDetailActions(site) {
     });
   }
 
-  const archiveBtn = document.getElementById('site-archive-btn');
-  if (archiveBtn) {
-    archiveBtn.addEventListener('click', async () => {
-      archiveBtn.disabled = true;
-      const result = await archiveSite(site.id, currentActorId());
+  detailEl.querySelectorAll('[data-site-status]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const target = btn.dataset.siteStatus;
+      btn.disabled = true;
+      // archiveSite also fires the site_archived notification to members;
+      // every other transition is a plain status change.
+      const result = target === 'archived'
+        ? await archiveSite(site.id, currentActorId())
+        : await changeSiteStatus(site.id, target, currentActorId());
       if (!result.ok) {
-        archiveBtn.disabled = false;
+        btn.disabled = false;
         alert(result.error);
       } else {
         render();
       }
     });
-  }
-
-  const restoreBtn = document.getElementById('site-restore-btn');
-  if (restoreBtn) {
-    restoreBtn.addEventListener('click', async () => {
-      restoreBtn.disabled = true;
-      const result = await restoreSite(site.id, currentActorId());
-      if (!result.ok) {
-        restoreBtn.disabled = false;
-        alert(result.error);
-      } else {
-        render();
-      }
-    });
-  }
+  });
 
   const cancelBtn = document.getElementById('site-edit-cancel-btn');
   if (cancelBtn) {
@@ -344,6 +388,9 @@ function wireDetailActions(site) {
         deliveryInstructions: document.getElementById('site-edit-instructions-input').value,
         projectStartDate: document.getElementById('site-edit-start-date-input').value,
         projectEndDate: document.getElementById('site-edit-end-date-input').value,
+        siteContactName: document.getElementById('site-edit-contact-name-input').value,
+        siteContactPhone: document.getElementById('site-edit-contact-phone-input').value,
+        accessNotes: document.getElementById('site-edit-access-notes-input').value,
       }, currentActorId());
       if (!result.ok) {
         saveBtn.disabled = false;
