@@ -8,7 +8,7 @@ import {
 } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { urgencyComparator } from './orderStatus.js';
+import { urgencyComparator, itemsSummary, itemsShortSummary } from './orderStatus.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -175,8 +175,8 @@ function renderCancellationRequests() {
     return `
       <div class="order-card" data-order-id="${order.id}">
         <div class="order-card-main">
-          <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
-          <span>${order.siteName ? `${order.siteName} &middot; ` : ''}${order.quantity} &times; ${order.unit} &middot; ${formatPrice(order.totalPrice)}</span>
+          <strong>${itemsShortSummary(order)}</strong>
+          <span>${order.siteName ? `${order.siteName} &middot; ` : ''}${itemsSummary(order)} &middot; ${formatPrice(order.totalPrice)}</span>
           <span>Requested by ${r.requestedBy || 'Unknown'}</span>
         </div>
         <span class="status-badge status-${order.status}">${CANCEL_REQUEST_STATUS_LABELS[order.status] || order.status}</span>
@@ -221,8 +221,8 @@ function renderDirectDeliveries() {
   directDeliveriesList.innerHTML = awaiting.map(o => `
     <div class="order-card" data-order-id="${o.id}">
       <div class="order-card-main">
-        <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
-        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} &times; ${o.unit} &middot; from ${o.stockistName || 'the supplier'}</span>
+        <strong>${itemsShortSummary(o)}</strong>
+        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)} &middot; from ${o.stockistName || 'the supplier'}</span>
       </div>
       ${confirmingDirectDeliveryId === o.id ? `
         <div class="reject-form">
@@ -378,8 +378,8 @@ function render() {
     const urgencyWord = urgencyLabel(urgency);
     return `
     <button class="result-card" data-id="${o.id}">
-      <span class="result-name">${o.productName}${o.variant ? ` (${o.variant})` : ''}</span>
-      <span class="result-meta">${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} &times; ${o.unit} &middot; ${formatPrice(o.totalPrice)} &middot; from ${o.stockistName || 'Unknown'}</span>
+      <span class="result-name">${itemsShortSummary(o)}</span>
+      <span class="result-meta">${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)} &middot; ${formatPrice(o.totalPrice)} &middot; from ${o.stockistName || 'Unknown'}</span>
       <span class="result-meta order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
     </button>
   `;
@@ -398,7 +398,7 @@ function renderDetail() {
   }
 
   const websiteUrl = order.stockistWebsite ? `https://${order.stockistWebsite}` : null;
-  const product = getProduct(order.productId);
+  const product = getProduct(order.items[0] ? order.items[0].productId : null);
   const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
   const urgencyWord = urgencyLabel(urgency);
 
@@ -407,9 +407,11 @@ function renderDetail() {
     <div class="product-preview">
       <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
       <div class="product-preview-info">
-        <strong>${order.productName}${order.variant ? ` — ${order.variant}` : ''}</strong>
-        <span>${order.quantity} &times; ${order.unit}</span>
-        <span class="product-preview-price">${formatPrice(order.unitPrice)} per ${order.unit} &middot; ${formatPrice(order.totalPrice)} total</span>
+        <strong>${itemsShortSummary(order)}</strong>
+        <ul class="order-items-list">
+          ${order.items.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.unitPrice != null ? ` &middot; ${formatPrice(it.unitPrice)} each &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
+        </ul>
+        <span class="product-preview-price">${formatPrice(order.totalPrice)} total</span>
       </div>
     </div>
     <p class="hint${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}"><strong>Needed by:</strong> ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</p>

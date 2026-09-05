@@ -100,6 +100,30 @@ export function nextActionFor(order, role, options = {}) {
   }
 }
 
+// --- Multi-item order contents (migration 0030) -------------------------
+// A one-line human summary of everything in an order. Prices are NEVER
+// included — a caller that shows money (Owner/Buyer) appends it itself, so
+// the Driver path stays price-free by simply not doing that.
+export function itemsSummary(order) {
+  const items = (order && order.items) || [];
+  if (items.length === 0) {
+    return order && order.productName ? order.productName : '—';
+  }
+  return items
+    .map(it => `${it.quantity} × ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}`)
+    .join(', ');
+}
+
+// Shorter form for tight spots (list rows): first item + "+N more".
+export function itemsShortSummary(order) {
+  const items = (order && order.items) || [];
+  if (items.length === 0) {
+    return order && order.productName ? order.productName : '—';
+  }
+  const first = `${items[0].productName}${items[0].variant ? ` (${items[0].variant})` : ''}`;
+  return items.length === 1 ? first : `${first} + ${items.length - 1} more`;
+}
+
 // --- Deterministic urgency-aware ordering --------------------------------
 // Tiers (see CLAUDE.md's Roadmap Step 4 entry for the full rationale):
 //   0 overdue   — earliest (most overdue) needed_by first
@@ -159,8 +183,15 @@ export const EVENT_RENDER = {
     // already are.
     const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
     const parts = Object.entries(changes)
-      .filter(([field]) => !skip.has(field))
+      .filter(([field]) => !skip.has(field) && field !== 'items')
       .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
+    // Multi-item (migration 0030): meta.changes.items is {from:[…],to:[…]}
+    // — render a compact "3 → 2 items" count rather than dumping arrays.
+    if (changes.items) {
+      const fromN = Array.isArray(changes.items.from) ? changes.items.from.length : 0;
+      const toN = Array.isArray(changes.items.to) ? changes.items.to.length : 0;
+      parts.unshift(fromN === toN ? 'items updated' : `items ${fromN} → ${toN}`);
+    }
     return { icon: '✏️', text: `${e.actorName || 'The worker'} edited ${label}${parts.length ? ` — ${parts.join(', ')}` : ''}` };
   },
   order_cancelled: (e, label) => ({

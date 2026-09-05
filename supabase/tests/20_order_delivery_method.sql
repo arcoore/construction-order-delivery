@@ -33,25 +33,25 @@ insert into buyer_grants (community_id, user_id, granted_by_id) values (:'co', :
 -- ================================================================
 
 select lives_ok(
-  format($$ insert into orders (community_id, site_id, site_name, product_id, product_name, quantity, unit, delivery_postcode, requested_by_id, requested_by) values (%L, %L, 'DM Site', 'p1', 'Test Product', 1, 'each', 'SW1A 1AA', %L, 'Worker DM') $$,
+  format($$ insert into orders (community_id, site_id, site_name, product_name, delivery_postcode, requested_by_id, requested_by) values (%L, %L, 'DM Site', 'Test Product', 'SW1A 1AA', %L, 'Worker DM') $$,
     :'co', :'site', :'worker_dm'),
   'item 1: a plain insert with no delivery_method specified defaults to ''driver'''
 );
 select ok(
-  (select delivery_method = 'driver' from orders where product_id = 'p1' and community_id = :'co'),
+  (select delivery_method = 'driver' from orders where product_name = 'Test Product' and community_id = :'co'),
   'item 2: the default really is ''driver'', not NULL'
 );
 
 select throws_ok(
-  format($$ insert into orders (community_id, site_id, site_name, product_id, product_name, quantity, unit, delivery_postcode, requested_by_id, requested_by, delivery_method) values (%L, %L, 'DM Site', 'p1', 'Test Product', 1, 'each', 'SW1A 1AA', %L, 'Worker DM', 'courier') $$,
+  format($$ insert into orders (community_id, site_id, site_name, product_name, delivery_postcode, requested_by_id, requested_by, delivery_method) values (%L, %L, 'DM Site', 'Test Product', 'SW1A 1AA', %L, 'Worker DM', 'courier') $$,
     :'co', :'site', :'worker_dm'),
   '23514', null,
   'item 3: an invalid delivery_method value is rejected by the CHECK constraint'
 );
 
 select ok(
-  to_regprocedure('public.create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)') is null,
-  'item 4: the obsolete 18-arg create_order signature (pre-delivery-method) no longer exists as its own catalog entry'
+  to_regprocedure('public.create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)') is null,
+  'item 4: the obsolete pre-multi-item create_order signature (scalar per-item args) no longer exists as its own catalog entry'
 );
 
 -- ================================================================
@@ -59,13 +59,13 @@ select ok(
 -- ================================================================
 select tests.authenticate_as(:'worker_dm');
 
-select create_order(:'co', :'site', 'p2', 'Cement', null, 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as omitted_result \gset
+select tests.create_order_1(:'co', :'site', 'p2', 'Cement', null, 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as omitted_result \gset
 select ok(
   (:'omitted_result'::orders).delivery_method = 'driver',
   'item 5: calling create_order with the old 18-argument shape (delivery_method omitted) still works and defaults to ''driver'' — a genuine backward-compatible default, not a breaking change'
 );
 
-select create_order(:'co', :'site', 'p3', 'Plasterboard', null, 3, 'sheet', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 9.00, null, null, 'direct_supplier') as direct_result \gset
+select tests.create_order_1(:'co', :'site', 'p3', 'Plasterboard', null, 3, 'sheet', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 9.00, null, null, 'direct_supplier') as direct_result \gset
 select ok(
   (:'direct_result'::orders).delivery_method = 'direct_supplier',
   'item 6: create_order accepts and stores an explicit ''direct_supplier'' delivery method'
@@ -73,7 +73,7 @@ select ok(
 select (:'direct_result'::orders).id as direct_order_id \gset
 
 select throws_ok(
-  format($$ select create_order(%L, %L, 'p4', 'Timber', null, 1, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 12.00, null, null, 'courier') $$,
+  format($$ select tests.create_order_1(%L, %L, 'p4', 'Timber', null, 1, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 12.00, null, null, 'courier') $$,
     :'co', :'site'),
   '22023', null,
   'item 7: create_order rejects an invalid delivery_method value'
@@ -95,7 +95,7 @@ select throws_ok(
 );
 
 select tests.authenticate_as(:'buyer_dm');
-select id as driver_order_id from orders where product_id = 'p2' and community_id = :'co' \gset
+select id as driver_order_id from orders where product_name = 'Cement' and community_id = :'co' \gset
 select start_purchase(:'driver_order_id');
 select complete_purchase(:'driver_order_id');
 select tests.authenticate_as(:'driver_dm');

@@ -89,7 +89,7 @@ select is((decide_join_request(:'m_worker', 'approved')).status, 'approved',
 insert into site_memberships (site_id, community_id, user_id, added_by_id) values (:'site', :'co', :'worker', :'owner');
 
 select tests.authenticate_as(:'worker');
-select (create_order(
+select (tests.create_order_1(
   :'co', :'site', 'p1', 'ST Product', null, 1, 'unit', 'SW1A 1AA', null, null,
   null, null, null, null, null, 9.99, null, null
 )).id as ord \gset

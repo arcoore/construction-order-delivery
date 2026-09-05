@@ -266,7 +266,7 @@ select tests.authenticate_as(:'owner_f');
 
 -- --- Order A: full happy path through delivered ---
 select tests.authenticate_as(:'worker_f');
-select create_order(:'company_f', :'site_f', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_a \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null) as order_a \gset
 select (:'order_a'::orders).id as order_a_id \gset
 
 select tests.authenticate_as(:'owner_f');
@@ -315,7 +315,7 @@ select ok(
 
 -- --- Order B: rejected ---
 select tests.authenticate_as(:'worker_f');
-select create_order(:'company_f', :'site_f', 'p2', 'Timber', '2.4m', 3, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50, null, null) as order_b \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p2', 'Timber', '2.4m', 3, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 4.50, null, null) as order_b \gset
 select (:'order_b'::orders).id as order_b_id \gset
 select tests.authenticate_as(:'owner_f');
 select reject_order(:'order_b_id', 'Not needed right now');
@@ -326,7 +326,7 @@ select ok(
 );
 
 -- --- Order C: approval reverted ---
-select create_order(:'company_f', :'site_f', 'p3', 'Hi-vis vest', 'L', 2, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 8.00, null, null) as order_c \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p3', 'Hi-vis vest', 'L', 2, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 8.00, null, null) as order_c \gset
 select (:'order_c'::orders).id as order_c_id \gset
 select tests.authenticate_as(:'owner_f');
 select approve_order(:'order_c_id');
@@ -338,7 +338,7 @@ select ok(
 );
 
 -- --- Order D: delivery cancelled by driver ---
-select create_order(:'company_f', :'site_f', 'p4', 'Drill', 'standard', 1, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 45.00, null, null) as order_d \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p4', 'Drill', 'standard', 1, 'each', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 45.00, null, null) as order_d \gset
 select (:'order_d'::orders).id as order_d_id \gset
 select tests.authenticate_as(:'owner_f');
 select approve_order(:'order_d_id');
@@ -361,7 +361,7 @@ select ok(
 
 -- --- Order E: cancellation request rejected ---
 select tests.authenticate_as(:'worker_f');
-select create_order(:'company_f', :'site_f', 'p5', 'Rebar', '6m', 4, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.20, null, null) as order_e \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p5', 'Rebar', '6m', 4, 'length', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.20, null, null) as order_e \gset
 select (:'order_e'::orders).id as order_e_id \gset
 select tests.authenticate_as(:'owner_f');
 select approve_order(:'order_e_id');
@@ -386,7 +386,7 @@ select ok(
 
 -- --- Order F: cancellation request approved ---
 select tests.authenticate_as(:'worker_f');
-select create_order(:'company_f', :'site_f', 'p6', 'Plasterboard', '2.4m', 6, 'sheet', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 12.00, null, null) as order_f_result \gset
+select tests.create_order_1(:'company_f', :'site_f', 'p6', 'Plasterboard', '2.4m', 6, 'sheet', 'SW1A 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 12.00, null, null) as order_f_result \gset
 select (:'order_f_result'::orders).id as order_f_id \gset
 select tests.authenticate_as(:'owner_f');
 select approve_order(:'order_f_id');

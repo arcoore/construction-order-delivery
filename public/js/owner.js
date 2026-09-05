@@ -20,7 +20,7 @@ import {
 // reimplemented) for the optional "assign a site at approval time" flow.
 import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { statusLabel, nextActionFor, urgencyComparator, describeEvent } from './orderStatus.js';
+import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary } from './orderStatus.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -612,7 +612,7 @@ orderDetailBackBtn.addEventListener('click', showOrdersList);
 // append-only log from orderLifecycle.js — no new history system, no
 // editing, no lifecycle actions.
 function renderOrderDetail(order) {
-  const product = getProduct(order.productId);
+  const product = getProduct(order.items[0] ? order.items[0].productId : null);
   const label = `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
   const events = getOrderEvents(order.id);
 
@@ -640,7 +640,10 @@ function renderOrderDetail(order) {
       <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
       <div class="product-preview-info">
         <strong>${label}</strong>
-        <span>${order.quantity} &times; ${order.unit}${order.totalPrice != null ? ` &middot; ${formatPrice(order.totalPrice)} (${formatPrice(order.unitPrice)} each)` : ''}</span>
+        <ul class="order-items-list">
+          ${order.items.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.lineTotal != null ? ` &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
+        </ul>
+        ${order.totalPrice != null ? `<span><strong>Total: ${formatPrice(order.totalPrice)}</strong></span>` : ''}
         <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
       </div>
     </div>
@@ -801,7 +804,7 @@ function renderBuyerRequests(communityId) {
 
 function renderOrderCard(order) {
   const requesterName = order.requestedBy || 'Unknown';
-  const product = getProduct(order.productId);
+  const product = getProduct(order.items[0] ? order.items[0].productId : null);
   const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
   const nextAction = nextActionFor(order, 'owner', { pendingCancellationRequest: pendingCancellation });
   const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
@@ -847,8 +850,8 @@ function renderOrderCard(order) {
         </div>
         <div class="order-card-main">
           <span class="owner-product-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</span>
-          <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
-          <span>${order.quantity} × ${order.unit}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span> (${formatPrice(order.unitPrice)} each)` : ''}</span>
+          <strong>${itemsShortSummary(order)}</strong>
+          <span>${itemsSummary(order)}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span>` : ''}</span>
           <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         </div>
         <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>

@@ -14,7 +14,7 @@ import {
   todayDeadlineDate, tomorrowDeadlineDate, isTodayDeadlineAvailable, cutoffTimeLabel,
   datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy, neededByUrgency, urgencyLabel,
 } from './deadline.js';
-import { statusLabel, nextActionFor, describeEvent } from './orderStatus.js';
+import { statusLabel, nextActionFor, describeEvent, itemsShortSummary } from './orderStatus.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -31,6 +31,13 @@ const siteOrdersList = document.getElementById('site-orders-list');
 let selectedProduct = null;
 let selectedSite = null;
 let latestOrders = [];
+// Multi-item (migration 0030). The Worker builds up an order by adding
+// materials one at a time; each entry is { productId, productName, variant,
+// unit, unitPrice, quantity }. Cleared only on a successful submit or an
+// explicit "Clear order" — closing the add-material form keeps it, so you
+// can add several. Order-level fields (site, postcode, needed-by, delivery
+// method, supplier) are chosen once, after the cart is built.
+let cart = [];
 
 // Phase 7C — Worker corrections & cancellation UI. All of these are purely
 // display-state; every action they lead to still calls the guarded Phase 7B
@@ -98,27 +105,66 @@ searchInput.addEventListener('input', () => {
   renderResults(results);
 });
 
+function cartBarHtml() {
+  if (cart.length === 0) return '';
+  const count = cart.reduce((n, it) => n + 1, 0);
+  return `
+    <div class="cart-bar" id="cart-bar">
+      <span>${count} ${count === 1 ? 'material' : 'materials'} in this order</span>
+      <div class="cart-bar-actions">
+        <button type="button" class="link-btn" id="cart-clear-btn">Clear</button>
+        <button type="button" class="btn btn-primary btn-small" id="cart-review-btn">Review order &rarr;</button>
+      </div>
+    </div>`;
+}
+
+function wireCartBar() {
+  const clearBtn = document.getElementById('cart-clear-btn');
+  if (clearBtn) clearBtn.addEventListener('click', () => { cart = []; renderResults(searchProducts(searchInput.value)); });
+  const reviewBtn = document.getElementById('cart-review-btn');
+  if (reviewBtn) reviewBtn.addEventListener('click', () => {
+    searchPanel.hidden = true;
+    orderPanel.hidden = false;
+    renderDetailsStep(null);
+  });
+}
+
 function renderResults(products) {
+  const bar = cartBarHtml();
   if (!searchInput.value.trim()) {
-    resultsEl.innerHTML = '';
+    resultsEl.innerHTML = bar;
+    wireCartBar();
     return;
   }
   if (products.length === 0) {
-    resultsEl.innerHTML = `<p class="empty-hint">No matches. Try a different word, e.g. "cement" or "vest".</p>`;
+    resultsEl.innerHTML = bar + `<p class="empty-hint">No matches. Try a different word, e.g. "cement" or "vest".</p>`;
+    wireCartBar();
     return;
   }
-  resultsEl.innerHTML = products.map(p => `
+  resultsEl.innerHTML = bar + products.map(p => `
     <button class="result-card" data-id="${p.id}">
       <span class="result-name">${p.name}</span>
       <span class="result-meta">${p.category} &middot; ${formatPrice(p.unitPrice)} per ${p.unit}</span>
     </button>
   `).join('');
+  wireCartBar();
 
   resultsEl.querySelectorAll('.result-card').forEach(btn => {
     btn.addEventListener('click', () => {
       const product = products.find(p => p.id === btn.dataset.id);
       openOrderForm(product);
     });
+  });
+}
+
+function addToCart(product, variant, quantity) {
+  cart.push({
+    productId: product.id,
+    productName: product.name,
+    variant: variant || null,
+    unit: product.unit,
+    unitPrice: product.unitPrice,
+    quantity,
   });
 }
 
@@ -130,8 +176,40 @@ function openOrderForm(product) {
   if (product.variants) {
     renderVariantStep(product);
   } else {
-    renderDetailsStep(product, null);
+    renderQuantityStep(product, null);
   }
+}
+
+// Small step: just how many, then "Add to order" drops the line into the
+// cart and returns to search so more can be added. Order-level details come
+// later, once (renderDetailsStep).
+function renderQuantityStep(product, variant) {
+  setBackAction(
+    product.variants ? 'Back to size selection' : 'Back to search',
+    product.variants ? () => renderVariantStep(product) : backToSearchKeepingCart
+  );
+  orderFormEl.innerHTML = `
+    <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
+    <p class="hint">${product.category} &middot; ${formatPrice(product.unitPrice)} per ${product.unit}</p>
+    <label class="field-label" for="qty-input">How many (${product.unit})?</label>
+    <input type="number" id="qty-input" class="text-input" min="1" value="1" />
+    <button id="add-to-order-btn" class="btn btn-primary btn-block">Add to order</button>
+    <p id="order-form-status" class="form-status"></p>
+  `;
+  document.getElementById('add-to-order-btn').addEventListener('click', () => {
+    const qty = Number(document.getElementById('qty-input').value) || 1;
+    if (qty <= 0) return;
+    addToCart(product, variant, qty);
+    backToSearchKeepingCart();
+  });
+}
+
+function backToSearchKeepingCart() {
+  selectedProduct = null;
+  orderPanel.hidden = true;
+  searchPanel.hidden = false;
+  searchInput.value = '';
+  renderResults([]);
 }
 
 function setBackAction(label, action) {
@@ -173,7 +251,7 @@ function renderVariantStep(product) {
 
   orderFormEl.querySelectorAll('.variant-option:not(.variant-option-custom)').forEach(btn => {
     btn.addEventListener('click', () => {
-      renderDetailsStep(product, btn.dataset.variant);
+      renderQuantityStep(product, btn.dataset.variant);
     });
   });
 
@@ -194,7 +272,7 @@ function renderVariantStep(product) {
       customError.hidden = false;
       return;
     }
-    renderDetailsStep(product, value);
+    renderQuantityStep(product, value);
   }
 
   document.getElementById('custom-size-continue').addEventListener('click', submitCustomSize);
@@ -278,22 +356,25 @@ function isNeededByChoiceValid(choice) {
   return !!choice && !!choice.type && (choice.type !== 'deadline' || !!choice.date);
 }
 
-function renderDetailsStep(product, variant, prefill = null) {
-  setBackAction(
-    product.variants ? 'Back to size selection' : 'Back to search',
-    product.variants ? () => renderVariantStep(product) : closeOrderForm
-  );
+// Order-level details, chosen once for everything in the cart: delivery
+// postcode, needed-by, delivery method. Also shows the cart contents with
+// per-line remove, and a way back to search to add more.
+function renderDetailsStep(prefill = null) {
+  if (cart.length === 0) { backToSearchKeepingCart(); return; }
+  setBackAction('Back to search', backToSearchKeepingCart);
 
   let neededByChoice = prefill && prefill.neededByType
     ? { type: prefill.neededByType, date: prefill.neededByMs != null ? new Date(prefill.neededByMs) : null }
     : { type: null, date: null };
 
   orderFormEl.innerHTML = `
-    <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
-    <p class="hint">${product.category} &middot; requesting as <strong>${getCurrentDisplayName() || 'Unknown'}</strong></p>
+    <h2>Your order &mdash; ${cart.length} ${cart.length === 1 ? 'material' : 'materials'}</h2>
+    <p class="hint">Requesting as <strong>${getCurrentDisplayName() || 'Unknown'}</strong></p>
 
-    <label class="field-label" for="qty-input">Quantity (${product.unit})</label>
-    <input type="number" id="qty-input" class="text-input" min="1" value="${prefill ? prefill.quantity : 1}" />
+    <ul class="order-items-list" id="cart-items">
+      ${cart.map((it, i) => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''} <button type="button" class="link-btn" data-remove-item="${i}">Remove</button></li>`).join('')}
+    </ul>
+    <button type="button" class="link-btn" id="add-more-btn">+ Add another material</button>
 
     <label class="field-label" for="postcode-input">Deliver to postcode</label>
     <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${prefill ? prefill.deliveryPostcode : (selectedSite ? selectedSite.postcode : '')}" />
@@ -306,9 +387,18 @@ function renderDetailsStep(product, variant, prefill = null) {
       <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') === 'direct_supplier' ? ' active' : ''}" data-delivery-method="direct_supplier">The supplier delivers direct to site</button>
     </div>
 
-    <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order this from</button>
+    <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order from</button>
     <p id="order-form-status" class="form-status"></p>
   `;
+
+  orderFormEl.querySelectorAll('[data-remove-item]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cart.splice(Number(btn.dataset.removeItem), 1);
+      if (cart.length === 0) { backToSearchKeepingCart(); return; }
+      renderDetailsStep(prefill);
+    });
+  });
+  document.getElementById('add-more-btn').addEventListener('click', backToSearchKeepingCart);
 
   wireNeededByControl(orderFormEl, neededByUiKeyFor(neededByChoice), choice => { neededByChoice = choice; });
 
@@ -321,12 +411,11 @@ function renderDetailsStep(product, variant, prefill = null) {
     deliveryMethodGroup.querySelectorAll('[data-delivery-method]').forEach(b => b.classList.toggle('active', b === btn));
   });
 
-  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(product, variant, neededByChoice, deliveryMethod));
+  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(neededByChoice, deliveryMethod));
 }
 
-async function goToSourceStep(product, variant, neededByChoice, deliveryMethod) {
+async function goToSourceStep(neededByChoice, deliveryMethod) {
   const statusEl = document.getElementById('order-form-status');
-  const qty = Number(document.getElementById('qty-input').value) || 1;
   const postcode = document.getElementById('postcode-input').value.trim();
 
   if (!isNeededByChoiceValid(neededByChoice)) {
@@ -352,7 +441,6 @@ async function goToSourceStep(product, variant, neededByChoice, deliveryMethod) 
   }
 
   const details = {
-    quantity: qty,
     deliveryPostcode: postcode.toUpperCase(),
     deliveryLat: location.lat,
     deliveryLon: location.lon,
@@ -363,7 +451,7 @@ async function goToSourceStep(product, variant, neededByChoice, deliveryMethod) 
     deliveryMethod: deliveryMethod || 'driver',
   };
 
-  renderSourceStep(product, variant, details);
+  renderSourceStep(details);
 }
 
 // Phase A — honest, distance-only supplier ranking. Real straight-line
@@ -398,22 +486,23 @@ function rankBranchesByDistance(branches, details) {
     });
 }
 
-function renderSourceStep(product, variant, details) {
-  setBackAction('Back to order details', () => {
-    renderDetailsStep(product, variant, details);
-  });
+// One supplier for the whole order. Branch ranking uses the first cart
+// item's product as the representative — multi-supplier-per-order is
+// deliberately out of scope (see migration 0030's header).
+function renderSourceStep(details) {
+  setBackAction('Back to order details', () => renderDetailsStep(details));
 
-  const sources = rankBranchesByDistance(getBranchesForProduct(product), details);
+  const repProduct = getProduct(cart[0] ? cart[0].productId : null);
+  if (!repProduct) { alert('That material is no longer in the catalog.'); backToSearchKeepingCart(); return; }
+  const sources = rankBranchesByDistance(getBranchesForProduct(repProduct), details);
 
   orderFormEl.innerHTML = `
-    <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
-    <p class="hint">${details.quantity} &times; ${product.unit} &middot; deliver to ${details.deliveryPostcode}</p>
-
-    <label class="field-label">Where should this be ordered from?</label>
+    <h2>Where should this be ordered from?</h2>
+    <p class="hint">${cart.length} ${cart.length === 1 ? 'material' : 'materials'} &middot; deliver to ${details.deliveryPostcode}</p>
     <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock — pick one to tell the driver where to buy it.</p>
     <div class="variant-list">
       ${sources.map(s => {
-        const avail = getAvailability(s.id, product.id);
+        const avail = getAvailability(s.id, repProduct.id);
         return `
         <button type="button" class="variant-option source-option" data-branch-id="${s.id}">
           <span class="variant-option-radio" aria-hidden="true"></span>
@@ -433,30 +522,24 @@ function renderSourceStep(product, variant, details) {
   orderFormEl.querySelectorAll('.source-option').forEach(btn => {
     btn.addEventListener('click', () => {
       const branch = sources.find(s => s.id === btn.dataset.branchId);
-      renderConfirmStep(product, variant, details, branch);
+      renderConfirmStep(details, branch, getAvailability(branch.id, repProduct.id));
     });
   });
 }
 
-function renderConfirmStep(product, variant, details, branch) {
-  setBackAction('Back to store selection', () => {
-    renderSourceStep(product, variant, details);
-  });
+function renderConfirmStep(details, branch, avail) {
+  setBackAction('Back to store selection', () => renderSourceStep(details));
 
-  const avail = getAvailability(branch.id, product.id);
   const websiteUrl = `https://${branch.website}`;
+  const total = cart.reduce((sum, it) => sum + (it.unitPrice || 0) * it.quantity, 0);
 
   orderFormEl.innerHTML = `
     <h2>Confirm this order</h2>
 
-    <div class="product-preview">
-      <div class="product-preview-icon" aria-hidden="true">${getCategoryIcon(product.category)}</div>
-      <div class="product-preview-info">
-        <strong>${product.name}${variant ? ` — ${variant}` : ''}</strong>
-        <span>${details.quantity} &times; ${product.unit} &middot; ${product.category}</span>
-        <span class="product-preview-price">${formatPrice(product.unitPrice)} per ${product.unit} &middot; ${formatPrice(product.unitPrice * details.quantity)} total</span>
-      </div>
-    </div>
+    <ul class="order-items-list">
+      ${cart.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''} &middot; ${formatPrice((it.unitPrice || 0) * it.quantity)}</li>`).join('')}
+    </ul>
+    <p class="hint"><strong>Total: ${formatPrice(total)}</strong></p>
 
     <div class="confirm-source-card">
       <div class="confirm-source-row">
@@ -468,7 +551,7 @@ function renderConfirmStep(product, variant, details, branch) {
       <p class="hint small-hint">Opens their homepage in a new tab — this is a demo catalog, so it isn't linked to the exact product listing.</p>
     </div>
 
-    <p class="hint">Delivering ${details.quantity} &times; ${product.unit} to <strong>${details.deliveryPostcode}</strong>.</p>
+    <p class="hint">Delivering to <strong>${details.deliveryPostcode}</strong>.</p>
     <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(details.neededByType, details.neededBy)}</p>
     <p class="hint"><strong>Delivery:</strong> ${details.deliveryMethod === 'direct_supplier' ? 'Supplier delivers direct to site' : 'A driver collects & delivers it'}</p>
 
@@ -476,27 +559,17 @@ function renderConfirmStep(product, variant, details, branch) {
   `;
 
   const confirmBtn = document.getElementById('confirm-order-btn');
-  confirmBtn.addEventListener('click', () => {
-    submitOrder(product, variant, details, branch, avail, confirmBtn);
-  });
+  confirmBtn.addEventListener('click', () => submitOrder(details, branch, avail, confirmBtn));
 }
 
-async function submitOrder(product, variant, details, branch, avail, confirmBtn) {
+async function submitOrder(details, branch, avail, confirmBtn) {
   const communityId = getActiveCommunityId();
-  // Display-only — the server independently derives whether approval is
-  // required from the community's own setting when it processes the
-  // request; this is just used to word the confirmation message correctly.
-  const approvalRequired = isApprovalRequired(communityId);
 
   confirmBtn.disabled = true;
   const result = await createOrder({
     communityId,
     siteId: selectedSite ? selectedSite.id : null,
-    productId: product.id,
-    productName: product.name,
-    variant,
-    quantity: details.quantity,
-    unit: product.unit,
+    items: cart.map(it => ({ ...it })),
     deliveryPostcode: details.deliveryPostcode,
     deliveryLat: details.deliveryLat,
     deliveryLon: details.deliveryLon,
@@ -505,7 +578,6 @@ async function submitOrder(product, variant, details, branch, avail, confirmBtn)
     stockistWebsite: branch.website,
     stockistPostcode: branch.postcode,
     pickupEstimate: avail ? avail.label : null,
-    unitPrice: product.unitPrice,
     neededByType: details.neededByType,
     neededBy: details.neededBy,
     deliveryMethod: details.deliveryMethod,
@@ -518,9 +590,10 @@ async function submitOrder(product, variant, details, branch, avail, confirmBtn)
   }
 
   const stillApprovalRequired = result.order.approvalWasRequired;
+  cart = [];
   orderFormEl.innerHTML = `
     <h2>Request sent</h2>
-    <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${stillApprovalRequired
+    <p class="hint">${itemsShortSummary(result.order)} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${stillApprovalRequired
       ? 'Waiting for the owner to approve it before a buyer can purchase it.'
       : 'It\'s gone straight to a buyer to purchase — this company doesn\'t require owner approval.'}</p>
   `;
@@ -756,15 +829,18 @@ async function handleWorkerAction(action, orderId) {
 // own field whitelist and re-authorization — this form cannot bypass that.
 
 function openEditForm(order) {
-  const product = getProduct(order.productId);
-  if (!product) {
-    alert('This product is no longer in the catalog, so it can\'t be edited here — cancel this order and place a new one instead.');
-    return;
-  }
+  // Multi-item (migration 0030): editState.items is the working copy of the
+  // order's line items — { productId, productName, variant, unit, unitPrice,
+  // quantity }. editIndex is which item the material/variant picker is
+  // currently targeting ('new' appends).
   editState = {
     order,
-    product,
-    variant: order.variant,
+    items: (order.items || []).map(it => ({
+      productId: it.productId, productName: it.productName, variant: it.variant,
+      unit: it.unit, unitPrice: it.unitPrice, quantity: it.quantity,
+    })),
+    editIndex: null,
+    pickProduct: null,
     deliveryPostcode: order.deliveryPostcode,
     site: { id: order.siteId, name: order.siteName, address: order.siteAddress, postcode: order.sitePostcode },
     stockistId: order.stockistId,
@@ -772,7 +848,6 @@ function openEditForm(order) {
     stockistWebsite: order.stockistWebsite,
     stockistPostcode: order.stockistPostcode,
     pickupEstimate: order.pickupEstimate,
-    unitPrice: order.unitPrice,
     neededByType: order.neededByType,
     neededBy: order.neededBy,
     mode: 'summary',
@@ -794,9 +869,53 @@ function renderEditForm() {
   if (!editState) return;
   if (editState.mode === 'pick-material') return renderEditPickMaterial();
   if (editState.mode === 'pick-variant') return renderEditPickVariant();
+  if (editState.mode === 'pick-item-qty') return renderEditPickItemQty();
   if (editState.mode === 'pick-source') return renderEditPickSource();
   if (editState.mode === 'pick-site') return renderEditPickSite();
   return renderEditSummary();
+}
+
+// Commits editState.pickProduct + editState.pickVariant + a quantity into
+// editState.items at editState.editIndex ('new' appends), then back to
+// summary. Shared by the change-an-item and add-an-item paths.
+function renderEditPickItemQty() {
+  const p = editState.pickProduct;
+  const v = editState.pickVariant || null;
+  const existing = editState.editIndex !== 'new' ? editState.items[editState.editIndex] : null;
+  const startQty = existing && existing.productId === p.id ? existing.quantity : 1;
+  orderFormEl.innerHTML = `
+    <h2>${p.name}${v ? ` &mdash; ${v}` : ''}</h2>
+    <label class="field-label" for="edit-item-qty-input">How many (${p.unit})?</label>
+    <input type="number" id="edit-item-qty-input" class="text-input" min="1" value="${startQty}" />
+    <button type="button" id="edit-item-qty-continue" class="btn btn-primary btn-block">${editState.editIndex === 'new' ? 'Add to order' : 'Update material'}</button>
+    <button type="button" class="link-btn" id="edit-item-qty-cancel">Cancel</button>
+  `;
+  document.getElementById('edit-item-qty-continue').addEventListener('click', () => {
+    const q = Number(document.getElementById('edit-item-qty-input').value) || 1;
+    if (q <= 0) return;
+    const entry = { productId: p.id, productName: p.name, variant: v, unit: p.unit, unitPrice: p.unitPrice, quantity: q };
+    if (editState.editIndex === 'new') editState.items.push(entry);
+    else editState.items[editState.editIndex] = entry;
+    editState.pickProduct = null;
+    editState.pickVariant = null;
+    editState.mode = 'summary';
+    renderEditForm();
+  });
+  document.getElementById('edit-item-qty-cancel').addEventListener('click', () => {
+    editState.mode = 'summary';
+    renderEditForm();
+  });
+}
+
+// Pull the current quantity inputs back into editState.items before any
+// navigation away from the summary, so a qty change isn't lost when the
+// Worker taps "Change" or "Add material".
+function syncEditQuantities() {
+  orderFormEl.querySelectorAll('[data-edit-qty]').forEach(inp => {
+    const i = Number(inp.dataset.editQty);
+    const q = Number(inp.value) || 0;
+    if (editState.items[i] && q > 0) editState.items[i].quantity = q;
+  });
 }
 
 function renderEditSummary() {
@@ -806,17 +925,24 @@ function renderEditSummary() {
   orderFormEl.innerHTML = `
     <h2>Edit order</h2>
 
-    <div class="product-preview">
-      <div class="product-preview-icon" aria-hidden="true">${getCategoryIcon(s.product.category)}</div>
-      <div class="product-preview-info">
-        <strong>${s.product.name}${s.variant ? ` — ${s.variant}` : ''}</strong>
-        <span>${s.stockistName ? `From ${s.stockistName}` : 'No stockist chosen yet'}</span>
-      </div>
-    </div>
-    <button type="button" class="link-btn" id="edit-change-material-btn">Change material or size</button>
+    <label class="field-label">Materials</label>
+    <ul class="order-items-list edit-items-list">
+      ${s.items.map((it, i) => `
+        <li>
+          <span>${it.productName}${it.variant ? ` (${it.variant})` : ''}</span>
+          <input type="number" class="text-input edit-item-qty" min="1" value="${it.quantity}" data-edit-qty="${i}" aria-label="Quantity for ${it.productName}" />
+          <span class="edit-item-unit">${it.unit}</span>
+          <button type="button" class="link-btn" data-edit-change="${i}">Change</button>
+          ${s.items.length > 1 ? `<button type="button" class="link-btn link-btn-danger" data-edit-remove="${i}">Remove</button>` : ''}
+        </li>
+      `).join('')}
+    </ul>
+    <button type="button" class="link-btn" id="edit-add-item-btn">+ Add another material</button>
 
-    <label class="field-label" for="edit-qty-input">Quantity (${s.product.unit})</label>
-    <input type="number" id="edit-qty-input" class="text-input" min="1" value="${s.order.quantity}" />
+    <div class="confirm-source-card">
+      <div class="confirm-source-row"><span class="source-name">${s.stockistName || 'No stockist chosen yet'}</span></div>
+      <button type="button" class="link-btn" id="edit-change-source-btn">Change stockist</button>
+    </div>
 
     <label class="field-label">Site</label>
     <div class="confirm-source-card">
@@ -842,11 +968,30 @@ function renderEditSummary() {
     choice => { editState.neededByType = choice.type; editState.neededBy = choice.date ? choice.date.getTime() : null; }
   );
 
-  document.getElementById('edit-change-material-btn').addEventListener('click', () => {
+  orderFormEl.querySelectorAll('[data-edit-change]').forEach(btn => btn.addEventListener('click', () => {
+    syncEditQuantities();
+    editState.editIndex = Number(btn.dataset.editChange);
+    editState.mode = 'pick-material';
+    renderEditForm();
+  }));
+  orderFormEl.querySelectorAll('[data-edit-remove]').forEach(btn => btn.addEventListener('click', () => {
+    syncEditQuantities();
+    editState.items.splice(Number(btn.dataset.editRemove), 1);
+    renderEditForm();
+  }));
+  document.getElementById('edit-add-item-btn').addEventListener('click', () => {
+    syncEditQuantities();
+    editState.editIndex = 'new';
     editState.mode = 'pick-material';
     renderEditForm();
   });
+  document.getElementById('edit-change-source-btn').addEventListener('click', () => {
+    syncEditQuantities();
+    editState.mode = 'pick-source';
+    renderEditForm();
+  });
   document.getElementById('edit-change-site-btn').addEventListener('click', () => {
+    syncEditQuantities();
     editState.mode = 'pick-site';
     renderEditForm();
   });
@@ -879,15 +1024,9 @@ function renderEditPickMaterial() {
     results.querySelectorAll('.result-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const product = products.find(pr => pr.id === btn.dataset.id);
-        editState.product = product;
-        editState.variant = null;
-        editState.stockistId = null;
-        editState.stockistName = null;
-        editState.stockistWebsite = null;
-        editState.stockistPostcode = null;
-        editState.pickupEstimate = null;
-        editState.unitPrice = product.unitPrice;
-        editState.mode = product.variants ? 'pick-variant' : 'pick-source';
+        editState.pickProduct = product;
+        editState.pickVariant = null;
+        editState.mode = product.variants ? 'pick-variant' : 'pick-item-qty';
         renderEditForm();
       });
     });
@@ -899,7 +1038,7 @@ function renderEditPickMaterial() {
 }
 
 function renderEditPickVariant() {
-  const product = editState.product;
+  const product = editState.pickProduct;
   orderFormEl.innerHTML = `
     <h2>${product.name}</h2>
     <label class="field-label">Which size / type do you need?</label>
@@ -927,8 +1066,8 @@ function renderEditPickVariant() {
 
   orderFormEl.querySelectorAll('.variant-option:not(.variant-option-custom)').forEach(btn => {
     btn.addEventListener('click', () => {
-      editState.variant = btn.dataset.variant;
-      editState.mode = 'pick-source';
+      editState.pickVariant = btn.dataset.variant;
+      editState.mode = 'pick-item-qty';
       renderEditForm();
     });
   });
@@ -939,8 +1078,8 @@ function renderEditPickVariant() {
   document.getElementById('edit-custom-size-continue').addEventListener('click', () => {
     const val = document.getElementById('edit-custom-size-input').value.trim();
     if (!val) return;
-    editState.variant = val;
-    editState.mode = 'pick-source';
+    editState.pickVariant = val;
+    editState.mode = 'pick-item-qty';
     renderEditForm();
   });
   document.getElementById('edit-variant-cancel-btn').addEventListener('click', () => {
@@ -950,7 +1089,8 @@ function renderEditPickVariant() {
 }
 
 function renderEditPickSource() {
-  const product = editState.product;
+  const product = getProduct(editState.items[0] ? editState.items[0].productId : null);
+  if (!product) { editState.mode = 'summary'; renderEditForm(); return; }
   const sources = getBranchesForProduct(product);
   orderFormEl.innerHTML = `
     <h2>Where should this be ordered from?</h2>
@@ -1031,9 +1171,14 @@ async function submitEdit() {
   const s = editState;
   const statusEl = document.getElementById('edit-form-status');
   const saveBtn = document.getElementById('edit-save-btn');
-  const quantity = Number(document.getElementById('edit-qty-input').value) || 1;
+  syncEditQuantities();
   const postcodeRaw = document.getElementById('edit-postcode-input').value.trim();
 
+  if (s.items.length === 0) {
+    statusEl.textContent = 'An order needs at least one material.';
+    statusEl.className = 'form-status error';
+    return;
+  }
   if (!postcodeRaw) {
     statusEl.textContent = 'Please enter a delivery postcode.';
     statusEl.className = 'form-status error';
@@ -1058,11 +1203,7 @@ async function submitEdit() {
   }
 
   const fields = {
-    productId: s.product.id,
-    productName: s.product.name,
-    variant: s.variant,
-    quantity,
-    unit: s.product.unit,
+    items: s.items.map(it => ({ ...it })),
     deliveryPostcode,
     siteId: s.site.id,
     stockistId: s.stockistId,
@@ -1070,7 +1211,6 @@ async function submitEdit() {
     stockistWebsite: s.stockistWebsite,
     stockistPostcode: s.stockistPostcode,
     pickupEstimate: s.pickupEstimate,
-    unitPrice: s.unitPrice,
     neededByType: s.neededByType,
     neededBy: s.neededBy,
   };
@@ -1126,8 +1266,8 @@ function renderSiteOrders() {
     return `
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
-        <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
-        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} × ${o.unit} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
+        <strong>${itemsShortSummary(o)}</strong>
+        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${(o.items || []).map(it => `${it.quantity}×${it.productName}`).join(', ')} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
         ${o.stockistName ? `<span>From ${o.stockistName} (${o.stockistWebsite})</span>` : ''}
         <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${o.rejectionReason}</span>` : ''}

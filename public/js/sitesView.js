@@ -1,5 +1,6 @@
 import { getInitials, formatPrice, timeAgo } from './data.js';
 import { subscribe } from './orderLifecycle.js';
+import { itemsShortSummary } from './orderStatus.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
   archiveSite, changeSiteStatus, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
@@ -315,8 +316,8 @@ function renderOrders(site) {
   return orders.map(o => `
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
-        <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
-        <span>${o.quantity} × ${o.unit}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''} &middot; requested by ${o.requestedBy || 'Unknown'}</span>
+        <strong>${itemsShortSummary(o)}</strong>
+        <span>${o.totalPrice != null ? `${formatPrice(o.totalPrice)} &middot; ` : ''}requested by ${o.requestedBy || 'Unknown'}</span>
       </div>
       <span class="status-badge status-${o.status}">${STATUS_LABELS[o.status] || o.status}</span>
     </div>

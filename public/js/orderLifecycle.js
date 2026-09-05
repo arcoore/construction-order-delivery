@@ -57,6 +57,30 @@ export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000; // documented server-side t
 let cache = { orders: [], events: [], cancellationRequests: [] };
 export let orderCacheReady = false;
 
+// Multi-item (migration 0030). Every order now has an `items` array of
+// { productId, productName, variant, quantity, unit, unitPrice, lineTotal }.
+// order.totalPrice stays the authoritative sum; order.productName/variant
+// are a headline for the first item. Drivers must still never see prices —
+// that's enforced where driver.js renders items, not here.
+function mapOrderItemRow(r) {
+  return {
+    id: r.id,
+    productId: r.product_id,
+    productName: r.product_name,
+    variant: r.variant,
+    quantity: r.quantity,
+    unit: r.unit,
+    unitPrice: r.unit_price,
+    lineTotal: r.line_total,
+    sortOrder: r.sort_order,
+  };
+}
+
+function attachItems(order, items) {
+  order.items = items || [];
+  return order;
+}
+
 function mapOrderRow(r) {
   return {
     id: r.id,
@@ -66,11 +90,12 @@ function mapOrderRow(r) {
     siteAddress: r.site_address,
     sitePostcode: r.site_postcode,
     siteDeliveryInstructions: r.site_delivery_instructions,
-    productId: r.product_id,
+    // Multi-item (migration 0030): productName/variant are now the
+    // denormalised HEADLINE (first item, plus " + N more"). The real line
+    // items live in `items` (attached separately — see attachItems). unit,
+    // quantity, unitPrice per-item are only on items[] now, never the order.
     productName: r.product_name,
     variant: r.variant,
-    quantity: r.quantity,
-    unit: r.unit,
     deliveryPostcode: r.delivery_postcode,
     deliveryLat: r.delivery_lat,
     deliveryLon: r.delivery_lon,
@@ -91,7 +116,6 @@ function mapOrderRow(r) {
     stockistWebsite: r.stockist_website,
     stockistPostcode: r.stockist_postcode,
     pickupEstimate: r.pickup_estimate,
-    unitPrice: r.unit_price,
     totalPrice: r.total_price,
     approvedById: r.approved_by_id,
     approvedBy: r.approved_by,
@@ -216,13 +240,22 @@ export async function refreshOrderCache() {
     notifyCancellationRequests();
     return;
   }
-  const [ordersRes, eventsRes, crRes] = await Promise.all([
+  const [ordersRes, eventsRes, crRes, itemsRes] = await Promise.all([
     supabase.from('orders').select('*'),
     supabase.from('order_events').select('*'),
     supabase.from('cancellation_requests').select('*'),
+    // Multi-item (migration 0030) — order_items is not in the realtime
+    // publication (like order_events), it rides the `orders` change signal.
+    supabase.from('order_items').select('*'),
   ]);
+  const itemsByOrder = new Map();
+  for (const r of (itemsRes.data || [])) {
+    if (!itemsByOrder.has(r.order_id)) itemsByOrder.set(r.order_id, []);
+    itemsByOrder.get(r.order_id).push(mapOrderItemRow(r));
+  }
+  for (const list of itemsByOrder.values()) list.sort((a, b) => a.sortOrder - b.sortOrder);
   cache = {
-    orders: (ordersRes.data || []).map(mapOrderRow),
+    orders: (ordersRes.data || []).map(row => attachItems(mapOrderRow(row), itemsByOrder.get(row.id))),
     events: (eventsRes.data || []).map(mapEventRow),
     cancellationRequests: (crRes.data || []).map(mapCancellationRequestRow),
   };
@@ -272,9 +305,25 @@ function getOrder(orderId) {
 
 function upsertOrder(order) {
   const idx = cache.orders.findIndex(o => o.id === order.id);
+  // An RPC-returned `orders` row carries no line items — carry the ones we
+  // already have forward so a UI render between the write and the next full
+  // refreshOrderCache never sees `order.items === undefined`. createOrder /
+  // editOrder explicitly refetch items (they're the only writes that change
+  // them); every other write leaves them alone.
+  if (order.items === undefined) {
+    order.items = idx === -1 ? [] : (cache.orders[idx].items || []);
+  }
   if (idx === -1) cache.orders.push(order); else cache.orders[idx] = order;
   notifyOrders();
   return order;
+}
+
+async function refetchOrderItems(orderId) {
+  const { data } = await supabase.from('order_items').select('*').eq('order_id', orderId);
+  const items = (data || []).map(mapOrderItemRow).sort((a, b) => a.sortOrder - b.sortOrder);
+  const idx = cache.orders.findIndex(o => o.id === orderId);
+  if (idx !== -1) { cache.orders[idx].items = items; notifyOrders(); }
+  return items;
 }
 
 function upsertEvents(rows) {
@@ -339,22 +388,28 @@ async function handleRpcFailure(error, { orderId, requestId } = {}) {
 
 // --- Order creation -------------------------------------------------------
 
-// fields: { communityId, siteId, productId, productName, variant, quantity,
-// unit, deliveryPostcode, deliveryLat, deliveryLon, stockistId,
-// stockistName, stockistWebsite, stockistPostcode, pickupEstimate,
-// unitPrice }. Approval-required and site authorization are both derived
-// server-side (create_order reads the community's own require_owner_approval
-// column and re-checks can_create_order_for_site itself) — this function no
-// longer pre-checks either, since the RPC is now the sole authority on both.
+// fields: { communityId, siteId, items: [{ productId, productName, variant,
+// quantity, unit, unitPrice }], deliveryPostcode, deliveryLat, deliveryLon,
+// stockistId, stockistName, stockistWebsite, stockistPostcode,
+// pickupEstimate, neededByType, neededBy, deliveryMethod }. Approval-required
+// and site authorization are both derived server-side. total_price is the
+// server-computed sum of every item — never sent from here.
+function itemsPayload(items) {
+  return (items || []).map(it => ({
+    productId: it.productId,
+    productName: it.productName,
+    variant: it.variant ?? null,
+    quantity: it.quantity,
+    unit: it.unit,
+    unitPrice: it.unitPrice ?? null,
+  }));
+}
+
 export async function createOrder(fields) {
   const { data, error } = await supabase.rpc('create_order', {
     p_community_id: fields.communityId,
     p_site_id: fields.siteId,
-    p_product_id: fields.productId,
-    p_product_name: fields.productName,
-    p_variant: fields.variant ?? null,
-    p_quantity: fields.quantity,
-    p_unit: fields.unit,
+    p_items: itemsPayload(fields.items),
     p_delivery_postcode: fields.deliveryPostcode,
     p_delivery_lat: fields.deliveryLat ?? null,
     p_delivery_lon: fields.deliveryLon ?? null,
@@ -363,20 +418,16 @@ export async function createOrder(fields) {
     p_stockist_website: fields.stockistWebsite ?? null,
     p_stockist_postcode: fields.stockistPostcode ?? null,
     p_pickup_estimate: fields.pickupEstimate ?? null,
-    p_unit_price: fields.unitPrice ?? null,
-    // Roadmap Step 2 — fields.neededBy is epoch ms (or null), matching the
-    // exact convention driver.js's deliveryTime already uses; converted to
-    // ISO here, at the RPC boundary, same as every other timestamp field.
     p_needed_by_type: fields.neededByType ?? null,
     p_needed_by: fields.neededBy != null ? new Date(fields.neededBy).toISOString() : null,
     // 'driver' (default) or 'direct_supplier' — see mapOrderRow's comment.
-    // Set once here, never accepted by editOrder (EDITABLE_ORDER_FIELDS below
-    // deliberately excludes it).
+    // Set once here, never accepted by editOrder.
     p_delivery_method: fields.deliveryMethod ?? 'driver',
   });
   if (error) return handleRpcFailure(error);
 
   const order = upsertOrder(mapOrderRow(data));
+  await refetchOrderItems(order.id);
   // The order_created event is written server-side by the RPC itself; pull
   // it into the event cache too so a subscribed timeline updates immediately
   // rather than waiting for the next full refresh.
@@ -402,11 +453,7 @@ export async function editOrder(orderId, fields) {
   const { data, error } = await supabase.rpc('edit_order', {
     p_order_id: orderId,
     p_expected_version: current.version,
-    p_product_id: fields.productId,
-    p_product_name: fields.productName,
-    p_variant: fields.variant ?? null,
-    p_quantity: fields.quantity,
-    p_unit: fields.unit,
+    p_items: itemsPayload(fields.items),
     p_delivery_postcode: fields.deliveryPostcode,
     p_delivery_lat: fields.deliveryLat ?? null,
     p_delivery_lon: fields.deliveryLon ?? null,
@@ -416,7 +463,6 @@ export async function editOrder(orderId, fields) {
     p_stockist_website: fields.stockistWebsite ?? null,
     p_stockist_postcode: fields.stockistPostcode ?? null,
     p_pickup_estimate: fields.pickupEstimate ?? null,
-    p_unit_price: fields.unitPrice ?? null,
     // Roadmap Step 2 — same shape as createOrder above. edit_order only
     // re-validates "in the future" when this is actually changing from the
     // order's current stored value, so resubmitting the existing (possibly
@@ -427,6 +473,7 @@ export async function editOrder(orderId, fields) {
   if (error) return handleRpcFailure(error, { orderId });
 
   const order = upsertOrder(mapOrderRow(data));
+  await refetchOrderItems(orderId);
   const { data: eventRows } = await supabase.from('order_events').select('*').eq('order_id', orderId).order('created_at', { ascending: false }).limit(2);
   if (eventRows) upsertEvents(eventRows.map(mapEventRow).filter(e => !cache.events.some(existing => existing.id === e.id)));
 

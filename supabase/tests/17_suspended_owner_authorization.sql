@@ -49,7 +49,7 @@ insert into site_memberships (site_id, community_id, user_id, added_by_id) value
 -- (approved member + site member) — orders has no direct INSERT grant.
 -- require_owner_approval defaults true, so it lands in pending_approval.
 select tests.authenticate_as(:'worker');
-select create_order(:'co', :'site', 'p1', 'Test Product', '25kg', 5, 'each', 'AA1 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'AA1 1AA', 'today', 6.75, null, null) as order_row \gset
+select tests.create_order_1(:'co', :'site', 'p1', 'Test Product', '25kg', 5, 'each', 'AA1 1AA', null, null, 'b1', 'Merchant', 'merchant.co.uk', 'AA1 1AA', 'today', 6.75, null, null) as order_row \gset
 select tests.authenticate_as(:'creator');
 select id as order_id from orders where community_id = :'co' limit 1 \gset
 

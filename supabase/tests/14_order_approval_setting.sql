@@ -47,7 +47,7 @@ insert into site_memberships (site_id, community_id, user_id, added_by_id) value
 -- ORDER A — created while approval is ON
 -- ================================================================
 select tests.authenticate_as(:'worker_g');
-select create_order(
+select tests.create_order_1(
   :'company_g', :'site_g', 'p1', 'Cement', '25kg bag', 5, 'bag', 'SW1A 1AA', null, null,
   'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null
 ) as order_a_result \gset
@@ -105,7 +105,7 @@ select is(
 -- ORDER B — created after approval is OFF (the case under test)
 -- ================================================================
 select tests.authenticate_as(:'worker_g');
-select create_order(
+select tests.create_order_1(
   :'company_g', :'site_g', 'p1', 'Cement', '25kg bag', 3, 'bag', 'SW1A 1AA', null, null,
   'b1', 'Merchant', 'merchant.co.uk', 'SW1 1AA', 'today', 6.75, null, null
 ) as order_b_result \gset

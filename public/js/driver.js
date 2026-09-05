@@ -6,7 +6,7 @@ import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { statusLabel, nextActionFor, urgencyComparator } from './orderStatus.js';
+import { statusLabel, nextActionFor, urgencyComparator, itemsSummary, itemsShortSummary } from './orderStatus.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -94,7 +94,7 @@ function safeDistanceKm(a, b) {
 // Defensive fallback only — every order should already carry the stockistId
 // the worker chose at creation. Kept in case that's ever missing.
 function nearestBranchFor(order, from) {
-  const product = getProduct(order.productId);
+  const product = getProduct(order.items && order.items[0] ? order.items[0].productId : null);
   if (!product) return null;
   let best = null;
   let bestDist = Infinity;
@@ -282,8 +282,8 @@ function renderOrderCard(order, pickup) {
           <span class="requester-name">${requesterName}</span>
         </div>
         <div class="order-card-main">
-          <strong>${order.productName}${order.variant ? ` (${order.variant})` : ''}</strong>
-          <span>${order.quantity} × ${order.unit}</span>
+          <strong>${itemsShortSummary(order)}</strong>
+          <span>${itemsSummary(order)}</span>
           <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         </div>
       </div>

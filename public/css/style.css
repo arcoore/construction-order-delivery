@@ -378,6 +378,40 @@ main#app {
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+
+/* Multi-item orders (migration 0030) */
+.order-items-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.order-items-list li {
+  padding: 4px 0;
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.order-items-list li:last-child { border-bottom: none; }
+.edit-items-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.edit-item-qty { width: 70px; }
+.edit-item-unit { color: var(--text-muted); font-size: 0.85rem; }
+.cart-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--navy-light, #eef2ff);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+.cart-bar-actions { display: flex; align-items: center; gap: 10px; }
 .settings-subhead:first-of-type {
   margin-top: 10px;
   padding-top: 0;
