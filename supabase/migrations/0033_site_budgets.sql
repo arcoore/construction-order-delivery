@@ -53,7 +53,12 @@ begin
     return new;
   end if;
 
-  select monthly_budget into v_budget from sites where id = new.site_id;
+  -- FOR UPDATE serializes concurrent order writes for the same site on the
+  -- sites row, so two orders that individually fit but together exceed the
+  -- budget can't both pass a stale committed-spend read (a real TOCTOU
+  -- without this lock). sites rows are almost never updated, so the
+  -- contention is negligible.
+  select monthly_budget into v_budget from sites where id = new.site_id for update;
   if v_budget is null then
     return new;
   end if;
