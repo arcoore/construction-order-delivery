@@ -5,7 +5,7 @@ import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -68,6 +68,7 @@ const goToCommunitiesBtn = document.getElementById('go-to-communities-btn');
 const profilePillBtn = document.getElementById('profile-pill-btn');
 const profileBackBtn = document.getElementById('profile-back-btn');
 const profileDetails = document.getElementById('profile-details');
+let confirmingDeleteAccount = false;
 const communityCircleBtn = document.getElementById('community-circle-btn');
 const accountCircleBtn = document.getElementById('account-circle-btn');
 const accountMenu = document.getElementById('account-menu');
@@ -268,11 +269,61 @@ async function showProfile() {
       </div>
     ` : ''}
     <button type="button" class="btn btn-secondary btn-block" id="profile-logout-btn">Log out</button>
+    ${confirmingDeleteAccount ? `
+      <div class="reject-form">
+        <p class="hint small-hint">This can't be undone. It only works if your account has no activity on file yet (no orders placed, no sites created, and no company you own) — otherwise you'll be asked to contact support instead. Type DELETE to confirm.</p>
+        <input type="text" id="delete-account-confirm-input" class="text-input" placeholder="DELETE" />
+        <div class="reject-form-actions">
+          <button class="btn btn-secondary" id="delete-account-cancel-btn">Never mind</button>
+          <button class="btn btn-primary" id="delete-account-confirm-btn">Delete my account</button>
+        </div>
+        <p id="delete-account-status" class="form-status"></p>
+      </div>
+    ` : `<button type="button" class="link-btn link-btn-danger" id="profile-delete-account-btn">Delete my account</button>`}
   `;
 
   document.getElementById('profile-logout-btn').addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('sitestock:logout'));
   });
+
+  const deleteStartBtn = document.getElementById('profile-delete-account-btn');
+  if (deleteStartBtn) {
+    deleteStartBtn.addEventListener('click', () => {
+      confirmingDeleteAccount = true;
+      showProfile();
+    });
+  }
+  const deleteCancelBtn = document.getElementById('delete-account-cancel-btn');
+  if (deleteCancelBtn) {
+    deleteCancelBtn.addEventListener('click', () => {
+      confirmingDeleteAccount = false;
+      showProfile();
+    });
+  }
+  const deleteConfirmBtn = document.getElementById('delete-account-confirm-btn');
+  if (deleteConfirmBtn) {
+    deleteConfirmBtn.addEventListener('click', async () => {
+      const input = document.getElementById('delete-account-confirm-input');
+      const statusEl = document.getElementById('delete-account-status');
+      if ((input.value || '').trim().toUpperCase() !== 'DELETE') {
+        statusEl.textContent = 'Type DELETE exactly to confirm.';
+        statusEl.className = 'form-status error';
+        return;
+      }
+      deleteConfirmBtn.disabled = true;
+      statusEl.textContent = 'Deleting…';
+      statusEl.className = 'form-status';
+      const result = await deleteAccount();
+      if (!result.ok) {
+        deleteConfirmBtn.disabled = false;
+        statusEl.textContent = result.error;
+        statusEl.className = 'form-status error';
+        return;
+      }
+      // deleteAccount() already signed out locally on success — the normal
+      // auth-state routing takes over from here, same as any other logout.
+    });
+  }
 
   profileDetails.querySelectorAll('[data-leave-company]').forEach(btn => {
     btn.addEventListener('click', async () => {

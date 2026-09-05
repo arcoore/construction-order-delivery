@@ -140,6 +140,40 @@ export async function logout() {
   notify();
 }
 
+// Product-audit gap fix: self-service account deletion. Deleting an Auth
+// user requires the service_role key, which must never reach the browser
+// (see CLAUDE.md's guardrails) — so this calls a server-side Edge Function
+// (supabase/functions/delete-account) instead of touching auth.admin
+// directly. That function forwards this call's own session as the
+// Authorization header automatically (supabase-js's functions.invoke
+// default), verifies the caller server-side, then attempts the deletion
+// with its own admin client.
+//
+// profiles.id has no ON DELETE CASCADE from orders/sites/communities.owner_id
+// on purpose — deleting an account must never silently delete a company's
+// real business records. That means the deletion genuinely only succeeds
+// for an account with no owned history at all (a fresh signup, essentially);
+// any real account still creating/purchasing/driving/owning something is
+// refused with a clear, honest error rather than partially succeeding or
+// silently corrupting historical records. There is deliberately no
+// automatic anonymization path — that needs a real policy decision, not a
+// default baked in here.
+export async function deleteAccount() {
+  const { data, error } = await supabase.functions.invoke('delete-account');
+  if (error) {
+    // supabase-js surfaces a non-2xx function response as `error`, with the
+    // function's own JSON body (containing our friendly `error` message)
+    // available on error.context — fall back to a generic message if that
+    // shape isn't present (e.g. a genuine network failure reaching the
+    // function at all).
+    const body = await error.context?.json?.().catch(() => null);
+    return { ok: false, error: body?.error || error.message || 'Could not delete your account.' };
+  }
+  if (data?.error) return { ok: false, error: data.error };
+  await logout();
+  return { ok: true };
+}
+
 // Roadmap Step 5 — password reset. Always returns the same generic success
 // shape regardless of whether the email is actually registered — this is
 // Supabase's own resetPasswordForEmail behavior already (it never reveals
