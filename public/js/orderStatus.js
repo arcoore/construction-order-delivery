@@ -21,6 +21,40 @@
 
 import { neededByUrgency } from './deadline.js';
 
+// --- Edit-diff helpers (order_edited event rendering) -------------------
+
+const NEEDED_BY_TYPE_WORDS = { asap: 'ASAP', deadline: 'a set date', null: 'unspecified' };
+
+// A readable summary of what changed between two item lists (meta.changes.items
+// {from,to}). Matches lines by productName+variant; reports adds, removes, and
+// quantity changes. Falls back to a plain count when there are too many
+// changes to read at a glance.
+function describeItemsChange(from, to) {
+  const fromArr = Array.isArray(from) ? from : [];
+  const toArr = Array.isArray(to) ? to : [];
+  const key = it => `${it.productName || ''}||${it.variant || ''}`;
+  const fromMap = new Map(fromArr.map(it => [key(it), it]));
+  const toMap = new Map(toArr.map(it => [key(it), it]));
+  const name = it => `${it.productName || 'item'}${it.variant ? ` (${it.variant})` : ''}`;
+
+  const bits = [];
+  for (const [k, it] of toMap) {
+    if (!fromMap.has(k)) bits.push(`added ${name(it)}`);
+    else {
+      const before = Number(fromMap.get(k).quantity);
+      const after = Number(it.quantity);
+      if (before !== after) bits.push(`${name(it)} ${before} → ${after}`);
+    }
+  }
+  for (const [k, it] of fromMap) {
+    if (!toMap.has(k)) bits.push(`removed ${name(it)}`);
+  }
+
+  if (bits.length === 0) return fromArr.length === toArr.length ? 'items updated' : `items ${fromArr.length} → ${toArr.length}`;
+  if (bits.length > 3) return `items ${fromArr.length} → ${toArr.length}`;
+  return bits.join(', ');
+}
+
 // --- Status labels -----------------------------------------------------
 
 const BASE_STATUS_LABELS = {
@@ -183,14 +217,22 @@ export const EVENT_RENDER = {
     // already are.
     const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'siteContactName', 'siteContactPhone', 'siteAccessNotes', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
     const parts = Object.entries(changes)
-      .filter(([field]) => !skip.has(field) && field !== 'items')
+      .filter(([field, v]) => !skip.has(field) && field !== 'items' && field !== 'neededByType' && v && typeof v === 'object')
       .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
-    // Multi-item (migration 0030): meta.changes.items is {from:[…],to:[…]}
-    // — render a compact "3 → 2 items" count rather than dumping arrays.
+    // needed-by: edit_order only ever records the *type* (asap/deadline), not
+    // the timestamp — so a Today→Tomorrow change (both 'deadline') would
+    // otherwise read "needed by deadline → deadline". Say something honest
+    // instead: name the real change when the type changed, "needed-by date
+    // changed" when only the date moved within 'deadline'.
+    if (changes.neededByType) {
+      const { from, to } = changes.neededByType;
+      parts.push(from === to
+        ? 'needed-by date changed'
+        : `needed by ${NEEDED_BY_TYPE_WORDS[from ?? 'null']} → ${NEEDED_BY_TYPE_WORDS[to ?? 'null']}`);
+    }
+    // Multi-item (migration 0030): meta.changes.items is {from:[…],to:[…]}.
     if (changes.items) {
-      const fromN = Array.isArray(changes.items.from) ? changes.items.from.length : 0;
-      const toN = Array.isArray(changes.items.to) ? changes.items.to.length : 0;
-      parts.unshift(fromN === toN ? 'items updated' : `items ${fromN} → ${toN}`);
+      parts.unshift(describeItemsChange(changes.items.from, changes.items.to));
     }
     return { icon: '✏️', text: `${e.actorName || 'The worker'} edited ${label}${parts.length ? ` — ${parts.join(', ')}` : ''}` };
   },
