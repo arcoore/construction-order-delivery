@@ -300,6 +300,24 @@ body {
   font-size: 0.85rem;
 }
 
+.delivery-shortfalls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.shortfall-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.shortfall-note {
+  margin-left: 26px;
+}
+
 .notif-row-unread {
   background: #fff7ef;
 }

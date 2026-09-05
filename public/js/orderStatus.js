@@ -143,6 +143,16 @@ export function nextActionFor(order, role, options = {}) {
 // A one-line human summary of everything in an order. Prices are NEVER
 // included — a caller that shows money (Owner/Buyer) appends it itself, so
 // the Driver path stays price-free by simply not doing that.
+// Partial fulfilment (migration 0036). '' when the order was delivered in
+// full or isn't delivered yet; otherwise a short human summary of what was
+// short. No prices.
+export function fulfilmentSummary(order) {
+  if (!order || order.fulfilmentStatus !== 'partial') return '';
+  const short = (order.items || []).filter(it => it.deliveredShort);
+  if (short.length === 0) return 'Delivered partial — some items were short';
+  return `Delivered partial — short: ${short.map(it => `${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.shortfallNote ? ` — ${it.shortfallNote}` : ''}`).join('; ')}`;
+}
+
 export function itemsSummary(order) {
   const items = (order && order.items) || [];
   if (items.length === 0) {

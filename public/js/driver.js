@@ -6,7 +6,7 @@ import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { statusLabel, nextActionFor, urgencyComparator, itemsSummary, itemsShortSummary } from './orderStatus.js';
+import { statusLabel, nextActionFor, urgencyComparator, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -213,6 +213,14 @@ function render() {
   if (reasonInput) reasonInput.focus();
   const deliveryLocationInput = listEl.querySelector('#delivery-location-input');
   if (deliveryLocationInput) deliveryLocationInput.focus();
+
+  // Partial fulfilment — a ticked "short" checkbox reveals its note field.
+  listEl.querySelectorAll('.shortfall-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const note = listEl.querySelector(`.shortfall-note[data-note-for="${cb.dataset.itemId}"]`);
+      if (note) note.hidden = !cb.checked;
+    });
+  });
 }
 
 // A plain Google Maps "search" link — opens in the browser or hands off to
@@ -274,6 +282,17 @@ function renderOrderCard(order, pickup) {
           <input type="datetime-local" id="delivery-time-input" class="text-input" value="${nowForDateTimeInput()}" />
           <label class="field-label" for="delivery-location-input">Delivered to (location)</label>
           <input type="text" id="delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${order.deliveryPostcode || ''}" />
+          ${(order.items && order.items.length) ? `
+          <p class="field-label">Anything short or missing? (optional)</p>
+          <div class="delivery-shortfalls">
+            ${order.items.map(it => `
+              <label class="shortfall-row">
+                <input type="checkbox" class="shortfall-check" data-item-id="${it.id}" />
+                <span>${it.quantity} × ${it.productName}${it.variant ? ` (${it.variant})` : ''}</span>
+              </label>
+              <input type="text" class="text-input shortfall-note" data-note-for="${it.id}" placeholder="What was short? (optional)" hidden />
+            `).join('')}
+          </div>` : ''}
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-action="cancel-deliver" data-id="${order.id}">Never mind</button>
             <button class="btn btn-primary" data-action="confirm-deliver" data-id="${order.id}">Confirm Delivered</button>
@@ -328,6 +347,7 @@ function renderOrderCard(order, pickup) {
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
         ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
+      ${fulfilmentSummary(order) ? `<p class="hint small-hint">${fulfilmentSummary(order)}</p>` : ''}
       ${actionHtml}
     </div>
   `;
@@ -379,8 +399,14 @@ async function handleAction(action, orderId) {
       locationInput.focus();
       return;
     }
+    const shortfalls = [...document.querySelectorAll('.shortfall-check')]
+      .filter(cb => cb.checked)
+      .map(cb => ({
+        itemId: cb.dataset.itemId,
+        note: (document.querySelector(`.shortfall-note[data-note-for="${cb.dataset.itemId}"]`)?.value || '').trim(),
+      }));
     actionInFlight = true;
-    result = await deliverOrder(orderId, new Date(timeVal).getTime(), locationVal);
+    result = await deliverOrder(orderId, new Date(timeVal).getTime(), locationVal, shortfalls);
     deliveringId = null;
   } else if (action === 'confirm-cancel') {
     const reasonInput = document.getElementById('cancel-reason-input');

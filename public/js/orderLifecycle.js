@@ -73,6 +73,9 @@ function mapOrderItemRow(r) {
     unitPrice: r.unit_price,
     lineTotal: r.line_total,
     sortOrder: r.sort_order,
+    // Partial fulfilment (migration 0036) — set by the driver on delivery.
+    deliveredShort: r.delivered_short,
+    shortfallNote: r.shortfall_note,
   };
 }
 
@@ -116,6 +119,7 @@ function mapOrderRow(r) {
     deliveredAt: r.delivered_at ? new Date(r.delivered_at).getTime() : null,
     deliveryTime: r.delivery_time ? new Date(r.delivery_time).getTime() : null,
     deliveryLocation: r.delivery_location,
+    fulfilmentStatus: r.fulfilment_status,
     stockistId: r.stockist_id,
     stockistName: r.stockist_name,
     stockistWebsite: r.stockist_website,
@@ -632,7 +636,7 @@ export async function collectDelivery(orderId) {
   return { ok: true, order };
 }
 
-export async function deliverOrder(orderId, deliveryTime, deliveryLocation) {
+export async function deliverOrder(orderId, deliveryTime, deliveryLocation, shortfalls = []) {
   if (!deliveryTime) return { ok: false, error: 'A delivery time is required.' };
   if (!deliveryLocation || !deliveryLocation.trim()) return { ok: false, error: 'A delivery location is required.' };
 
@@ -640,9 +644,11 @@ export async function deliverOrder(orderId, deliveryTime, deliveryLocation) {
     p_order_id: orderId,
     p_delivery_time: new Date(deliveryTime).toISOString(),
     p_delivery_location: deliveryLocation.trim(),
+    p_shortfalls: (shortfalls || []).map(s => ({ itemId: s.itemId, note: s.note || '' })),
   });
   if (error) return handleRpcFailure(error, { orderId });
   const order = upsertOrder(mapOrderRow(data));
+  await refetchOrderItems(orderId);
 
   // The order_delivered notification (to both the buyer and the requester)
   // is written server-side by mark_delivered itself.

@@ -22,7 +22,7 @@ import {
 // reimplemented) for the optional "assign a site at approval time" flow.
 import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary } from './orderStatus.js';
+import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -751,6 +751,7 @@ function renderOrderDetail(order) {
     ${order.status === 'delivered' ? `
       <h2>Delivery</h2>
       <p class="hint">Delivered to ${order.deliveryLocation || 'an unrecorded location'} at ${order.deliveryTime ? new Date(order.deliveryTime).toLocaleString() : 'an unrecorded time'}${order.deliveredAt ? ` &middot; confirmed ${new Date(order.deliveredAt).toLocaleString()}` : ''}.</p>
+      ${order.fulfilmentStatus === 'partial' ? `<p class="hint"><strong>${fulfilmentSummary(order)}</strong></p>` : order.fulfilmentStatus === 'full' ? '<p class="hint">Delivered in full.</p>' : ''}
     ` : ''}
 
     <h2>Timeline</h2>
@@ -966,7 +967,9 @@ function renderOrderCard(order) {
         <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
       </div>
       <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner', order.deliveryMethod)}</span>
+      ${order.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
+      ${fulfilmentSummary(order) ? `<p class="hint small-hint">${fulfilmentSummary(order)}</p>` : ''}
       <div class="driver-route">
         <div class="route-step">
           <span class="route-label">Buy from</span>

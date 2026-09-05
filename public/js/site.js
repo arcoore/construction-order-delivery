@@ -14,7 +14,7 @@ import {
   todayDeadlineDate, tomorrowDeadlineDate, isTodayDeadlineAvailable, cutoffTimeLabel,
   datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy, neededByUrgency, urgencyLabel,
 } from './deadline.js';
-import { statusLabel, nextActionFor, describeEvent, itemsShortSummary } from './orderStatus.js';
+import { statusLabel, nextActionFor, describeEvent, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -1275,8 +1275,10 @@ function renderSiteOrders() {
         ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${o.rejectionReason}</span>` : ''}
         ${o.status === 'cancelled' ? `<span class="rejection-reason">Cancelled by ${o.orderCancelledBy || 'you'}${o.orderCancellationReason ? `: ${o.orderCancellationReason}` : ''}</span>` : ''}
         ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${o.deliveryLocation} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
+        ${fulfilmentSummary(o) ? `<span class="rejection-reason">${fulfilmentSummary(o)}</span>` : ''}
       </div>
       <span class="status-badge status-${o.status}">${statusLabel(o.status, 'worker', o.deliveryMethod)}</span>
+      ${o.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${cancellationStateHint(o)}
       ${isOwn ? renderHistoryToggle(o) : ''}

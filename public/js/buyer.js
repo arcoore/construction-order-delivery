@@ -8,7 +8,7 @@ import {
 } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { urgencyComparator, itemsSummary, itemsShortSummary, statusLabel } from './orderStatus.js';
+import { urgencyComparator, itemsSummary, itemsShortSummary, statusLabel, fulfilmentSummary } from './orderStatus.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -280,8 +280,10 @@ function renderMyPurchases() {
         <strong>${itemsShortSummary(o)}</strong>
         <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
         <span class="result-meta">Purchased ${new Date(o.purchasedAt).toLocaleDateString()} &middot; from ${o.stockistName || 'Unknown'}</span>
+        ${fulfilmentSummary(o) ? `<span class="result-meta">${fulfilmentSummary(o)}</span>` : ''}
       </div>
       <span class="status-badge status-${o.status}">${statusLabel(o.status, 'buyer', o.deliveryMethod)}</span>
+      ${o.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
     </div>
   `).join('') + (remaining > 0
     ? `<button type="button" class="link-btn list-show-more" id="my-purchases-show-more">Show ${remaining} older</button>`

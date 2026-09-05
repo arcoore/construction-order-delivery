@@ -39,7 +39,7 @@ with lifecycle_fns(sig) as (
     ('claim_delivery(uuid)'),
     ('cancel_delivery(uuid, text)'),
     ('mark_collected(uuid)'),
-    ('mark_delivered(uuid, timestamptz, text)'),
+    ('mark_delivered(uuid, timestamptz, text, jsonb)'),
     ('cancel_order_direct(uuid, text)'),
     ('request_cancellation(uuid, text)'),
     ('decide_cancellation_request(uuid, cancellation_request_status, text)')
@@ -63,7 +63,7 @@ with lifecycle_fns(sig) as (
     ('claim_delivery(uuid)'),
     ('cancel_delivery(uuid, text)'),
     ('mark_collected(uuid)'),
-    ('mark_delivered(uuid, timestamptz, text)'),
+    ('mark_delivered(uuid, timestamptz, text, jsonb)'),
     ('cancel_order_direct(uuid, text)'),
     ('request_cancellation(uuid, text)'),
     ('decide_cancellation_request(uuid, cancellation_request_status, text)')
@@ -89,7 +89,7 @@ with lifecycle_fns(sig) as (
     ('claim_delivery(uuid)'),
     ('cancel_delivery(uuid, text)'),
     ('mark_collected(uuid)'),
-    ('mark_delivered(uuid, timestamptz, text)'),
+    ('mark_delivered(uuid, timestamptz, text, jsonb)'),
     ('cancel_order_direct(uuid, text)'),
     ('request_cancellation(uuid, text)'),
     ('decide_cancellation_request(uuid, cancellation_request_status, text)')
@@ -115,7 +115,7 @@ with lifecycle_fns(sig) as (
     ('claim_delivery(uuid)'),
     ('cancel_delivery(uuid, text)'),
     ('mark_collected(uuid)'),
-    ('mark_delivered(uuid, timestamptz, text)'),
+    ('mark_delivered(uuid, timestamptz, text, jsonb)'),
     ('cancel_order_direct(uuid, text)'),
     ('request_cancellation(uuid, text)'),
     ('decide_cancellation_request(uuid, cancellation_request_status, text)')
