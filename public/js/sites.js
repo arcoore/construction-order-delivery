@@ -60,6 +60,9 @@ function mapSite(r) {
     siteContactName: r.site_contact_name || '',
     siteContactPhone: r.site_contact_phone || '',
     accessNotes: r.access_notes || '',
+    // Migration 0033 — optional monthly spend cap, hard-enforced server-side
+    // by the orders_enforce_site_budget trigger. null = no budget.
+    monthlyBudget: r.monthly_budget,
   };
 }
 
@@ -158,6 +161,7 @@ export async function createSite(communityId, fields, actorId) {
     site_contact_name: (fields.siteContactName || '').trim() || null,
     site_contact_phone: (fields.siteContactPhone || '').trim() || null,
     access_notes: (fields.accessNotes || '').trim() || null,
+    monthly_budget: normalizeBudget(fields.monthlyBudget),
   }).select().single();
   if (error) return { ok: false, error: error.message };
   const site = mapSite(data);
@@ -186,6 +190,7 @@ export async function updateSite(siteId, patch, actorId) {
   if (patch.siteContactName !== undefined) updates.site_contact_name = (patch.siteContactName || '').trim() || null;
   if (patch.siteContactPhone !== undefined) updates.site_contact_phone = (patch.siteContactPhone || '').trim() || null;
   if (patch.accessNotes !== undefined) updates.access_notes = (patch.accessNotes || '').trim() || null;
+  if (patch.monthlyBudget !== undefined) updates.monthly_budget = normalizeBudget(patch.monthlyBudget);
 
   const { data, error } = await supabase.from('sites').update(updates).eq('id', siteId).select().single();
   if (error) return { ok: false, error: error.message };
@@ -194,6 +199,13 @@ export async function updateSite(siteId, patch, actorId) {
   if (idx !== -1) cache.sites[idx] = mapped;
   notify();
   return { ok: true, site: mapped };
+}
+
+// '' / null / a non-positive or non-numeric value all mean "no budget".
+function normalizeBudget(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 const SITE_STATUSES = ['active', 'paused', 'completed', 'archived'];

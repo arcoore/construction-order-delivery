@@ -20,6 +20,7 @@ const createEndDateInput = document.getElementById('site-end-date-input');
 const createContactNameInput = document.getElementById('site-contact-name-input');
 const createContactPhoneInput = document.getElementById('site-contact-phone-input');
 const createAccessNotesInput = document.getElementById('site-access-notes-input');
+const createBudgetInput = document.getElementById('site-budget-input');
 const createBtn = document.getElementById('create-site-btn');
 const createStatusEl = document.getElementById('create-site-status');
 const detailPanel = document.getElementById('site-detail-panel');
@@ -81,6 +82,7 @@ createBtn.addEventListener('click', async () => {
       siteContactName: createContactNameInput.value,
       siteContactPhone: createContactPhoneInput.value,
       accessNotes: createAccessNotesInput.value,
+      monthlyBudget: createBudgetInput.value,
     }, currentActorId());
 
     if (!result.ok) {
@@ -97,6 +99,7 @@ createBtn.addEventListener('click', async () => {
     createContactNameInput.value = '';
     createContactPhoneInput.value = '';
     createAccessNotesInput.value = '';
+    createBudgetInput.value = '';
     createStatusEl.textContent = `"${result.site.name}" created.`;
     createStatusEl.className = 'form-status success';
   } finally {
@@ -190,6 +193,21 @@ function siteStatusButtons(site) {
   return btn('active', 'Restore', true);
 }
 
+// Client-side mirror of the SQL _site_committed_spend helper (migration
+// 0033) — current calendar month, orders that still count (not
+// rejected/cancelled). Display only; the real enforcement is the DB trigger.
+function siteMonthSpend(siteId) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return latestOrders
+    .filter(o => o.siteId === siteId
+      && !['rejected', 'cancelled'].includes(o.status)
+      && new Date(o.createdAt).getFullYear() === y
+      && new Date(o.createdAt).getMonth() === m)
+    .reduce((sum, o) => sum + (o.totalPrice || 0), 0);
+}
+
 function renderSiteInfo(site) {
   if (editingSite) {
     return `
@@ -212,6 +230,8 @@ function renderSiteInfo(site) {
         <input type="tel" id="site-edit-contact-phone-input" class="text-input" value="${site.siteContactPhone || ''}" />
         <label class="field-label" for="site-edit-access-notes-input">Access notes</label>
         <input type="text" id="site-edit-access-notes-input" class="text-input" value="${site.accessNotes || ''}" />
+        <label class="field-label" for="site-edit-budget-input">Monthly budget £ (blank = none)</label>
+        <input type="number" id="site-edit-budget-input" class="text-input" min="0" step="1" value="${site.monthlyBudget ?? ''}" />
         <p id="site-edit-status" class="form-status"></p>
         <div class="reject-form-actions">
           <button class="btn btn-secondary" id="site-edit-cancel-btn">Cancel</button>
@@ -248,6 +268,11 @@ function renderSiteInfo(site) {
     <div class="profile-field">
       <span class="profile-label">Access notes</span>
       <span class="profile-value">${site.accessNotes}</span>
+    </div>` : ''}
+    ${site.monthlyBudget != null ? `
+    <div class="profile-field">
+      <span class="profile-label">Monthly budget</span>
+      <span class="profile-value">${formatPrice(siteMonthSpend(site.id))} of ${formatPrice(site.monthlyBudget)} committed this month${siteMonthSpend(site.id) >= site.monthlyBudget ? ' — at limit' : ''}</span>
     </div>` : ''}
     <div class="profile-field">
       <span class="profile-label">Status</span>
@@ -392,6 +417,7 @@ function wireDetailActions(site) {
         siteContactName: document.getElementById('site-edit-contact-name-input').value,
         siteContactPhone: document.getElementById('site-edit-contact-phone-input').value,
         accessNotes: document.getElementById('site-edit-access-notes-input').value,
+        monthlyBudget: document.getElementById('site-edit-budget-input').value,
       }, currentActorId());
       if (!result.ok) {
         saveBtn.disabled = false;
