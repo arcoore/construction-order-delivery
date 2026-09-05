@@ -5,6 +5,7 @@ import {
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess, transferOwnership,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink, renameCommunity,
+  getApprovalThreshold, setApprovalThreshold,
   teamMemberships, suspendMember, restoreMember, removeMember,
   fetchMembershipEvents, getMembershipById,
 } from './community.js';
@@ -40,6 +41,9 @@ const teamActivityList = document.getElementById('owner-team-activity-list');
 const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
 const approvalToggle = document.getElementById('approval-required-toggle');
+const approvalThresholdInput = document.getElementById('approval-threshold-input');
+const approvalThresholdSaveBtn = document.getElementById('approval-threshold-save-btn');
+const approvalThresholdStatus = document.getElementById('approval-threshold-status');
 const sitesSummaryListEl = document.getElementById('owner-sites-summary-list');
 const newSiteBtn = document.getElementById('owner-new-site-btn');
 const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
@@ -234,7 +238,22 @@ manageSitesBtn.addEventListener('click', () => {
 
 function renderApprovalSetting(communityId) {
   approvalToggle.checked = isApprovalRequired(communityId);
+  if (document.activeElement !== approvalThresholdInput) {
+    const t = getApprovalThreshold(communityId);
+    approvalThresholdInput.value = t == null ? '' : t;
+  }
 }
+
+approvalThresholdSaveBtn.addEventListener('click', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  approvalThresholdSaveBtn.disabled = true;
+  const result = await setApprovalThreshold(communityId, approvalThresholdInput.value);
+  approvalThresholdSaveBtn.disabled = false;
+  approvalThresholdStatus.textContent = result.ok ? 'Saved.' : result.error;
+  approvalThresholdStatus.className = result.ok ? 'form-status success' : 'form-status error';
+  setTimeout(() => { approvalThresholdStatus.textContent = ''; }, 3000);
+});
 
 // --- Roadmap Step 5: Owner setup checklist -----------------------------
 // Every item is a live boolean derived from data this file (and sites.js)
@@ -689,7 +708,8 @@ function renderOrderDetail(order) {
 
   const peopleRows = [
     order.requestedBy ? `<p class="hint"><strong>Requested by</strong> ${order.requestedBy}</p>` : '',
-    order.approvedBy ? `<p class="hint"><strong>Approved by</strong> ${order.approvedBy}</p>` : '',
+    order.approvedBy ? `<p class="hint"><strong>${order.secondApprovedBy ? 'First approval' : 'Approved by'}</strong> ${order.approvedBy}</p>` : '',
+    order.secondApprovedBy ? `<p class="hint"><strong>Second approval</strong> ${order.secondApprovedBy}</p>` : '',
     order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${order.rejectedBy}${order.rejectionReason ? ` — ${order.rejectionReason}` : ''}</p>` : '',
     order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${order.purchasedBy}</p>` : '',
     order.driver ? `<p class="hint"><strong>Driver</strong> ${order.driver}</p>` : '',
@@ -895,10 +915,28 @@ function renderOrderCard(order) {
         </div>
       `;
     } else {
+      // Two-stage threshold approval (migration 0034).
+      const firstDone = order.needsSecondApproval && order.approvedById;
+      const iGaveFirst = firstDone && order.approvedById === currentOwnerId();
+      let approveLabel = 'Approve';
+      let approveDisabled = '';
+      let note = '';
+      if (order.needsSecondApproval && !order.approvedById) {
+        note = '<p class="hint small-hint">This order is over the approval threshold — it needs two different owners to approve.</p>';
+        approveLabel = 'Approve (1 of 2)';
+      } else if (iGaveFirst) {
+        note = '<p class="hint small-hint">You gave the first approval — a second owner must give the other.</p>';
+        approveLabel = 'Approve';
+        approveDisabled = 'disabled';
+      } else if (firstDone) {
+        note = `<p class="hint small-hint">${order.approvedBy || 'Another owner'} approved this — it needs your approval too.</p>`;
+        approveLabel = 'Approve (2 of 2)';
+      }
       actionHtml = `
+        ${note}
         <div class="owner-actions">
           <button class="btn btn-secondary" data-action="reject" data-id="${order.id}">Reject</button>
-          <button class="btn btn-primary" data-action="approve" data-id="${order.id}">Approve</button>
+          <button class="btn btn-primary" data-action="approve" data-id="${order.id}" ${approveDisabled}>${approveLabel}</button>
         </div>
       `;
     }

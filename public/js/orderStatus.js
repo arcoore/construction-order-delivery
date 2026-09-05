@@ -115,6 +115,11 @@ export function nextActionFor(order, role, options = {}) {
 
   switch (order.status) {
     case 'pending_approval':
+      // Two-stage threshold approval (migration 0034): first approval given,
+      // waiting on a second, different owner.
+      if (order.needsSecondApproval && order.approvedById) {
+        return role === 'owner' ? 'A second owner’s approval needed' : 'Waiting for a second owner’s approval';
+      }
       return role === 'owner' ? 'Your approval needed' : 'Waiting for owner approval';
     case 'pending_purchase':
       return role === 'buyer' ? 'Ready to purchase' : 'Waiting for a buyer';
@@ -186,7 +191,12 @@ export function urgencyComparator(a, b) {
 // history toggle read from, instead of two independently-maintained copies.
 export const EVENT_RENDER = {
   order_created: (e, label) => ({ icon: '📝', text: `${e.actorName || 'Someone'} requested ${label}` }),
-  approved: (e, label) => ({ icon: '✅', text: `${e.actorName || 'Owner'} approved ${label}` }),
+  approved: (e, label) => {
+    const stage = e.meta?.stage;
+    if (stage === 'first') return { icon: '✅', text: `${e.actorName || 'An owner'} gave the first approval for ${label}` };
+    if (stage === 'second') return { icon: '✅', text: `${e.actorName || 'An owner'} gave the second approval for ${label}` };
+    return { icon: '✅', text: `${e.actorName || 'Owner'} approved ${label}` };
+  },
   rejected: (e, label) => ({ icon: '🚫', text: `${e.actorName || 'Owner'} rejected ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
   approval_reverted: (e, label) => ({ icon: '↩️', text: `${e.actorName || 'Owner'} reverted the decision on ${label}` }),
   purchase_started: (e, label) => ({ icon: '🛒', text: `${e.actorName || 'A buyer'} started purchasing ${label}` }),

@@ -110,6 +110,7 @@ function mapCommunity(r) {
     ownerId: r.owner_id,
     requireOwnerApproval: r.require_owner_approval,
     discoverable: r.discoverable,
+    approvalThreshold: r.approval_threshold,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
@@ -687,6 +688,29 @@ export function isApprovalRequired(communityId) {
 export async function setApprovalRequired(communityId, required) {
   const { data, error } = await supabase.from('communities')
     .update({ require_owner_approval: !!required })
+    .eq('id', communityId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const idx = cache.communities.findIndex(c => c.id === communityId);
+  if (idx !== -1) cache.communities[idx] = mapCommunity(data);
+  notify();
+  return { ok: true };
+}
+
+export function getApprovalThreshold(communityId) {
+  const community = cache.communities.find(c => c.id === communityId);
+  return community ? community.approvalThreshold : null;
+}
+
+// Two-stage approval (migration 0034). '' / null / non-positive -> no
+// threshold (single approval). Same plain owner-only client UPDATE pattern
+// as setApprovalRequired/setDiscoverable.
+export async function setApprovalThreshold(communityId, value) {
+  const n = value === '' || value === null || value === undefined ? null : Number(value);
+  const threshold = Number.isFinite(n) && n > 0 ? n : null;
+  const { data, error } = await supabase.from('communities')
+    .update({ approval_threshold: threshold })
     .eq('id', communityId)
     .select()
     .single();

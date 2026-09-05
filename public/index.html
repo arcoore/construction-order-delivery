@@ -278,6 +278,13 @@
         <span>Require owner approval before new orders go to a buyer</span>
       </label>
       <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool — existing orders keep whatever setting applied when they were created.</p>
+      <label class="field-label" for="approval-threshold-input">Require a second approval for orders over &pound; (blank = never)</label>
+      <div class="invite-link-row">
+        <input type="number" id="approval-threshold-input" class="text-input" min="0" step="1" placeholder="e.g. 1000" />
+        <button type="button" class="btn btn-secondary" id="approval-threshold-save-btn">Save</button>
+      </div>
+      <p id="approval-threshold-status" class="form-status" aria-live="polite"></p>
+      <p class="hint small-hint">Only applies while owner approval is on. An order above this amount needs two different owners to approve it before it reaches a buyer.</p>
     </div>
 
     <div class="panel" id="owner-people-panel" hidden>

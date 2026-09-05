@@ -125,6 +125,12 @@ function mapOrderRow(r) {
     approvedById: r.approved_by_id,
     approvedBy: r.approved_by,
     approvedAt: r.approved_at ? new Date(r.approved_at).getTime() : null,
+    // Two-stage threshold approval (migration 0034). needsSecondApproval is
+    // snapshotted at creation and recomputed on every item edit.
+    needsSecondApproval: r.needs_second_approval,
+    secondApprovedById: r.second_approved_by_id,
+    secondApprovedBy: r.second_approved_by,
+    secondApprovedAt: r.second_approved_at ? new Date(r.second_approved_at).getTime() : null,
     rejectedById: r.rejected_by_id,
     rejectedBy: r.rejected_by,
     rejectedAt: r.rejected_at ? new Date(r.rejected_at).getTime() : null,
