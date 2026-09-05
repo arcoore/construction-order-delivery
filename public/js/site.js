@@ -1312,7 +1312,10 @@ function renderSiteOrders() {
       ${o.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${cancellationStateHint(o)}
-      ${isOwn ? `<div class="order-card-links">${renderHistoryToggle(o)}<button type="button" class="link-btn" data-open-messages="${o.id}">Messages${getMessageCountForOrder(o.id) ? ` (${getMessageCountForOrder(o.id)})` : ''}</button></div>` : ''}
+      <div class="order-card-links">
+        ${isOwn ? renderHistoryToggle(o) : ''}
+        <button type="button" class="link-btn" data-open-messages="${o.id}">Messages${getMessageCountForOrder(o.id) ? ` (${getMessageCountForOrder(o.id)})` : ''}</button>
+      </div>
       ${isOwn && expandedHistoryIds.has(o.id) ? renderOrderHistory(o) : ''}
       ${renderWorkerActions(o)}
     </div>
