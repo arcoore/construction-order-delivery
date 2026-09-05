@@ -18,6 +18,8 @@ let activeTab = 'available';
 let latestOrders = [];
 let cancellingId = null;
 let deliveringId = null;
+let completedShowAll = false;
+const COMPLETED_PAGE = 25;
 
 // YYYY-MM-DDTHH:mm in local time, for a datetime-local input's default value.
 function nowForDateTimeInput() {
@@ -73,6 +75,7 @@ tabsEl.addEventListener('click', e => {
   activeTab = btn.dataset.tab;
   cancellingId = null;
   deliveringId = null;
+  completedShowAll = false;
   tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
   render();
 });
@@ -137,6 +140,7 @@ function render() {
   const communityId = getActiveCommunityId();
   const orders = latestOrders.filter(o => o.communityId === communityId);
   let filtered;
+  let completedRemaining = 0;
   if (activeTab === 'available') {
     // direct_supplier orders never enter the driver pool at all — the
     // merchant delivers straight to site, so there is no leg for a driver
@@ -149,10 +153,11 @@ function render() {
   } else {
     // Completed: most recently delivered first, capped so a long-serving
     // driver's history stays a glance, not an endless scroll.
-    filtered = orders
+    const done = orders
       .filter(o => o.status === 'delivered' && o.driverId === currentDriverId())
-      .sort((a, b) => (b.deliveredAt || 0) - (a.deliveredAt || 0))
-      .slice(0, 25);
+      .sort((a, b) => (b.deliveredAt || 0) - (a.deliveredAt || 0));
+    filtered = completedShowAll ? done : done.slice(0, COMPLETED_PAGE);
+    completedRemaining = done.length - filtered.length;
   }
 
   if (filtered.length === 0) {
@@ -192,7 +197,13 @@ function render() {
     ? '<p class="empty-hint">Set your current location above to sort these by distance.</p>'
     : '';
 
-  listEl.innerHTML = locationHint + withDistance.map(({ order, pickup }) => renderOrderCard(order, pickup)).join('');
+  const showMoreHtml = completedRemaining > 0
+    ? `<button type="button" class="link-btn list-show-more" id="completed-show-more">Show ${completedRemaining} older</button>`
+    : '';
+  listEl.innerHTML = locationHint + withDistance.map(({ order, pickup }) => renderOrderCard(order, pickup)).join('') + showMoreHtml;
+
+  const completedShowMore = document.getElementById('completed-show-more');
+  if (completedShowMore) completedShowMore.addEventListener('click', () => { completedShowAll = true; render(); });
 
   listEl.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => handleAction(btn.dataset.action, btn.dataset.id));
@@ -393,6 +404,7 @@ export function refreshDriverView() {
   activeTab = 'available';
   cancellingId = null;
   deliveringId = null;
+  completedShowAll = false;
   tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'available'));
   render();
 }

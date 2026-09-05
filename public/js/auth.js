@@ -113,11 +113,12 @@ export async function createAccount(email, password, displayName, defaultRole) {
   });
   if (error) return { error: friendlyAuthError(error) };
   // Local dev has email confirmations disabled, so signUp returns a real
-  // session immediately — if a real cloud project later requires
-  // confirmation, `data.session` comes back null here and this would need
-  // a "check your email" state. Not built yet; not needed locally.
+  // session immediately. If a cloud project has confirmations ON, `data.session`
+  // comes back null and the user must click a link in their inbox before they
+  // can log in — a normal, non-error outcome the caller shows as an info state,
+  // not a red error (see authView.js).
   if (!data.session) {
-    return { error: 'Account created — check your email to confirm before logging in.' };
+    return { needsConfirmation: true, message: 'Account created. Check your email for a confirmation link, then log in.' };
   }
   currentSession = data.session;
   notify();

@@ -190,6 +190,15 @@ registerForm.addEventListener('submit', async e => {
       setStatus(registerStatus, result.error, 'error');
       return;
     }
+    if (result.needsConfirmation) {
+      // Cloud project with email confirmation on — no session yet. Send them
+      // to the login form with an info (not error) message.
+      showAuthForm('login');
+      authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
+      setStatus(loginStatus, result.message, 'success');
+      registerStatus.textContent = '';
+      return;
+    }
     loggedIn();
   } catch (err) {
     setStatus(registerStatus, 'Could not reach the server. Check your connection and try again.', 'error');

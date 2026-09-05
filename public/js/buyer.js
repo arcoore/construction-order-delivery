@@ -259,18 +259,20 @@ function renderDirectDeliveries() {
 // current Buyer, newest-purchase first, capped so it stays a glance not a
 // ledger. Collapsed by default (native <details>), so it never competes
 // with the work queue above it.
-const MY_PURCHASES_LIMIT = 20;
+const MY_PURCHASES_PAGE = 20;
+let myPurchasesShowAll = false;
 
 function renderMyPurchases() {
   const userId = getCurrentUserId();
   const communityId = getActiveCommunityId();
-  const mine = latestOrders
+  const all = latestOrders
     .filter(o => o.communityId === communityId && o.purchasedById === userId && o.purchasedAt)
-    .sort((a, b) => b.purchasedAt - a.purchasedAt)
-    .slice(0, MY_PURCHASES_LIMIT);
+    .sort((a, b) => b.purchasedAt - a.purchasedAt);
+  const mine = myPurchasesShowAll ? all : all.slice(0, MY_PURCHASES_PAGE);
+  const remaining = all.length - mine.length;
 
-  myPurchasesPanel.hidden = mine.length === 0;
-  if (mine.length === 0) return;
+  myPurchasesPanel.hidden = all.length === 0;
+  if (all.length === 0) return;
 
   myPurchasesList.innerHTML = mine.map(o => `
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
@@ -281,7 +283,12 @@ function renderMyPurchases() {
       </div>
       <span class="status-badge status-${o.status}">${statusLabel(o.status, 'buyer', o.deliveryMethod)}</span>
     </div>
-  `).join('');
+  `).join('') + (remaining > 0
+    ? `<button type="button" class="link-btn list-show-more" id="my-purchases-show-more">Show ${remaining} older</button>`
+    : '');
+
+  const showMore = document.getElementById('my-purchases-show-more');
+  if (showMore) showMore.addEventListener('click', () => { myPurchasesShowAll = true; renderMyPurchases(); });
 }
 
 let directDeliveryInFlight = false;
@@ -652,6 +659,7 @@ export async function refreshBuyerView(orderId = null) {
   await releaseHoldIfAny();
   decidingRequestId = null;
   decidingAction = null;
+  myPurchasesShowAll = false;
   const target = orderId && latestOrders.find(o => o.id === orderId && o.status === 'pending_purchase');
   if (target && visibleToCurrentBuyer(target)) {
     showDetail(orderId);

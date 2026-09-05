@@ -865,7 +865,7 @@ function renderNotifList() {
       <button type="button" class="notif-row-toggle" data-notif-toggle="${n.id}" title="${n.read ? 'Mark as unread' : 'Mark as read'}">${n.read ? '○' : '●'}</button>
     </div>
   `).join('') + (remaining > 0
-    ? `<button type="button" class="link-btn notif-show-more" id="notif-show-more">Show ${remaining} older</button>`
+    ? `<button type="button" class="link-btn list-show-more" id="notif-show-more">Show ${remaining} older</button>`
     : '');
 
   const showMoreBtn = document.getElementById('notif-show-more');
