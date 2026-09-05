@@ -302,6 +302,8 @@ function renderOrderCard(order, pickup) {
           <span class="route-value">${order.siteName || order.deliveryPostcode}</span>
           ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
           ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${order.siteDeliveryInstructions}</span>` : ''}
+          ${order.siteAccessNotes ? `<span class="route-sub">🔑 ${order.siteAccessNotes}</span>` : ''}
+          ${order.siteContactName || order.siteContactPhone ? `<span class="route-sub">📞 ${[order.siteContactName, order.siteContactPhone && `<a href="tel:${order.siteContactPhone.replace(/[^\d+]/g, '')}">${order.siteContactPhone}</a>`].filter(Boolean).join(' · ')}</span>` : ''}
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
           ${mapsLink([order.siteAddress, order.sitePostcode].filter(Boolean).join(', ') || order.deliveryPostcode, 'Open delivery in Maps')}
         </div>

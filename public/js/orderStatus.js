@@ -181,7 +181,7 @@ export const EVENT_RENDER = {
     // without knowing "today" relative to when the diff is being read, so
     // this summary line intentionally stays as simple as siteId/stockistId
     // already are.
-    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
+    const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'siteContactName', 'siteContactPhone', 'siteAccessNotes', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
     const parts = Object.entries(changes)
       .filter(([field]) => !skip.has(field) && field !== 'items')
       .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);

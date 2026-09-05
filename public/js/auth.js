@@ -210,6 +210,32 @@ export async function completePasswordReset(newPassword) {
   return { ok: true };
 }
 
+// Self-service display-name change (product-audit gap fix). display_name
+// lives in two places that must stay in sync: the session's own
+// user_metadata (what getCurrentDisplayName reads for the current user) and
+// the profiles row (what everyone else's identity.js resolveDisplayName
+// reads). updateUser writes the first (and returns the updated user, set on
+// currentSession directly here the same way login()/createAccount() do, so
+// the change is visible on the very next render without waiting for the
+// USER_UPDATED event); the profiles UPDATE — allowed by the
+// profiles_update_own RLS policy (0009) — writes the second. auth.uid(),
+// the only thing any permission check depends on, never changes.
+export async function updateDisplayName(newName) {
+  newName = (newName || '').trim();
+  if (!newName) return { error: 'Please enter a display name.' };
+  if (newName.length > 60) return { error: 'That name is too long (60 characters max).' };
+  const { data, error } = await supabase.auth.updateUser({ data: { display_name: newName } });
+  if (error) return { error: friendlyAuthError(error) };
+  if (data?.user && currentSession) currentSession = { ...currentSession, user: data.user };
+  const uid = currentSession?.user?.id;
+  if (uid) {
+    const { error: profileError } = await supabase.from('profiles').update({ display_name: newName }).eq('id', uid);
+    if (profileError) return { error: profileError.message };
+  }
+  notify();
+  return { ok: true };
+}
+
 // Self-service email change (product-audit gap fix). Supabase Auth's own
 // secure-email-change flow: updateUser({ email }) sends a confirmation link
 // to the NEW address (and, depending on the project's Auth settings, also

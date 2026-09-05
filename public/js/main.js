@@ -5,7 +5,7 @@ import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount, requestEmailChange } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
 import { getInitials, timeAgo } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -70,6 +70,7 @@ const profileBackBtn = document.getElementById('profile-back-btn');
 const profileDetails = document.getElementById('profile-details');
 let confirmingDeleteAccount = false;
 let changingEmail = false;
+let changingName = false;
 const communityCircleBtn = document.getElementById('community-circle-btn');
 const accountCircleBtn = document.getElementById('account-circle-btn');
 const accountMenu = document.getElementById('account-menu');
@@ -229,6 +230,18 @@ async function showProfile() {
     <div class="profile-field">
       <span class="profile-label">Display name</span>
       <span class="profile-value">${displayName || '—'}</span>
+      ${changingName ? `
+        <div class="reject-form">
+          <label class="field-label" for="change-name-input">New display name</label>
+          <input type="text" id="change-name-input" class="text-input" maxlength="60" value="${displayName || ''}" />
+          <p class="hint small-hint">This is how your name shows on orders and team lists. It's cosmetic only — it never changes your access.</p>
+          <div class="reject-form-actions">
+            <button class="btn btn-secondary" id="change-name-cancel-btn">Cancel</button>
+            <button class="btn btn-primary" id="change-name-confirm-btn">Save</button>
+          </div>
+          <p id="change-name-status" class="form-status"></p>
+        </div>
+      ` : `<button type="button" class="link-btn" id="profile-change-name-btn">Change name</button>`}
     </div>
     ${account ? `
       <div class="profile-field">
@@ -298,6 +311,38 @@ async function showProfile() {
   document.getElementById('profile-logout-btn').addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('sitestock:logout'));
   });
+
+  const changeNameStartBtn = document.getElementById('profile-change-name-btn');
+  if (changeNameStartBtn) {
+    changeNameStartBtn.addEventListener('click', () => {
+      changingName = true;
+      showProfile();
+    });
+  }
+  const changeNameCancelBtn = document.getElementById('change-name-cancel-btn');
+  if (changeNameCancelBtn) {
+    changeNameCancelBtn.addEventListener('click', () => {
+      changingName = false;
+      showProfile();
+    });
+  }
+  const changeNameConfirmBtn = document.getElementById('change-name-confirm-btn');
+  if (changeNameConfirmBtn) {
+    changeNameConfirmBtn.addEventListener('click', async () => {
+      const input = document.getElementById('change-name-input');
+      const statusEl = document.getElementById('change-name-status');
+      changeNameConfirmBtn.disabled = true;
+      const result = await updateDisplayName(input.value);
+      if (result.error) {
+        changeNameConfirmBtn.disabled = false;
+        statusEl.textContent = result.error;
+        statusEl.className = 'form-status error';
+        return;
+      }
+      changingName = false;
+      showProfile();
+    });
+  }
 
   const changeEmailStartBtn = document.getElementById('profile-change-email-btn');
   if (changeEmailStartBtn) {

@@ -90,6 +90,11 @@ function mapOrderRow(r) {
     siteAddress: r.site_address,
     sitePostcode: r.site_postcode,
     siteDeliveryInstructions: r.site_delivery_instructions,
+    // Point-in-time site contact snapshot (migration 0031) — for the driver
+    // collecting/delivering; never re-read live from the site record.
+    siteContactName: r.site_contact_name,
+    siteContactPhone: r.site_contact_phone,
+    siteAccessNotes: r.site_access_notes,
     // Multi-item (migration 0030): productName/variant are now the
     // denormalised HEADLINE (first item, plus " + N more"). The real line
     // items live in `items` (attached separately — see attachItems). unit,
