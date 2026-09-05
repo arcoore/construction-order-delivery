@@ -6,6 +6,7 @@ import {
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink, renameCommunity,
   teamMemberships, suspendMember, restoreMember, removeMember,
+  fetchMembershipEvents, getMembershipById,
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
@@ -34,6 +35,8 @@ const buyerRequestsPanel = document.getElementById('owner-buyer-requests-panel')
 const buyerRequestsList = document.getElementById('owner-buyer-requests-list');
 const teamPanel = document.getElementById('owner-team-panel');
 const teamList = document.getElementById('owner-team-list');
+const teamActivityDetails = document.getElementById('owner-team-activity');
+const teamActivityList = document.getElementById('owner-team-activity-list');
 const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
 const approvalToggle = document.getElementById('approval-required-toggle');
@@ -560,6 +563,44 @@ function renderTeam(communityId) {
       render();
     });
   });
+
+  renderTeamActivity(communityId);
+}
+
+const TEAM_EVENT_TEXT = {
+  member_suspended: (who, by, reason) => `${by} suspended ${who}${reason ? ` — ${reason}` : ''}`,
+  member_restored: (who, by) => `${by} restored ${who}`,
+  member_removed: (who, by, reason) => `${by} removed ${who} from the company${reason ? ` — ${reason}` : ''}`,
+  member_left: who => `${who} left the company`,
+  member_rerequested: who => `${who} asked to rejoin`,
+};
+
+// One-shot async render of the workforce-lifecycle audit trail. Runs
+// alongside renderTeam (owner-only, already gated). A fetch failure just
+// leaves the section empty — it's a read-only history, never load-bearing.
+async function renderTeamActivity(communityId) {
+  if (!teamActivityDetails) return;
+  const events = await fetchMembershipEvents(communityId);
+  // The owner may have switched community while the fetch was in flight.
+  if (getActiveCommunityId() !== communityId) return;
+  if (events.length === 0) {
+    teamActivityDetails.hidden = true;
+    return;
+  }
+  teamActivityDetails.hidden = false;
+  teamActivityList.innerHTML = events.map(e => {
+    const membership = getMembershipById(e.membershipId);
+    const who = membership ? resolveDisplayName(membership.userId) : 'a member';
+    const by = e.actorName || 'An owner';
+    const fn = TEAM_EVENT_TEXT[e.type];
+    const text = fn ? fn(who, by, e.reason) : `${e.type.replace(/_/g, ' ')} — ${who}`;
+    return `
+      <div class="activity-item">
+        <span class="activity-icon" aria-hidden="true">👥</span>
+        <span class="activity-text">${text}</span>
+        <span class="activity-time">${timeAgo(e.createdAt)}</span>
+      </div>`;
+  }).join('');
 }
 
 function render() {

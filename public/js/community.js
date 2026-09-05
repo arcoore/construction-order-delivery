@@ -216,6 +216,47 @@ export function getJoinRequests() {
   return cache.memberships;
 }
 
+export function getMembershipById(id) {
+  return cache.memberships.find(m => m.id === id) || null;
+}
+
+// Lazy one-shot read of the workforce-lifecycle audit trail
+// (community_membership_events, migration 0023 — RLS lets an owner or the
+// member themself read it). Deliberately NOT part of the synchronous cache
+// facade: it's a rarely-opened audit log, not render-hot data, so it's
+// fetched on demand when the owner opens the Team activity view rather than
+// kept warm on every cache refresh.
+function mapMembershipEvent(r) {
+  return {
+    id: r.id,
+    membershipId: r.membership_id,
+    communityId: r.community_id,
+    type: r.type,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    fromStatus: r.from_status,
+    toStatus: r.to_status,
+    reason: r.reason,
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+
+export async function fetchMembershipEvents(communityId, limit = 50) {
+  const { data, error } = await supabase
+    .from('community_membership_events')
+    .select('*')
+    .eq('community_id', communityId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  const ids = [...new Set(data.map(e => e.actor_id).filter(Boolean))];
+  if (ids.length) {
+    const { data: profiles } = await supabase.from('profiles').select('id, display_name').in('id', ids);
+    if (profiles) primeProfiles(profiles);
+  }
+  return data.map(mapMembershipEvent);
+}
+
 export function eligibleRoles(communityId, userId) {
   const roles = [];
   if (isOwner(communityId, userId)) roles.push('owner');
