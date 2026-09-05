@@ -13,7 +13,7 @@
 -- a verification count as anon would fail with a permission error before it
 -- ever got the chance to prove anything about row counts.
 begin;
-select plan(22);
+select plan(26);
 
 -- ================================================================
 -- Fixtures (still privileged/superuser — no role switch yet)
@@ -209,6 +209,41 @@ select throws_ok(
   $$ select request_join_by_invite_code('S5PRIV') $$,
   '42501', null,
   'item 22: anon cannot execute request_join_by_invite_code at all (no EXECUTE grant)'
+);
+
+-- ================================================================
+-- items 23-25: company rename rides the same communities_update_owner_only
+-- RLS policy — the owner can rename, a non-owner's UPDATE silently affects
+-- zero rows (same RLS-denial shape as the discoverable toggle above).
+-- ================================================================
+select tests.authenticate_as(:'owner_id');
+update communities set name = 'Renamed Private Co' where id = :'private_id';
+select is(
+  (select name from communities where id = :'private_id'),
+  'Renamed Private Co',
+  'item 23: the owner CAN rename their company'
+);
+
+select tests.authenticate_as(:'approved_id');
+update communities set name = 'Hijacked Co' where id = :'private_id';
+select tests.authenticate_as(:'owner_id');
+select is(
+  (select name from communities where id = :'private_id'),
+  'Renamed Private Co',
+  'item 24: a non-owner (approved member) CANNOT rename the company — value unchanged by their attempt'
+);
+
+select tests.clear_authentication();
+select throws_ok(
+  format($$ update communities set name = 'Anon Co' where id = %L $$, :'private_id'),
+  '42501', null,
+  'item 25: anon cannot rename the company either (no UPDATE grant on communities for anon)'
+);
+select tests.authenticate_as(:'owner_id');
+select is(
+  (select name from communities where id = :'private_id'),
+  'Renamed Private Co',
+  'item 25b: the company name is still unchanged after the anon attempt'
 );
 
 select finish();

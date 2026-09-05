@@ -656,6 +656,27 @@ export async function setApprovalRequired(communityId, required) {
   return { ok: true };
 }
 
+// Owner-settable company rename. Same plain client-update pattern as
+// setApprovalRequired/setDiscoverable — communities_update_owner_only RLS
+// already scopes every UPDATE on this table to is_owner, so no RPC is
+// needed for a single owner-editable column. Past orders/notifications
+// snapshot the name at the time they were written and are never rewritten.
+export async function renameCommunity(communityId, name) {
+  name = (name || '').trim();
+  if (!name) return { ok: false, error: 'Company name cannot be empty.' };
+  if (name.length > 80) return { ok: false, error: 'That name is too long (80 characters max).' };
+  const { data, error } = await supabase.from('communities')
+    .update({ name })
+    .eq('id', communityId)
+    .select()
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const idx = cache.communities.findIndex(c => c.id === communityId);
+  if (idx !== -1) cache.communities[idx] = mapCommunity(data);
+  notify();
+  return { ok: true };
+}
+
 export function getBuyerGrants() {
   return cache.buyerGrants;
 }

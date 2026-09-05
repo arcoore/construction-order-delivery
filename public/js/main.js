@@ -818,6 +818,17 @@ subscribeCommunities(() => {
   if (role && !eligibleRoles(community.id, userId).includes(role)) {
     setActiveRole(null);
     showRoleSelect();
+    return;
+  }
+
+  // Keep the topbar in sync with a live company-cache change that isn't a
+  // navigation — e.g. the owner renaming the company from Company settings,
+  // or a rename arriving via Realtime. showRoleView/showRoleSelect set these
+  // on view entry; this covers the "already on the page" case.
+  if (!sessionBar.hidden) {
+    const displayName = getCurrentDisplayName();
+    communityIndicator.textContent = `${community.name} — ${displayName}`;
+    communityCircleBtn.textContent = getInitials(community.name);
   }
 });
 

@@ -250,6 +250,14 @@
     <div class="panel" id="owner-invite-panel">
       <h2>Company settings</h2>
 
+      <h3 class="settings-subhead">Company name</h3>
+      <div class="invite-link-row">
+        <input type="text" id="owner-company-name-input" class="text-input" maxlength="80" />
+        <button type="button" class="btn btn-secondary" id="owner-rename-company-btn">Save name</button>
+      </div>
+      <p id="owner-rename-company-status" class="form-status" aria-live="polite"></p>
+      <p class="hint small-hint">Renaming only changes how the company shows now — it never rewrites the name on past orders or notifications.</p>
+
       <h3 class="settings-subhead">Invite people</h3>
       <p class="hint">Share this link or code with your team — they'll still need your approval before they can see anything.</p>
       <div class="invite-link-row">

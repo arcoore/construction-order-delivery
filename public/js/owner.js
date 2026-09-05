@@ -4,7 +4,7 @@ import {
   getActiveCommunityId, getActiveCommunity, getJoinRequests, decideJoinRequest, subscribeCommunities,
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess, transferOwnership,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
-  isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink,
+  isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink, renameCommunity,
   teamMemberships, suspendMember, restoreMember, removeMember,
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
@@ -43,6 +43,9 @@ const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
 const setupChecklistPanel = document.getElementById('owner-setup-checklist-panel');
 const setupChecklistList = document.getElementById('owner-setup-checklist-list');
 const invitePanel = document.getElementById('owner-invite-panel');
+const companyNameInput = document.getElementById('owner-company-name-input');
+const renameCompanyBtn = document.getElementById('owner-rename-company-btn');
+const renameCompanyStatus = document.getElementById('owner-rename-company-status');
 const inviteLinkInput = document.getElementById('owner-invite-link-input');
 const copyInviteLinkBtn = document.getElementById('owner-copy-invite-link-btn');
 const inviteCodeText = document.getElementById('owner-invite-code-text');
@@ -306,10 +309,31 @@ function handleChecklistCta(key) {
 function renderInvitePanel(communityId) {
   const community = getActiveCommunity();
   if (!community) return;
+  // Don't stomp on the field while the owner is mid-edit (a background
+  // re-render — realtime, tab switch — must not wipe what they're typing).
+  if (document.activeElement !== companyNameInput) companyNameInput.value = community.name;
   inviteLinkInput.value = buildInviteLink(community.code);
   inviteCodeText.textContent = community.code;
   discoverableToggle.checked = !!community.discoverable;
 }
+
+renameCompanyBtn.addEventListener('click', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  renameCompanyBtn.disabled = true;
+  renameCompanyStatus.textContent = '';
+  renameCompanyStatus.className = 'form-status';
+  const result = await renameCommunity(communityId, companyNameInput.value);
+  renameCompanyBtn.disabled = false;
+  if (!result.ok) {
+    renameCompanyStatus.textContent = result.error;
+    renameCompanyStatus.className = 'form-status error';
+    return;
+  }
+  renameCompanyStatus.textContent = 'Company name updated.';
+  renameCompanyStatus.className = 'form-status success';
+  setTimeout(() => { renameCompanyStatus.textContent = ''; }, 3000);
+});
 
 copyInviteLinkBtn.addEventListener('click', async () => {
   inviteLinkInput.select();

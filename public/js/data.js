@@ -10,7 +10,12 @@
 // well beyond the ordering flow.
 
 export function formatPrice(amount) {
-  return `£${amount.toFixed(2)}`;
+  // Null-safe on purpose: a few call sites render a price that can legitimately
+  // be absent (an order or line item whose unit price never got set), and a
+  // hard `null.toFixed()` crash there would take down the whole card. "—" is
+  // the same "no value" placeholder the rest of the UI uses.
+  if (amount == null || Number.isNaN(Number(amount))) return '—';
+  return `£${Number(amount).toFixed(2)}`;
 }
 
 const AVAILABILITY_OPTIONS = [
