@@ -842,6 +842,9 @@ function renderNotifBell() {
   if (!notifPanel.hidden) renderNotifList();
 }
 
+let notifShowAll = false;
+const NOTIF_PAGE = 30;
+
 function renderNotifList() {
   const userId = getCurrentUserId();
   const notifs = getNotificationsFor(userId);
@@ -849,7 +852,9 @@ function renderNotifList() {
     notifList.innerHTML = '<p class="empty-hint">No notifications yet.</p>';
     return;
   }
-  notifList.innerHTML = notifs.map(n => `
+  const shown = notifShowAll ? notifs : notifs.slice(0, NOTIF_PAGE);
+  const remaining = notifs.length - shown.length;
+  notifList.innerHTML = shown.map(n => `
     <div class="notif-row${!n.read ? ' notif-row-unread' : ''}">
       <span class="notif-row-icon" aria-hidden="true">${NOTIF_ICONS[n.type] || '🔔'}</span>
       <button type="button" class="notif-row-body" data-notif-open="${n.id}">
@@ -859,7 +864,12 @@ function renderNotifList() {
       </button>
       <button type="button" class="notif-row-toggle" data-notif-toggle="${n.id}" title="${n.read ? 'Mark as unread' : 'Mark as read'}">${n.read ? '○' : '●'}</button>
     </div>
-  `).join('');
+  `).join('') + (remaining > 0
+    ? `<button type="button" class="link-btn notif-show-more" id="notif-show-more">Show ${remaining} older</button>`
+    : '');
+
+  const showMoreBtn = document.getElementById('notif-show-more');
+  if (showMoreBtn) showMoreBtn.addEventListener('click', () => { notifShowAll = true; renderNotifList(); });
 
   notifList.querySelectorAll('[data-notif-open]').forEach(btn => {
     btn.addEventListener('click', () => openNotification(btn.dataset.notifOpen));
@@ -932,7 +942,7 @@ notifBellBtn.addEventListener('click', e => {
   e.stopPropagation();
   accountMenu.hidden = true;
   notifPanel.hidden = !notifPanel.hidden;
-  if (!notifPanel.hidden) renderNotifList();
+  if (!notifPanel.hidden) { notifShowAll = false; renderNotifList(); }
 });
 
 notifPanel.addEventListener('click', e => e.stopPropagation());

@@ -292,6 +292,14 @@ body {
   border-bottom: none;
 }
 
+.notif-show-more {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
 .notif-row-unread {
   background: #fff7ef;
 }
