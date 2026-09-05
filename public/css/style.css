@@ -395,6 +395,22 @@ body {
   cursor: pointer;
 }
 
+/* --- Two-factor enrollment QR --- */
+.mfa-qr {
+  width: 180px;
+  max-width: 100%;
+  margin: 8px 0;
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.mfa-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .notif-row-unread {
   background: #fff7ef;
 }

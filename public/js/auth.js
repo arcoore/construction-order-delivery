@@ -53,8 +53,11 @@ export function inPasswordRecoveryContext() {
 
 // main.js's bootstrap awaits this before the first route happens — nothing
 // ever renders a role view off an unknown/uninitialized auth state.
-export const authReady = supabase.auth.getSession().then(({ data }) => {
+export const authReady = supabase.auth.getSession().then(async ({ data }) => {
   currentSession = data.session;
+  // A refresh mid-2FA-challenge (session is aal1, a verified factor exists)
+  // must re-gate — the JS flag doesn't survive a reload, the AAL does.
+  if (currentSession && await mfaLoginRequired()) mfaChallengePending = true;
   notify();
 });
 
@@ -91,8 +94,13 @@ export function isAuthenticated() {
 
 function friendlyAuthError(error) {
   const msg = (error && error.message) || 'Something went wrong.';
+  const code = error && error.code;
+  if (code === 'email_not_confirmed' || /email not confirmed/i.test(msg)) {
+    return 'Check your email and click the confirmation link before logging in.';
+  }
   if (/already registered|already exists/i.test(msg)) return 'That email is already registered.';
   if (/invalid login credentials/i.test(msg)) return 'Incorrect email or password.';
+  if (/invalid.*(totp|code)|mfa/i.test(msg)) return 'That code isn\'t right — check your authenticator app and try again.';
   if (/password.*(least|short)/i.test(msg)) return msg;
   return msg;
 }
@@ -131,13 +139,129 @@ export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: friendlyAuthError(error) };
   currentSession = data.session;
+
+  // Two-factor: if this account has a verified TOTP factor, the password
+  // only got us to aal1 — the app stays gated (mfaChallengePending) until
+  // verifyMfaLogin() steps the session up to aal2. main.js's routeFromTop()
+  // checks mfaChallengePending() before the authenticated check, exactly
+  // like the password-recovery gate.
+  if (await mfaLoginRequired()) {
+    mfaChallengePending = true;
+    notify();
+    return { mfaRequired: true };
+  }
   notify();
   return { account: accountFromSession(data.session) };
+}
+
+// --- Two-factor (TOTP) --------------------------------------------------
+// Supabase-native MFA (supabase.auth.mfa.*). Opt-in per account from the
+// Profile screen. Once a factor is verified, login requires the 6-digit
+// code (the client gate here + an aal2 re-check on the sensitive write
+// RPCs — migration 0040 — so a stolen password + a raw aal1 token still
+// can't place/approve orders or touch the company).
+let mfaChallengePending = false; // set true by login() when a 2nd factor is owed
+export function isMfaChallengePending() { return mfaChallengePending; }
+export function clearMfaChallenge() { mfaChallengePending = false; notify(); }
+
+async function currentAal() {
+  try {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    return data || { currentLevel: null, nextLevel: null };
+  } catch {
+    return { currentLevel: null, nextLevel: null };
+  }
+}
+
+// True when the session is authenticated but hasn't cleared the second
+// factor this login (aal1 now, aal2 expected).
+export async function mfaLoginRequired() {
+  if (!currentSession) return false;
+  const { currentLevel, nextLevel } = await currentAal();
+  return nextLevel === 'aal2' && currentLevel !== 'aal2';
+}
+
+async function verifiedTotpFactorId() {
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const totp = (data && data.totp) || [];
+    const verified = totp.find(f => f.status === 'verified') || totp[0];
+    return verified ? verified.id : null;
+  } catch {
+    return null;
+  }
+}
+
+// Whether the CURRENT user has 2FA switched on — for the Profile toggle.
+export async function getMfaEnabled() {
+  return !!(await verifiedTotpFactorId());
+}
+
+// Step 1 of turning 2FA on: enroll a TOTP factor and hand back the QR /
+// secret for the user to add to their authenticator app.
+export async function startMfaEnrollment() {
+  // Clear any stale unverified factor first so re-enrolling doesn't pile up.
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    for (const f of ((data && data.totp) || [])) {
+      if (f.status !== 'verified') await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
+  } catch { /* best effort */ }
+  const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'SiteStock' });
+  if (error) return { error: friendlyAuthError(error) };
+  return { factorId: data.id, qrSvg: data.totp.qr_code, secret: data.totp.secret };
+}
+
+// Step 2: the user types the 6-digit code from their app to confirm the
+// factor. On success 2FA is on and this session is now aal2.
+export async function confirmMfaEnrollment(factorId, code) {
+  code = (code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(code)) return { error: 'Enter the 6-digit code from your authenticator app.' };
+  const ch = await supabase.auth.mfa.challenge({ factorId });
+  if (ch.error) return { error: friendlyAuthError(ch.error) };
+  const { error } = await supabase.auth.mfa.verify({ factorId, challengeId: ch.data.id, code });
+  if (error) return { error: friendlyAuthError(error) };
+  mfaChallengePending = false;
+  notify();
+  return { ok: true };
+}
+
+// Login-time challenge: the user has 2FA and just entered their password.
+export async function verifyMfaLogin(code) {
+  code = (code || '').replace(/\s/g, '');
+  if (!/^\d{6}$/.test(code)) return { error: 'Enter the 6-digit code from your authenticator app.' };
+  const factorId = await verifiedTotpFactorId();
+  if (!factorId) { mfaChallengePending = false; notify(); return { ok: true }; }
+  const ch = await supabase.auth.mfa.challenge({ factorId });
+  if (ch.error) return { error: friendlyAuthError(ch.error) };
+  const { error } = await supabase.auth.mfa.verify({ factorId, challengeId: ch.data.id, code });
+  if (error) return { error: friendlyAuthError(error) };
+  mfaChallengePending = false;
+  notify();
+  return { ok: true };
+}
+
+// Turn 2FA off (unenroll every TOTP factor). Requires the current session
+// to already be aal2 — Supabase refuses unenroll otherwise, which is the
+// desired behaviour (you can't drop 2FA without passing it).
+export async function disableMfa() {
+  try {
+    const { data } = await supabase.auth.mfa.listFactors();
+    for (const f of ((data && data.totp) || [])) {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id });
+      if (error) return { error: friendlyAuthError(error) };
+    }
+  } catch (e) {
+    return { error: 'Could not turn 2FA off — try again.' };
+  }
+  notify();
+  return { ok: true };
 }
 
 export async function logout() {
   await supabase.auth.signOut();
   currentSession = null;
+  mfaChallengePending = false;
   notify();
 }
 

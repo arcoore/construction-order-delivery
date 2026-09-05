@@ -5,7 +5,7 @@ import { refreshOwnerView } from './owner.js';
 import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, isMfaChallengePending, getMfaEnabled, startMfaEnrollment, confirmMfaEnrollment, disableMfa, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
 import { getInitials, timeAgo, escapeHtml } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -73,6 +73,7 @@ const profileDetails = document.getElementById('profile-details');
 let confirmingDeleteAccount = false;
 let changingEmail = false;
 let changingName = false;
+let mfaEnrollment = null; // { factorId, qrSvg, secret } while turning 2FA on
 const communityCircleBtn = document.getElementById('community-circle-btn');
 const accountCircleBtn = document.getElementById('account-circle-btn');
 const accountMenu = document.getElementById('account-menu');
@@ -206,6 +207,7 @@ async function showProfile() {
   const account = getLoggedInAccount();
   const userId = getCurrentUserId();
   const displayName = getCurrentDisplayName();
+  const mfaOn = await getMfaEnabled();
 
   const memberships = myCommunities(userId).map(c => ({
     id: c.id,
@@ -266,6 +268,26 @@ async function showProfile() {
         <span class="profile-label">Account created</span>
         <span class="profile-value">${new Date(account.createdAt).toLocaleDateString()}</span>
       </div>
+      <div class="profile-field">
+        <span class="profile-label">Two-factor authentication</span>
+        <span class="profile-value">${mfaOn ? '✅ On — a code from your authenticator app is required at login' : 'Off'}</span>
+        ${mfaEnrollment ? `
+          <div class="reject-form">
+            <p class="hint small-hint">1. In your authenticator app (Google Authenticator, Authy, 1Password…), add an account and scan this QR code — or type the key manually.</p>
+            <div class="mfa-qr">${mfaEnrollment.qrSvg}</div>
+            <p class="hint small-hint">Setup key: <code>${escapeHtml(mfaEnrollment.secret)}</code></p>
+            <label class="field-label" for="mfa-enroll-code-input">2. Enter the 6-digit code it shows</label>
+            <input type="text" id="mfa-enroll-code-input" class="text-input" inputmode="numeric" maxlength="6" placeholder="123456" />
+            <div class="reject-form-actions">
+              <button class="btn btn-secondary" id="mfa-enroll-cancel-btn">Cancel</button>
+              <button class="btn btn-primary" id="mfa-enroll-confirm-btn">Turn on 2FA</button>
+            </div>
+            <p id="mfa-enroll-status" class="form-status"></p>
+          </div>
+        ` : (mfaOn
+          ? `<button type="button" class="link-btn link-btn-danger" id="mfa-disable-btn">Turn off 2FA</button><p id="mfa-status" class="form-status"></p>`
+          : `<button type="button" class="link-btn" id="mfa-enable-btn">Turn on 2FA</button><p id="mfa-status" class="form-status"></p>`)}
+      </div>
     ` : ''}
     <div class="profile-field">
       <span class="profile-label">Companies (${memberships.length})</span>
@@ -313,6 +335,55 @@ async function showProfile() {
   document.getElementById('profile-logout-btn').addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('sitestock:logout'));
   });
+
+  const mfaEnableBtn = document.getElementById('mfa-enable-btn');
+  if (mfaEnableBtn) {
+    mfaEnableBtn.addEventListener('click', async () => {
+      mfaEnableBtn.disabled = true;
+      const result = await startMfaEnrollment();
+      if (result.error) {
+        const s = document.getElementById('mfa-status');
+        if (s) { s.textContent = result.error; s.className = 'form-status error'; }
+        mfaEnableBtn.disabled = false;
+        return;
+      }
+      mfaEnrollment = result;
+      showProfile();
+    });
+  }
+  const mfaEnrollCancelBtn = document.getElementById('mfa-enroll-cancel-btn');
+  if (mfaEnrollCancelBtn) {
+    mfaEnrollCancelBtn.addEventListener('click', () => { mfaEnrollment = null; showProfile(); });
+  }
+  const mfaEnrollConfirmBtn = document.getElementById('mfa-enroll-confirm-btn');
+  if (mfaEnrollConfirmBtn) {
+    mfaEnrollConfirmBtn.addEventListener('click', async () => {
+      const input = document.getElementById('mfa-enroll-code-input');
+      const status = document.getElementById('mfa-enroll-status');
+      mfaEnrollConfirmBtn.disabled = true;
+      const result = await confirmMfaEnrollment(mfaEnrollment.factorId, input.value);
+      if (result.error) {
+        mfaEnrollConfirmBtn.disabled = false;
+        status.textContent = result.error;
+        status.className = 'form-status error';
+        input.select();
+        return;
+      }
+      mfaEnrollment = null;
+      showProfile();
+    });
+  }
+  const mfaDisableBtn = document.getElementById('mfa-disable-btn');
+  if (mfaDisableBtn) {
+    mfaDisableBtn.addEventListener('click', async () => {
+      if (!window.confirm('Turn off two-factor authentication? Your account will only be protected by your password.')) return;
+      mfaDisableBtn.disabled = true;
+      const result = await disableMfa();
+      const s = document.getElementById('mfa-status');
+      if (result.error && s) { s.textContent = result.error; s.className = 'form-status error'; mfaDisableBtn.disabled = false; return; }
+      showProfile();
+    });
+  }
 
   const changeNameStartBtn = document.getElementById('profile-change-name-btn');
   if (changeNameStartBtn) {
@@ -629,6 +700,13 @@ function routeFromTop() {
   // the authenticated check for exactly that reason — see auth.js's
   // inPasswordRecoveryContext header for the full race-condition rationale.
   if (inPasswordRecoveryContext()) {
+    showAuth();
+    return;
+  }
+  // Two-factor: password succeeded but the 6-digit code hasn't been entered
+  // this login (session is aal1, a verified factor exists). Same gate shape
+  // as password recovery — the auth view shows the code form.
+  if (isMfaChallengePending()) {
     showAuth();
     return;
   }

@@ -7,6 +7,7 @@
 import {
   createAccount, login, requestPasswordReset, completePasswordReset,
   inPasswordRecoveryContext, subscribeAuth,
+  isMfaChallengePending, verifyMfaLogin, logout,
 } from './auth.js';
 
 const authTabs = document.getElementById('auth-tabs');
@@ -25,6 +26,11 @@ const resetRequestSubmitBtn = document.getElementById('reset-request-submit-btn'
 const setNewPasswordForm = document.getElementById('set-new-password-form');
 const newPasswordStatus = document.getElementById('new-password-status');
 const newPasswordSubmitBtn = document.getElementById('new-password-submit-btn');
+const mfaChallengeForm = document.getElementById('mfa-challenge-form');
+const mfaChallengeInput = document.getElementById('mfa-challenge-input');
+const mfaChallengeStatus = document.getElementById('mfa-challenge-status');
+const mfaChallengeSubmitBtn = document.getElementById('mfa-challenge-submit-btn');
+const mfaChallengeCancelBtn = document.getElementById('mfa-challenge-cancel-btn');
 
 let selectedRegisterRole = null;
 
@@ -45,8 +51,40 @@ function showAuthForm(which) {
   registerForm.hidden = which !== 'register';
   resetRequestForm.hidden = which !== 'reset-request';
   setNewPasswordForm.hidden = which !== 'set-new-password';
-  authTabs.hidden = which === 'reset-request' || which === 'set-new-password';
+  mfaChallengeForm.hidden = which !== 'mfa-challenge';
+  authTabs.hidden = which === 'reset-request' || which === 'set-new-password' || which === 'mfa-challenge';
 }
+
+// A pending 2FA challenge (from login() or a mid-challenge page refresh)
+// replaces the login/register tabs with the code form — same "one-shot flow
+// the user didn't navigate to" treatment as the password-recovery forms.
+subscribeAuth(() => {
+  if (isMfaChallengePending()) {
+    mfaChallengeStatus.textContent = '';
+    showAuthForm('mfa-challenge');
+    mfaChallengeInput.focus();
+  }
+});
+
+mfaChallengeForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  mfaChallengeSubmitBtn.disabled = true;
+  setStatus(mfaChallengeStatus, 'Verifying…', '');
+  const result = await verifyMfaLogin(mfaChallengeInput.value);
+  mfaChallengeSubmitBtn.disabled = false;
+  if (result.error) {
+    setStatus(mfaChallengeStatus, result.error, 'error');
+    mfaChallengeInput.select();
+    return;
+  }
+  mfaChallengeInput.value = '';
+  loggedIn();
+});
+
+mfaChallengeCancelBtn.addEventListener('click', async () => {
+  await logout();
+  showAuthForm('login');
+});
 
 authTabs.addEventListener('click', e => {
   const btn = e.target.closest('.tab-btn');
@@ -87,6 +125,13 @@ loginForm.addEventListener('submit', async e => {
     const result = await login(email, password);
     if (result.error) {
       setStatus(loginStatus, result.error, 'error');
+      return;
+    }
+    if (result.mfaRequired) {
+      // login() flipped isMfaChallengePending(); the subscribeAuth handler
+      // above swaps in the code form. Just clear the login field state.
+      setStatus(loginStatus, '', '');
+      document.getElementById('login-password-input').value = '';
       return;
     }
     loggedIn();

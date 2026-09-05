@@ -104,6 +104,16 @@
         <p id="new-password-status" class="form-status"></p>
       </form>
 
+      <form id="mfa-challenge-form" class="auth-form" hidden>
+        <h2>Two-factor authentication</h2>
+        <p class="hint">Enter the 6-digit code from your authenticator app to finish signing in.</p>
+        <label class="field-label" for="mfa-challenge-input">Authentication code</label>
+        <input type="text" id="mfa-challenge-input" class="text-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
+        <button type="submit" class="btn btn-primary btn-block" id="mfa-challenge-submit-btn">Verify</button>
+        <button type="button" class="link-btn" id="mfa-challenge-cancel-btn">Cancel and sign out</button>
+        <p id="mfa-challenge-status" class="form-status"></p>
+      </form>
+
       <form id="register-form" class="auth-form" hidden>
         <label class="field-label" for="register-email-input">Email</label>
         <input type="email" id="register-email-input" class="text-input" autocomplete="email" />

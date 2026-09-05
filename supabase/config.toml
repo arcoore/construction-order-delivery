@@ -1,7 +1,5 @@
-# Minimal Supabase CLI project config — inert until the Supabase CLI is
-# actually installed and run against this directory. Written now so
-# `supabase/` is immediately usable once that happens; creates no
-# infrastructure by existing as a file.
+# Minimal Supabase CLI project config — the local `supabase` CLI stack reads
+# this and fills defaults for everything not set here.
 project_id = "sitestock"
 
 [db]
@@ -10,10 +8,27 @@ major_version = 15
 
 [auth]
 enabled = true
+# Confirmation / recovery links redirect here (the local dev server).
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 [auth.email]
 enable_signup = true
-enable_confirmations = false # revisit once real email delivery is configured
+# Account security (2026-09): a new account can't be used until the user
+# clicks the confirmation link emailed to them. Locally these emails land in
+# Inbucket (http://127.0.0.1:54324); on hosted this is the Supabase
+# dashboard's "Confirm email" toggle + a real SMTP/email provider.
+enable_confirmations = true
+
+[auth.mfa]
+max_enrolled_factors = 10
+
+# TOTP (authenticator-app) two-factor. Opt-in per account from the Profile
+# screen; once a verified factor exists, login requires the 6-digit code
+# (client gate + an aal2 check on the sensitive write RPCs — migration 0040).
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
 
 [api]
 enabled = true
