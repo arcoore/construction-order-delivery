@@ -8,7 +8,7 @@ import {
 } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
-import { urgencyComparator, itemsSummary, itemsShortSummary } from './orderStatus.js';
+import { urgencyComparator, itemsSummary, itemsShortSummary, statusLabel } from './orderStatus.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -19,6 +19,8 @@ const cancellationRequestsPanel = document.getElementById('buyer-cancellation-re
 const cancellationRequestsList = document.getElementById('buyer-cancellation-requests-list');
 const directDeliveriesPanel = document.getElementById('buyer-direct-deliveries-panel');
 const directDeliveriesList = document.getElementById('buyer-direct-deliveries-list');
+const myPurchasesPanel = document.getElementById('buyer-my-purchases-panel');
+const myPurchasesList = document.getElementById('buyer-my-purchases-list');
 
 const HOLD_MS = 3000;
 
@@ -249,6 +251,37 @@ function renderDirectDeliveries() {
   });
   const locationInput = directDeliveriesList.querySelector('#direct-delivery-location-input');
   if (locationInput) locationInput.focus();
+}
+
+// Read-only "what have I purchased" list — the Buyer's own purchase history,
+// which otherwise vanishes from their view the moment an order leaves
+// pending_purchase. No new data: every order where purchasedById is the
+// current Buyer, newest-purchase first, capped so it stays a glance not a
+// ledger. Collapsed by default (native <details>), so it never competes
+// with the work queue above it.
+const MY_PURCHASES_LIMIT = 20;
+
+function renderMyPurchases() {
+  const userId = getCurrentUserId();
+  const communityId = getActiveCommunityId();
+  const mine = latestOrders
+    .filter(o => o.communityId === communityId && o.purchasedById === userId && o.purchasedAt)
+    .sort((a, b) => b.purchasedAt - a.purchasedAt)
+    .slice(0, MY_PURCHASES_LIMIT);
+
+  myPurchasesPanel.hidden = mine.length === 0;
+  if (mine.length === 0) return;
+
+  myPurchasesList.innerHTML = mine.map(o => `
+    <div class="order-card status-${o.status}" data-order-id="${o.id}">
+      <div class="order-card-main">
+        <strong>${itemsShortSummary(o)}</strong>
+        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
+        <span class="result-meta">Purchased ${new Date(o.purchasedAt).toLocaleDateString()} &middot; from ${o.stockistName || 'Unknown'}</span>
+      </div>
+      <span class="status-badge status-${o.status}">${statusLabel(o.status, 'buyer', o.deliveryMethod)}</span>
+    </div>
+  `).join('');
 }
 
 let directDeliveryInFlight = false;
@@ -627,6 +660,8 @@ export async function refreshBuyerView(orderId = null) {
     if (orderId) highlightCancellationRequestForOrder(orderId);
   }
   renderCancellationRequests();
+  renderDirectDeliveries();
+  renderMyPurchases();
 }
 
 subscribe(orders => {
@@ -634,6 +669,7 @@ subscribe(orders => {
   render();
   renderCancellationRequests();
   renderDirectDeliveries();
+  renderMyPurchases();
 });
 
 subscribeCancellationRequests(renderCancellationRequests);
