@@ -24,6 +24,7 @@ import {
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
 import { refreshOrderCache } from './orderLifecycle.js';
+import { refreshMessageCache } from './orderMessages.js';
 import { refreshSupplierCache } from './suppliers.js';
 import { refreshProductsCache } from './products.js';
 import { startRealtimeForSession, stopRealtime } from './realtime.js';
@@ -40,7 +41,7 @@ import { startRealtimeForSession, stopRealtime } from './realtime.js';
 // grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
   try {
-    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache(), refreshSupplierCache(), refreshProductsCache()]);
+    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache(), refreshSupplierCache(), refreshProductsCache(), refreshMessageCache()]);
   } catch (err) {
     console.error('SiteStock: failed to refresh community/site/order/notification/supplier/product data', err);
   }

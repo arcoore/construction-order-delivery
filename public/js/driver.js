@@ -7,6 +7,8 @@ import { getCurrentUserId } from './identity.js';
 import { subscribe, claimDelivery, collectDelivery, deliverOrder, cancelDelivery } from './orderLifecycle.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
+import { renderOrderThread } from './orderThreadView.js';
+import { subscribeOrderMessages, getMessageCountForOrder } from './orderMessages.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -20,6 +22,8 @@ let cancellingId = null;
 let deliveringId = null;
 let completedShowAll = false;
 const COMPLETED_PAGE = 25;
+let threadOrderId = null;
+let threadDraft = '';
 
 // YYYY-MM-DDTHH:mm in local time, for a datetime-local input's default value.
 function nowForDateTimeInput() {
@@ -137,6 +141,10 @@ function currentDriverId() {
 }
 
 function render() {
+  // Capture an in-progress message draft before the list DOM is rebuilt.
+  const openInput = listEl.querySelector('.msg-input');
+  if (openInput) threadDraft = openInput.value;
+
   const communityId = getActiveCommunityId();
   const orders = latestOrders.filter(o => o.communityId === communityId);
   let filtered;
@@ -221,6 +229,19 @@ function render() {
       if (note) note.hidden = !cb.checked;
     });
   });
+
+  listEl.querySelectorAll('[data-toggle-thread]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.toggleThread;
+      threadOrderId = threadOrderId === id ? null : id;
+      render();
+    });
+  });
+  if (threadOrderId) {
+    const el = listEl.querySelector(`[data-thread-container="${threadOrderId}"]`);
+    if (el) renderOrderThread(el, threadOrderId, threadDraft);
+  }
+  threadDraft = '';
 }
 
 // A plain Google Maps "search" link — opens in the browser or hands off to
@@ -349,6 +370,10 @@ function renderOrderCard(order, pickup) {
         ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
       ${fulfilmentSummary(order) ? `<p class="hint small-hint">${fulfilmentSummary(order)}</p>` : ''}
       ${actionHtml}
+      <button type="button" class="link-btn" data-toggle-thread="${order.id}">
+        ${threadOrderId === order.id ? 'Hide messages' : `Messages${getMessageCountForOrder(order.id) ? ` (${getMessageCountForOrder(order.id)})` : ''}`}
+      </button>
+      ${threadOrderId === order.id ? `<div class="driver-thread" data-thread-container="${order.id}"></div>` : ''}
     </div>
   `;
 }
@@ -431,6 +456,7 @@ export function refreshDriverView() {
   cancellingId = null;
   deliveringId = null;
   completedShowAll = false;
+  threadOrderId = null;
   tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'available'));
   render();
 }
@@ -439,3 +465,5 @@ subscribe(orders => {
   latestOrders = orders;
   render();
 });
+
+subscribeOrderMessages(render);

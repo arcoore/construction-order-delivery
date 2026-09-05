@@ -10,7 +10,7 @@
 -- (breaking a live-freshness feature without anyone noticing) would both be
 -- real regressions this test catches on every future `db test`.
 begin;
-select plan(17);
+select plan(18);
 
 -- ================================================================
 -- items 1-10: every approved table is a real publication member
@@ -76,15 +76,21 @@ select ok(
   'item 13: notification_preferences is deliberately NOT a member of supabase_realtime'
 );
 
+-- order_messages (migration 0037) — a chat thread, live updates are the
+-- point, so unlike order_events it IS published.
+select ok(
+  exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'order_messages'),
+  'item 13b: order_messages IS a member of supabase_realtime'
+);
+
 -- ================================================================
--- item 14: exactly ten tables total — catches a member added under some
--- other name/schema that the eleven ok()/not-ok() checks above wouldn't
--- individually name-check for.
+-- item 14: exactly eleven tables total — catches a member added under some
+-- other name/schema that the name-checks above wouldn't individually catch.
 -- ================================================================
 select is(
   (select count(*)::int from pg_publication_tables where pubname = 'supabase_realtime'),
-  10,
-  'item 14: supabase_realtime has exactly the ten approved members, nothing else'
+  11,
+  'item 14: supabase_realtime has exactly the eleven approved members, nothing else'
 );
 
 -- ================================================================

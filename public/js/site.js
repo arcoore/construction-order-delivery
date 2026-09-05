@@ -15,6 +15,8 @@ import {
   datetimeLocalToDate, dateToDatetimeLocalValue, formatNeededBy, neededByUrgency, urgencyLabel,
 } from './deadline.js';
 import { statusLabel, nextActionFor, describeEvent, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
+import { renderOrderThread } from './orderThreadView.js';
+import { subscribeOrderMessages, getMessageCountForOrder } from './orderMessages.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -867,6 +869,30 @@ function closeEditForm() {
   showSiteSelect();
 }
 
+// Messaging opens in the dedicated order panel (like the edit form) rather
+// than inline in the order list, so a background list re-render can never
+// wipe an in-progress message.
+let messagesOrderId = null;
+function openMessagesPanel(orderId) {
+  messagesOrderId = orderId;
+  siteSelectPanel.hidden = true;
+  searchPanel.hidden = true;
+  orderPanel.hidden = false;
+  setBackAction('Back to my orders', closeMessagesPanel);
+  const order = latestOrders.find(o => o.id === orderId);
+  orderFormEl.innerHTML = `
+    <h1>Messages</h1>
+    <p class="hint">${order ? itemsShortSummary(order) : 'this order'}</p>
+    <div id="worker-order-thread"></div>
+  `;
+  renderOrderThread(document.getElementById('worker-order-thread'), orderId);
+}
+function closeMessagesPanel() {
+  messagesOrderId = null;
+  orderPanel.hidden = true;
+  showSiteSelect();
+}
+
 function renderEditForm() {
   if (!editState) return;
   if (editState.mode === 'pick-material') return renderEditPickMaterial();
@@ -1281,7 +1307,7 @@ function renderSiteOrders() {
       ${o.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${cancellationStateHint(o)}
-      ${isOwn ? renderHistoryToggle(o) : ''}
+      ${isOwn ? `<div class="order-card-links">${renderHistoryToggle(o)}<button type="button" class="link-btn" data-open-messages="${o.id}">Messages${getMessageCountForOrder(o.id) ? ` (${getMessageCountForOrder(o.id)})` : ''}</button></div>` : ''}
       ${isOwn && expandedHistoryIds.has(o.id) ? renderOrderHistory(o) : ''}
       ${renderWorkerActions(o)}
     </div>
@@ -1294,6 +1320,10 @@ function renderSiteOrders() {
 
   siteOrdersList.querySelectorAll('[data-history-toggle]').forEach(btn => {
     btn.addEventListener('click', () => toggleHistory(btn.dataset.historyToggle));
+  });
+
+  siteOrdersList.querySelectorAll('[data-open-messages]').forEach(btn => {
+    btn.addEventListener('click', () => openMessagesPanel(btn.dataset.openMessages));
   });
 
   if (cancellingOrderId) wireCancelHoldButton(cancellingOrderId);
@@ -1342,6 +1372,7 @@ function toggleHistory(orderId) {
 export function refreshWorkerView() {
   closeOrderForm();
   editState = null;
+  messagesOrderId = null;
   cancellingOrderId = null;
   requestingCancelOrderId = null;
   expandedHistoryIds = new Set();
@@ -1355,6 +1386,14 @@ subscribe(orders => {
 });
 
 subscribeCancellationRequests(renderSiteOrders);
+subscribeOrderMessages(() => {
+  if (messagesOrderId && !orderPanel.hidden) {
+    const el = document.getElementById('worker-order-thread');
+    if (el) renderOrderThread(el, messagesOrderId);
+  } else {
+    renderSiteOrders(); // keep the "Messages (N)" counts fresh
+  }
+});
 
 // Roadmap Step 4 — keeps an expanded history panel live: order_events isn't
 // itself in the Realtime publication, but refreshOrderCache() always

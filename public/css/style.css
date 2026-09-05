@@ -318,6 +318,55 @@ body {
   margin-left: 26px;
 }
 
+/* --- Order message threads (migration 0037) --- */
+.msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.msg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-alt, #f1f1f3);
+  font-size: 0.9rem;
+}
+
+.msg-row-mine {
+  background: var(--orange-soft, #ffe9d6);
+}
+
+.msg-meta {
+  font-size: 0.75rem;
+  color: var(--muted, #888);
+}
+
+.msg-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-compose {
+  display: flex;
+  gap: 6px;
+}
+
+.msg-compose .msg-input {
+  flex: 1;
+}
+
+.order-card-links {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .notif-row-unread {
   background: #fff7ef;
 }

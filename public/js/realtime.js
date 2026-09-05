@@ -85,6 +85,7 @@ import { refreshNotificationCache } from './notifications.js';
 import { refreshOrderCache } from './orderLifecycle.js';
 import { refreshCommunityCache } from './community.js';
 import { refreshSitesCache } from './sites.js';
+import { refreshMessageCache } from './orderMessages.js';
 
 // --- Coalescing ----------------------------------------------------------
 // A single lifecycle RPC can produce more than one Realtime event in quick
@@ -107,6 +108,7 @@ function coalesce(fn, ms = 150) {
 
 const coalescedRefreshNotifications = coalesce(refreshNotificationCache);
 const coalescedRefreshOrders = coalesce(refreshOrderCache);
+const coalescedRefreshMessages = coalesce(refreshMessageCache);
 // Permission-relevant tables (sites/site_memberships/community_memberships/
 // owner_grants/buyer_grants/buyer_requests/communities) always refresh BOTH
 // caches together, deliberately — the exact same defensive pairing
@@ -196,6 +198,17 @@ function createCommunityChannel(communityId) {
       }
     );
   });
+
+  // order_messages — its own refresh (a chat thread, live updates are the
+  // point). Community-scoped like the order tables.
+  channel = channel.on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'order_messages', filter },
+    () => {
+      if (myGeneration !== communityGeneration) return;
+      coalescedRefreshMessages();
+    }
+  );
 
   permissionTables.forEach(table => {
     // `communities` itself is filtered on its own primary key, not a

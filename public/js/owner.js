@@ -23,6 +23,8 @@ import {
 import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
+import { renderOrderThread } from './orderThreadView.js';
+import { subscribeOrderMessages } from './orderMessages.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -767,7 +769,12 @@ function renderOrderDetail(order) {
         `;
       }).join('')}
     </div>
+
+    <h2>Messages</h2>
+    <div id="owner-order-thread"></div>
   `;
+
+  renderOrderThread(document.getElementById('owner-order-thread'), order.id);
 }
 
 // Roadmap Step 5 — an Owner can optionally assign a new Worker to one or
@@ -1065,6 +1072,14 @@ subscribe(orders => {
 subscribeCommunities(render);
 subscribeOrderEvents(render);
 subscribeSites(render);
+// A new message on the currently-open order detail — re-render just the
+// thread (a full render() would collapse any in-progress compose).
+subscribeOrderMessages(() => {
+  if (selectedOrderId && !orderDetailPanel.hidden) {
+    const el = document.getElementById('owner-order-thread');
+    if (el) renderOrderThread(el, selectedOrderId);
+  }
+});
 // Roadmap Step 4 — a pending cancellation request now feeds the card's
 // next-action line (getPendingCancellationRequestForOrder), so a live
 // approve/reject/new-request change needs to re-render this view too.

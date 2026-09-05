@@ -9,6 +9,8 @@ import {
 import { canPurchaseForSite } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { urgencyComparator, itemsSummary, itemsShortSummary, statusLabel, fulfilmentSummary } from './orderStatus.js';
+import { renderOrderThread } from './orderThreadView.js';
+import { subscribeOrderMessages } from './orderMessages.js';
 
 const listPanel = document.getElementById('buyer-list-panel');
 const listEl = document.getElementById('buyer-orders-list');
@@ -472,9 +474,13 @@ function renderDetail() {
       <span class="hold-confirm-label" id="hold-purchase-label">Press and hold to confirm Purchased</span>
     </button>
     <p id="buyer-purchase-status" class="form-status"></p>
+
+    <h2>Messages</h2>
+    <div id="buyer-order-thread"></div>
   `;
 
   wireHoldButton(order.id);
+  renderOrderThread(document.getElementById('buyer-order-thread'), order.id);
 }
 
 function wireHoldButton(orderId) {
@@ -683,3 +689,9 @@ subscribe(orders => {
 });
 
 subscribeCancellationRequests(renderCancellationRequests);
+subscribeOrderMessages(() => {
+  if (!detailPanel.hidden && selectedOrderId) {
+    const el = document.getElementById('buyer-order-thread');
+    if (el) renderOrderThread(el, selectedOrderId);
+  }
+});
