@@ -68,6 +68,9 @@ const copyInviteStatus = document.getElementById('owner-copy-invite-status');
 const discoverableToggle = document.getElementById('discoverable-toggle');
 const peoplePanel = document.getElementById('owner-people-panel');
 const peopleList = document.getElementById('owner-people-list');
+const analyticsPanel = document.getElementById('owner-analytics-panel');
+const analyticsSitesEl = document.getElementById('owner-analytics-sites');
+const analyticsSuppliersEl = document.getElementById('owner-analytics-suppliers');
 
 // Groups the existing order.status values into the tabs an owner actually
 // needs to scan for "what needs attention" — no new statuses, this is a
@@ -426,6 +429,33 @@ discoverableToggle.addEventListener('change', async () => {
 // second management surface. Each row navigates to (or reuses) the exact
 // existing panel/action; nothing here approves/assigns anything itself.
 
+// This-month committed spend, grouped by site and by supplier. Pure UI over
+// latestOrders — same "committed = not rejected/cancelled, created this
+// calendar month" rule the site-budget trigger uses server-side.
+function renderAnalytics(communityId, inCommunity) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const thisMonth = inCommunity.filter(o =>
+    !['rejected', 'cancelled'].includes(o.status)
+    && new Date(o.createdAt).getFullYear() === y
+    && new Date(o.createdAt).getMonth() === m);
+
+  if (thisMonth.length === 0) { analyticsPanel.hidden = true; return; }
+  analyticsPanel.hidden = false;
+
+  const bySite = new Map();
+  const bySupplier = new Map();
+  for (const o of thisMonth) {
+    const amt = o.totalPrice || 0;
+    bySite.set(o.siteName || 'No site', (bySite.get(o.siteName || 'No site') || 0) + amt);
+    bySupplier.set(o.stockistName || 'Unknown', (bySupplier.get(o.stockistName || 'Unknown') || 0) + amt);
+  }
+  const row = ([name, amt]) => `<div class="activity-item"><span class="activity-text">${name}</span><span class="activity-time">${formatPrice(amt)}</span></div>`;
+  const sorted = map => [...map.entries()].sort((a, b) => b[1] - a[1]);
+  analyticsSitesEl.innerHTML = sorted(bySite).map(row).join('');
+  analyticsSuppliersEl.innerHTML = sorted(bySupplier).slice(0, 8).map(row).join('');
+}
+
 function renderPeoplePanel(communityId) {
   const pendingJoins = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
   const pendingBuyer = getBuyerRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
@@ -673,6 +703,7 @@ function render() {
   const inCommunity = latestOrders.filter(o => o.communityId === communityId);
 
   renderDashboard(inCommunity, communityId);
+  renderAnalytics(communityId, inCommunity);
   renderSitesSummary(communityId, inCommunity);
   renderTeam(communityId);
 
