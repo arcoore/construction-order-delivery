@@ -3,7 +3,7 @@
 -- inserted rows, which is exactly what the eventual notification-creating
 -- functions will rely on.
 begin;
-select plan(4);
+select plan(7);
 
 select tests.create_user('owner-d@test.local', 'Owner D')     as owner_d \gset
 select tests.create_user('recipient@test.local', 'Recipient') as recipient \gset
@@ -41,6 +41,24 @@ with attempt as (
 ) select count(*)::int as attempt_rowcount from attempt \gset
 select is( :'attempt_rowcount'::int, 0,
   'a different user''s UPDATE against another recipient''s notification affects zero rows (RLS using-clause blocks it entirely)'
+);
+
+-- Migration 0032 — a recipient may delete their own notification; a
+-- bystander's DELETE against it affects zero rows.
+select tests.authenticate_as(:'bystander');
+with attempt as (
+  delete from notifications where recipient_user_id = :'recipient' returning 1
+) select count(*)::int as del_rowcount from attempt \gset
+select is( :'del_rowcount'::int, 0,
+  'item: a bystander cannot delete another recipient''s notification (RLS blocks it, zero rows)'
+);
+
+select tests.authenticate_as(:'recipient');
+select is( (select count(*) from notifications where recipient_user_id = :'recipient')::int, 1,
+  'item: the notification still exists after the bystander''s blocked delete' );
+delete from notifications where recipient_user_id = :'recipient';
+select is( (select count(*) from notifications where recipient_user_id = :'recipient')::int, 0,
+  'item: a recipient CAN delete their own notification (notifications_delete_own, 0032)'
 );
 
 select finish();

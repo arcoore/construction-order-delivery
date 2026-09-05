@@ -19,7 +19,7 @@ import {
 } from './community.js';
 import {
   subscribeNotifications, getNotificationsFor, getUnreadCount,
-  markRead, markUnread, markAllRead, getPreferences, savePreferences,
+  markRead, markUnread, markAllRead, deleteNotification, getPreferences, savePreferences,
   refreshNotificationCache,
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
@@ -863,6 +863,7 @@ function renderNotifList() {
         <span class="notif-row-time">${timeAgo(n.createdAt)}</span>
       </button>
       <button type="button" class="notif-row-toggle" data-notif-toggle="${n.id}" title="${n.read ? 'Mark as unread' : 'Mark as read'}">${n.read ? '○' : '●'}</button>
+      <button type="button" class="notif-row-delete" data-notif-delete="${n.id}" title="Remove this notification" aria-label="Remove this notification">&times;</button>
     </div>
   `).join('') + (remaining > 0
     ? `<button type="button" class="link-btn list-show-more" id="notif-show-more">Show ${remaining} older</button>`
@@ -881,6 +882,15 @@ function renderNotifList() {
       const n = getNotificationsFor(getCurrentUserId()).find(x => x.id === id);
       if (!n) return;
       if (n.read) await markUnread(id); else await markRead(id);
+    });
+  });
+  notifList.querySelectorAll('[data-notif-delete]').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      btn.disabled = true;
+      const result = await deleteNotification(btn.dataset.notifDelete);
+      if (!result.ok) { btn.disabled = false; return; }
+      renderNotifList();
     });
   });
 }

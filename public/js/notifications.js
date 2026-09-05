@@ -202,6 +202,18 @@ export async function markUnread(id) {
   return { ok: true };
 }
 
+// Delete one notification (migration 0032 — notifications_delete_own,
+// scoped to recipient_user_id = auth.uid(), same boundary as select/update).
+// Each row is the recipient's private copy of a system signal, never shared
+// state, so a self-delete affects no one else.
+export async function deleteNotification(id) {
+  const { error } = await supabase.from('notifications').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  cache.notifications = cache.notifications.filter(n => n.id !== id);
+  notify();
+  return { ok: true };
+}
+
 // RLS's own using-clause (recipient_user_id = auth.uid()) is the real
 // boundary here — this UPDATE's WHERE clause is a query-shaping convenience
 // on top of that, not the security check itself.
