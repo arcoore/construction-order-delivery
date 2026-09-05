@@ -1,4 +1,4 @@
-import { getInitials, formatPrice, timeAgo } from './data.js';
+import { getInitials, formatPrice, timeAgo, escapeHtml } from "./data.js";
 import { subscribe } from './orderLifecycle.js';
 import { itemsShortSummary } from './orderStatus.js';
 import {
@@ -145,8 +145,8 @@ function renderList() {
     const { memberCount, openCount } = siteSummary(s);
     return `
       <button type="button" class="result-card" data-site-id="${s.id}">
-        <span class="result-name">${s.name}</span>
-        <span class="result-meta">${[s.address, s.postcode].filter(Boolean).join(' · ') || 'No address on file'}</span>
+        <span class="result-name">${escapeHtml(s.name)}</span>
+        <span class="result-meta">${escapeHtml([s.address, s.postcode].filter(Boolean).join(' · ') || 'No address on file')}</span>
         <span class="result-meta">${memberCount} ${memberCount === 1 ? 'employee' : 'employees'} &middot; ${openCount} open order${openCount === 1 ? '' : 's'}</span>
       </button>
     `;
@@ -213,23 +213,23 @@ function renderSiteInfo(site) {
     return `
       <div class="reject-form">
         <label class="field-label" for="site-edit-name-input">Site name</label>
-        <input type="text" id="site-edit-name-input" class="text-input" value="${site.name}" />
+        <input type="text" id="site-edit-name-input" class="text-input" value="${escapeHtml(site.name)}" />
         <label class="field-label" for="site-edit-address-input">Address</label>
-        <input type="text" id="site-edit-address-input" class="text-input" value="${site.address}" />
+        <input type="text" id="site-edit-address-input" class="text-input" value="${escapeHtml(site.address)}" />
         <label class="field-label" for="site-edit-postcode-input">Postcode</label>
-        <input type="text" id="site-edit-postcode-input" class="text-input" value="${site.postcode}" />
+        <input type="text" id="site-edit-postcode-input" class="text-input" value="${escapeHtml(site.postcode)}" />
         <label class="field-label" for="site-edit-instructions-input">Delivery instructions</label>
-        <input type="text" id="site-edit-instructions-input" class="text-input" value="${site.deliveryInstructions || ''}" />
+        <input type="text" id="site-edit-instructions-input" class="text-input" value="${escapeHtml(site.deliveryInstructions || "")}" />
         <label class="field-label" for="site-edit-start-date-input">Project start date</label>
         <input type="date" id="site-edit-start-date-input" class="text-input" value="${site.projectStartDate || ''}" />
         <label class="field-label" for="site-edit-end-date-input">Project end date</label>
         <input type="date" id="site-edit-end-date-input" class="text-input" value="${site.projectEndDate || ''}" />
         <label class="field-label" for="site-edit-contact-name-input">Site contact</label>
-        <input type="text" id="site-edit-contact-name-input" class="text-input" value="${site.siteContactName || ''}" />
+        <input type="text" id="site-edit-contact-name-input" class="text-input" value="${escapeHtml(site.siteContactName || "")}" />
         <label class="field-label" for="site-edit-contact-phone-input">Contact phone</label>
-        <input type="tel" id="site-edit-contact-phone-input" class="text-input" value="${site.siteContactPhone || ''}" />
+        <input type="tel" id="site-edit-contact-phone-input" class="text-input" value="${escapeHtml(site.siteContactPhone || "")}" />
         <label class="field-label" for="site-edit-access-notes-input">Access notes</label>
-        <input type="text" id="site-edit-access-notes-input" class="text-input" value="${site.accessNotes || ''}" />
+        <input type="text" id="site-edit-access-notes-input" class="text-input" value="${escapeHtml(site.accessNotes || "")}" />
         <label class="field-label" for="site-edit-budget-input">Monthly budget £ (blank = none)</label>
         <input type="number" id="site-edit-budget-input" class="text-input" min="0" step="1" value="${site.monthlyBudget ?? ''}" />
         <p id="site-edit-status" class="form-status"></p>
@@ -244,15 +244,15 @@ function renderSiteInfo(site) {
   return `
     <div class="profile-field">
       <span class="profile-label">Address</span>
-      <span class="profile-value">${site.address || '—'}</span>
+      <span class="profile-value">${escapeHtml(site.address || "—")}</span>
     </div>
     <div class="profile-field">
       <span class="profile-label">Postcode</span>
-      <span class="profile-value">${site.postcode || '—'}</span>
+      <span class="profile-value">${escapeHtml(site.postcode || "—")}</span>
     </div>
     <div class="profile-field">
       <span class="profile-label">Delivery instructions</span>
-      <span class="profile-value">${site.deliveryInstructions || '—'}</span>
+      <span class="profile-value">${escapeHtml(site.deliveryInstructions || "—")}</span>
     </div>
     ${(site.projectStartDate || site.projectEndDate) ? `
     <div class="profile-field">
@@ -262,12 +262,12 @@ function renderSiteInfo(site) {
     ${site.siteContactName || site.siteContactPhone ? `
     <div class="profile-field">
       <span class="profile-label">Site contact</span>
-      <span class="profile-value">${[site.siteContactName, site.siteContactPhone].filter(Boolean).join(' · ')}</span>
+      <span class="profile-value">${escapeHtml([site.siteContactName, site.siteContactPhone].filter(Boolean).join(" · "))}</span>
     </div>` : ''}
     ${site.accessNotes ? `
     <div class="profile-field">
       <span class="profile-label">Access notes</span>
-      <span class="profile-value">${site.accessNotes}</span>
+      <span class="profile-value">${escapeHtml(site.accessNotes)}</span>
     </div>` : ''}
     ${site.monthlyBudget != null ? `
     <div class="profile-field">
@@ -276,7 +276,7 @@ function renderSiteInfo(site) {
     </div>` : ''}
     <div class="profile-field">
       <span class="profile-label">Status</span>
-      <span class="profile-value">${SITE_STATUS_LABEL[site.status] || site.status}${site.status === 'archived' && site.archivedAt ? ` — ${timeAgo(site.archivedAt)} by ${site.archivedById ? resolveDisplayName(site.archivedById) : 'the owner'}` : ''}</span>
+      <span class="profile-value">${SITE_STATUS_LABEL[site.status] || site.status}${site.status === 'archived' && site.archivedAt ? ` — ${timeAgo(site.archivedAt)} by ${site.archivedById ? escapeHtml(resolveDisplayName(site.archivedById)) : "the owner"}` : ''}</span>
     </div>
     <div class="owner-actions">
       <button class="btn btn-secondary" id="site-edit-btn">Edit</button>
@@ -311,10 +311,10 @@ function renderMembers(site) {
     return `
       <div class="order-card">
         <div class="request-header">
-          ${!assigned ? `<input type="checkbox" class="bulk-assign-checkbox" data-bulk-member-id="${userId}" ${bulkSelectedMemberIds.has(userId) ? 'checked' : ''} aria-label="Select ${displayName} for bulk assignment" />` : ''}
-          <div class="requester-badge" title="${displayName}">
+          ${!assigned ? `<input type="checkbox" class="bulk-assign-checkbox" data-bulk-member-id="${userId}" ${bulkSelectedMemberIds.has(userId) ? 'checked' : ''} aria-label="Select ${escapeHtml(displayName)} for bulk assignment" />` : ''}
+          <div class="requester-badge" title="${escapeHtml(displayName)}">
             <span class="requester-avatar">${getInitials(displayName)}</span>
-            <span class="requester-name">${displayName}</span>
+            <span class="requester-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="order-card-main">
             <strong>${assigned ? 'Assigned to this site' : 'Not assigned'}</strong>
@@ -345,7 +345,7 @@ function renderOrders(site) {
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${itemsShortSummary(o)}</strong>
-        <span>${o.totalPrice != null ? `${formatPrice(o.totalPrice)} &middot; ` : ''}requested by ${o.requestedBy || 'Unknown'}</span>
+        <span>${o.totalPrice != null ? `${formatPrice(o.totalPrice)} &middot; ` : ''}requested by ${escapeHtml(o.requestedBy || "Unknown")}</span>
       </div>
       <span class="status-badge status-${o.status}">${STATUS_LABELS[o.status] || o.status}</span>
     </div>
@@ -360,7 +360,7 @@ function renderDetail() {
   }
 
   detailEl.innerHTML = `
-    <h1>${site.name}${site.status !== 'active' ? ` <span class="status-badge status-rejected">${SITE_STATUS_LABEL[site.status] || site.status}</span>` : ''}</h1>
+    <h1>${escapeHtml(site.name)}${site.status !== 'active' ? ` <span class="status-badge status-rejected">${SITE_STATUS_LABEL[site.status] || site.status}</span>` : ''}</h1>
     ${renderSiteInfo(site)}
     <h2>Employees</h2>
     <div class="orders-list">${renderMembers(site)}</div>

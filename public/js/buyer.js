@@ -1,4 +1,4 @@
-import { formatPrice, getCategoryIcon } from './data.js';
+import { formatPrice, getCategoryIcon, escapeHtml } from './data.js';
 import { getProduct } from './products.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
@@ -180,11 +180,11 @@ function renderCancellationRequests() {
       <div class="order-card" data-order-id="${order.id}">
         <div class="order-card-main">
           <strong>${itemsShortSummary(order)}</strong>
-          <span>${order.siteName ? `${order.siteName} &middot; ` : ''}${itemsSummary(order)} &middot; ${formatPrice(order.totalPrice)}</span>
-          <span>Requested by ${r.requestedBy || 'Unknown'}</span>
+          <span>${order.siteName ? `${escapeHtml(order.siteName)} &middot; ` : ""}${itemsSummary(order)} &middot; ${formatPrice(order.totalPrice)}</span>
+          <span>Requested by ${escapeHtml(r.requestedBy || "Unknown")}</span>
         </div>
         <span class="status-badge status-${order.status}">${CANCEL_REQUEST_STATUS_LABELS[order.status] || order.status}</span>
-        <p class="hint small-hint">Reason: ${r.reason}</p>
+        <p class="hint small-hint">Reason: ${escapeHtml(r.reason)}</p>
         ${actionHtml}
       </div>
     `;
@@ -226,7 +226,7 @@ function renderDirectDeliveries() {
     <div class="order-card" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${itemsShortSummary(o)}</strong>
-        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)} &middot; from ${o.stockistName || 'the supplier'}</span>
+        <span>${o.siteName ? `${escapeHtml(o.siteName)} &middot; ` : ""}${itemsSummary(o)} &middot; from ${escapeHtml(o.stockistName || "the supplier")}</span>
       </div>
       ${confirmingDirectDeliveryId === o.id ? `
         <div class="reject-form">
@@ -280,8 +280,8 @@ function renderMyPurchases() {
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${itemsShortSummary(o)}</strong>
-        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
-        <span class="result-meta">Purchased ${new Date(o.purchasedAt).toLocaleDateString()} &middot; from ${o.stockistName || 'Unknown'}</span>
+        <span>${o.siteName ? `${escapeHtml(o.siteName)} &middot; ` : ""}${itemsSummary(o)}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
+        <span class="result-meta">Purchased ${new Date(o.purchasedAt).toLocaleDateString()} &middot; from ${escapeHtml(o.stockistName || "Unknown")}</span>
         ${fulfilmentSummary(o) ? `<span class="result-meta">${fulfilmentSummary(o)}</span>` : ''}
       </div>
       <span class="status-badge status-${o.status}">${statusLabel(o.status, 'buyer', o.deliveryMethod)}</span>
@@ -423,7 +423,7 @@ function render() {
     return `
     <button class="result-card" data-id="${o.id}">
       <span class="result-name">${itemsShortSummary(o)}</span>
-      <span class="result-meta">${o.siteName ? `${o.siteName} &middot; ` : ''}${itemsSummary(o)} &middot; ${formatPrice(o.totalPrice)} &middot; from ${o.stockistName || 'Unknown'}</span>
+      <span class="result-meta">${o.siteName ? `${escapeHtml(o.siteName)} &middot; ` : ""}${itemsSummary(o)} &middot; ${formatPrice(o.totalPrice)} &middot; from ${escapeHtml(o.stockistName || "Unknown")}</span>
       <span class="result-meta order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
     </button>
   `;
@@ -453,7 +453,7 @@ function renderDetail() {
       <div class="product-preview-info">
         <strong>${itemsShortSummary(order)}</strong>
         <ul class="order-items-list">
-          ${order.items.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.unitPrice != null ? ` &middot; ${formatPrice(it.unitPrice)} each &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
+          ${order.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.unitPrice != null ? ` &middot; ${formatPrice(it.unitPrice)} each &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
         </ul>
         <span class="product-preview-price">${formatPrice(order.totalPrice)} total</span>
       </div>
@@ -461,12 +461,12 @@ function renderDetail() {
     <p class="hint${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}"><strong>Needed by:</strong> ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</p>
     <div class="confirm-source-card">
       <div class="confirm-source-row">
-        <span class="source-name">${order.stockistName || 'Unknown stockist'}</span>
+        <span class="source-name">${escapeHtml(order.stockistName || 'Unknown stockist')}</span>
       </div>
-      <span class="source-meta">${order.stockistWebsite || ''} &middot; ${order.stockistPostcode || ''}</span>
-      ${websiteUrl ? `<a class="link-btn" href="${websiteUrl}" target="_blank" rel="noopener noreferrer">Open ${order.stockistName.split(' - ')[0]}'s website &nearr;</a>` : ''}
+      <span class="source-meta">${escapeHtml(order.stockistWebsite || '')} &middot; ${escapeHtml(order.stockistPostcode || '')}</span>
+      ${websiteUrl ? `<a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml((order.stockistName || '').split(' - ')[0])}'s website &nearr;</a>` : ''}
     </div>
-    <p class="hint">${order.siteName ? `For <strong>${order.siteName}</strong> — d` : 'D'}eliver to <strong>${order.deliveryPostcode}</strong>. Requested by ${order.requestedBy || 'Unknown'}.</p>
+    <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> — d` : 'D'}eliver to <strong>${order.deliveryPostcode}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
     <p class="hint small-hint">Buy this from the stockist above yourself, outside SiteStock — this app doesn't process the purchase. Once you've actually paid, come back here and press and hold the button below for 3 seconds to confirm.</p>
 
     <button type="button" class="btn btn-primary btn-block hold-confirm-btn" id="hold-purchase-btn">

@@ -5,7 +5,7 @@ import {
   getPendingJoinCode, clearPendingJoinCode,
 } from './community.js';
 import { getLoggedInAccount, subscribeAuth } from './auth.js';
-import { timeAgo } from './data.js';
+import { timeAgo, escapeHtml } from './data.js';
 import {
   getCurrentUserId, getCurrentDisplayName,
   subscribeIdentity,
@@ -186,8 +186,8 @@ function render() {
   myCommunitiesList.innerHTML = mine.map(c => `
     <div class="community-card">
       <div class="community-card-info">
-        <strong>${c.name}</strong>
-        <span>Code: ${c.code}</span>
+        <strong>${escapeHtml(c.name)}</strong>
+        <span>Code: ${escapeHtml(c.code)}</span>
       </div>
       <button class="btn btn-primary" data-enter="${c.id}">Enter</button>
     </div>
@@ -247,7 +247,7 @@ function render() {
       return `
         <div class="community-card">
           <div class="community-card-info">
-            <strong>${c.name}</strong>
+            <strong>${escapeHtml(c.name)}</strong>
           </div>
           ${actionHtml}
         </div>

@@ -1,4 +1,4 @@
-import { getAvailability, getCategoryIcon, formatPrice } from './data.js';
+import { getAvailability, getCategoryIcon, formatPrice, escapeHtml } from './data.js';
 import { searchProducts, getProduct } from './products.js';
 import { getBranchesForProduct } from './suppliers.js';
 import { geocodePostcode, distanceKm } from './geo.js';
@@ -502,7 +502,7 @@ function renderSourceStep(details) {
 
   orderFormEl.innerHTML = `
     <h2>Where should this be ordered from?</h2>
-    <p class="hint">${cart.length} ${cart.length === 1 ? 'material' : 'materials'} &middot; deliver to ${details.deliveryPostcode}</p>
+    <p class="hint">${cart.length} ${cart.length === 1 ? 'material' : 'materials'} &middot; deliver to ${escapeHtml(details.deliveryPostcode)}</p>
     <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock — pick one to tell the driver where to buy it.</p>
     <div class="variant-list">
       ${sources.map(s => {
@@ -541,21 +541,21 @@ function renderConfirmStep(details, branch, avail) {
     <h2>Confirm this order</h2>
 
     <ul class="order-items-list">
-      ${cart.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''} &middot; ${formatPrice((it.unitPrice || 0) * it.quantity)}</li>`).join('')}
+      ${cart.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''} &middot; ${formatPrice((it.unitPrice || 0) * it.quantity)}</li>`).join('')}
     </ul>
     <p class="hint"><strong>Total: ${formatPrice(total)}</strong></p>
 
     <div class="confirm-source-card">
       <div class="confirm-source-row">
-        <span class="source-name">${branch.name}</span>
+        <span class="source-name">${escapeHtml(branch.name)}</span>
         <span class="availability-badge availability-${avail.key}">${avail.label}</span>
       </div>
-      <span class="source-meta">${branch.website} &middot; ${branch.postcode}</span>
-      <a class="link-btn" href="${websiteUrl}" target="_blank" rel="noopener noreferrer">Open ${branch.name.split(' - ')[0]}'s website &nearr;</a>
+      <span class="source-meta">${escapeHtml(branch.website)} &middot; ${escapeHtml(branch.postcode)}</span>
+      <a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml(branch.name.split(' - ')[0])}'s website &nearr;</a>
       <p class="hint small-hint">Opens their homepage in a new tab — this is a demo catalog, so it isn't linked to the exact product listing.</p>
     </div>
 
-    <p class="hint">Delivering to <strong>${details.deliveryPostcode}</strong>.</p>
+    <p class="hint">Delivering to <strong>${escapeHtml(details.deliveryPostcode)}</strong>.</p>
     <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(details.neededByType, details.neededBy)}</p>
     <p class="hint"><strong>Delivery:</strong> ${details.deliveryMethod === 'direct_supplier' ? 'Supplier delivers direct to site' : 'A driver collects & delivers it'}</p>
 
@@ -597,7 +597,7 @@ async function submitOrder(details, branch, avail, confirmBtn) {
   cart = [];
   orderFormEl.innerHTML = `
     <h2>Request sent</h2>
-    <p class="hint">${itemsShortSummary(result.order)} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${stillApprovalRequired
+    <p class="hint">${itemsShortSummary(result.order)} from ${escapeHtml(branch.name)}, delivering to ${escapeHtml(details.deliveryPostcode)}. ${stillApprovalRequired
       ? 'Waiting for the owner to approve it before a buyer can purchase it.'
       : 'It\'s gone straight to a buyer to purchase — this company doesn\'t require owner approval.'}</p>
   `;
@@ -648,7 +648,7 @@ function cancellationStateHint(order) {
   const history = getCancellationRequestsForOrder(order.id);
   const latest = history.length ? history.reduce((a, b) => (a.createdAt > b.createdAt ? a : b)) : null;
   if (latest && latest.status === 'rejected') {
-    return `<p class="hint small-hint">Cancellation rejected${latest.decisionReason ? `: ${latest.decisionReason}` : '.'}</p>`;
+    return `<p class="hint small-hint">Cancellation rejected${latest.decisionReason ? `: ${escapeHtml(latest.decisionReason)}` : "."}</p>`;
   }
   return '';
 }
@@ -1300,12 +1300,12 @@ function renderSiteOrders() {
     <div class="order-card status-${o.status}" data-order-id="${o.id}">
       <div class="order-card-main">
         <strong>${itemsShortSummary(o)}</strong>
-        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${(o.items || []).map(it => `${it.quantity}×${it.productName}`).join(', ')} &middot; to ${o.deliveryPostcode}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
-        ${o.stockistName ? `<span>From ${o.stockistName} (${o.stockistWebsite})</span>` : ''}
+        <span>${o.siteName ? `${escapeHtml(o.siteName)} &middot; ` : ""}${(o.items || []).map(it => `${escapeHtml(it.quantity)}×${escapeHtml(it.productName)}`).join(', ')} &middot; to ${escapeHtml(o.deliveryPostcode)}${o.totalPrice != null ? ` &middot; ${formatPrice(o.totalPrice)}` : ''}</span>
+        ${o.stockistName ? `<span>From ${escapeHtml(o.stockistName)} (${escapeHtml(o.stockistWebsite)})</span>` : ''}
         <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(o.neededByType, o.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
-        ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${o.rejectionReason}</span>` : ''}
-        ${o.status === 'cancelled' ? `<span class="rejection-reason">Cancelled by ${o.orderCancelledBy || 'you'}${o.orderCancellationReason ? `: ${o.orderCancellationReason}` : ''}</span>` : ''}
-        ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${o.deliveryLocation} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
+        ${o.status === 'rejected' && o.rejectionReason ? `<span class="rejection-reason">Reason: ${escapeHtml(o.rejectionReason)}</span>` : ''}
+        ${o.status === 'cancelled' ? `<span class="rejection-reason">Cancelled by ${escapeHtml(o.orderCancelledBy || "you")}${o.orderCancellationReason ? `: ${escapeHtml(o.orderCancellationReason)}` : ""}</span>` : ''}
+        ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${escapeHtml(o.deliveryLocation)} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
         ${fulfilmentSummary(o) ? `<span class="rejection-reason">${fulfilmentSummary(o)}</span>` : ''}
       </div>
       <span class="status-badge status-${o.status}">${statusLabel(o.status, 'worker', o.deliveryMethod)}</span>

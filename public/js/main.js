@@ -6,7 +6,7 @@ import { refreshDriverView } from './driver.js';
 import { refreshBuyerView } from './buyer.js';
 import { refreshSitesView } from './sitesView.js';
 import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
-import { getInitials, timeAgo } from './data.js';
+import { getInitials, timeAgo, escapeHtml } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
   getActiveCommunityId, getActiveCommunity,
@@ -231,11 +231,11 @@ async function showProfile() {
   profileDetails.innerHTML = `
     <div class="profile-field">
       <span class="profile-label">Display name</span>
-      <span class="profile-value">${displayName || '—'}</span>
+      <span class="profile-value">${escapeHtml(displayName || '—')}</span>
       ${changingName ? `
         <div class="reject-form">
           <label class="field-label" for="change-name-input">New display name</label>
-          <input type="text" id="change-name-input" class="text-input" maxlength="60" value="${displayName || ''}" />
+          <input type="text" id="change-name-input" class="text-input" maxlength="60" value="${escapeHtml(displayName || '')}" />
           <p class="hint small-hint">This is how your name shows on orders and team lists. It's cosmetic only — it never changes your access.</p>
           <div class="reject-form-actions">
             <button class="btn btn-secondary" id="change-name-cancel-btn">Cancel</button>
@@ -248,7 +248,7 @@ async function showProfile() {
     ${account ? `
       <div class="profile-field">
         <span class="profile-label">Email</span>
-        <span class="profile-value">${account.email}</span>
+        <span class="profile-value">${escapeHtml(account.email)}</span>
         ${changingEmail ? `
           <div class="reject-form">
             <label class="field-label" for="change-email-input">New email address</label>
@@ -274,10 +274,10 @@ async function showProfile() {
           ? '<span class="profile-value">Not in any companies yet</span>'
           : memberships.map(m => `
             <div class="profile-community-row">
-              <strong>${m.name}</strong>
+              <strong>${escapeHtml(m.name)}</strong>
               <span class="status-badge status-pending">${m.role}</span>
               ${renderBuyerBadge(m)}
-              ${m.isCreator ? '' : `<button type="button" class="link-btn link-btn-danger" data-leave-company="${m.id}" data-company-name="${m.name}">Leave this company</button>`}
+              ${m.isCreator ? '' : `<button type="button" class="link-btn link-btn-danger" data-leave-company="${m.id}" data-company-name="${escapeHtml(m.name)}">Leave this company</button>`}
             </div>
           `).join('')}
       </div>
@@ -288,9 +288,9 @@ async function showProfile() {
         <div class="profile-communities">
           ${suspended.map(s => `
             <div class="profile-community-row profile-community-suspended">
-              <strong>${s.name}</strong>
+              <strong>${escapeHtml(s.name)}</strong>
               <span class="status-badge status-suspended">Suspended</span>
-              <span class="profile-value">${s.reason ? `Reason: ${s.reason}` : 'Your access here is paused'}${s.by ? ` — by ${s.by}` : ''}. Ask an owner to restore your access.</span>
+              <span class="profile-value">${s.reason ? `Reason: ${escapeHtml(s.reason)}` : 'Your access here is paused'}${s.by ? ` — by ${escapeHtml(s.by)}` : ''}. Ask an owner to restore your access.</span>
             </div>
           `).join('')}
         </div>
@@ -866,8 +866,8 @@ function renderNotifList() {
     <div class="notif-row${!n.read ? ' notif-row-unread' : ''}">
       <span class="notif-row-icon" aria-hidden="true">${NOTIF_ICONS[n.type] || '🔔'}</span>
       <button type="button" class="notif-row-body" data-notif-open="${n.id}">
-        <strong>${n.title}</strong>
-        <span>${n.message}</span>
+        <strong>${escapeHtml(n.title)}</strong>
+        <span>${escapeHtml(n.message)}</span>
         <span class="notif-row-time">${timeAgo(n.createdAt)}</span>
       </button>
       <button type="button" class="notif-row-toggle" data-notif-toggle="${n.id}" title="${n.read ? 'Mark as unread' : 'Mark as read'}">${n.read ? '○' : '●'}</button>

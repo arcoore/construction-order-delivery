@@ -1,4 +1,4 @@
-import { getInitials } from './data.js';
+import { getInitials, escapeHtml } from './data.js';
 import { getProduct } from './products.js';
 import { getBranch } from './suppliers.js';
 import { distanceKm, getCurrentPosition, geocodePostcode } from './geo.js';
@@ -278,9 +278,11 @@ function renderOrderCard(order, pickup) {
   // (Number.isFinite below), matching how this card already silently omits
   // it when the Driver hasn't set a location — never "Infinity"/"NaN".
   const buyFromName = branch ? branch.name : (order.stockistName || 'Unknown');
+  // Plain text (escaped by the caller before it hits innerHTML) — a real
+  // middle-dot, not a &middot; entity, so escaping doesn't mangle it.
   const buyFromSub = branch
-    ? `${branch.website} &middot; ${branch.postcode}`
-    : [order.stockistWebsite, order.stockistPostcode].filter(Boolean).join(' &middot; ');
+    ? `${branch.website} · ${branch.postcode}`
+    : [order.stockistWebsite, order.stockistPostcode].filter(Boolean).join(' · ');
 
   let actionHtml = '';
   if (order.status === 'purchased') {
@@ -335,7 +337,8 @@ function renderOrderCard(order, pickup) {
     }
   }
 
-  const requesterName = order.requestedBy || 'Unknown';
+  const requesterNameRaw = order.requestedBy || 'Unknown';
+  const requesterName = escapeHtml(requesterNameRaw);
   const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
   const urgencyWord = urgencyLabel(urgency);
   const nextAction = nextActionFor(order, 'driver');
@@ -344,7 +347,7 @@ function renderOrderCard(order, pickup) {
     <div class="order-card driver-card status-${order.status}" data-order-id="${order.id}">
       <div class="request-header">
         <div class="requester-badge" title="Requested by ${requesterName}">
-          <span class="requester-avatar">${getInitials(requesterName)}</span>
+          <span class="requester-avatar">${getInitials(requesterNameRaw)}</span>
           <span class="requester-name">${requesterName}</span>
         </div>
         <div class="order-card-main">
@@ -356,20 +359,20 @@ function renderOrderCard(order, pickup) {
       <div class="driver-route">
         <div class="route-step">
           <span class="route-label">Buy from</span>
-          <span class="route-value">${buyFromName}</span>
-          ${buyFromSub ? `<span class="route-sub">${buyFromSub}</span>` : ''}
-          ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
+          <span class="route-value">${escapeHtml(buyFromName)}</span>
+          ${buyFromSub ? `<span class="route-sub">${escapeHtml(buyFromSub)}</span>` : ''}
+          ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${escapeHtml(order.pickupEstimate)}</span>` : ''}
           ${Number.isFinite(dist) ? `<span class="route-dist">${dist.toFixed(1)} km from you</span>` : ''}
           ${mapsLink(branch ? branch.postcode : order.stockistPostcode, 'Open pickup in Maps')}
         </div>
         <div class="route-arrow">&rarr;</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
-          <span class="route-value">${order.siteName || order.deliveryPostcode}</span>
-          ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
-          ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${order.siteDeliveryInstructions}</span>` : ''}
-          ${order.siteAccessNotes ? `<span class="route-sub">🔑 ${order.siteAccessNotes}</span>` : ''}
-          ${order.siteContactName || order.siteContactPhone ? `<span class="route-sub">📞 ${[order.siteContactName, order.siteContactPhone && `<a href="tel:${order.siteContactPhone.replace(/[^\d+]/g, '')}">${order.siteContactPhone}</a>`].filter(Boolean).join(' · ')}</span>` : ''}
+          <span class="route-value">${escapeHtml(order.siteName || order.deliveryPostcode)}</span>
+          ${order.siteName ? `<span class="route-sub">${escapeHtml([order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode)}</span>` : ''}
+          ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${escapeHtml(order.siteDeliveryInstructions)}</span>` : ''}
+          ${order.siteAccessNotes ? `<span class="route-sub">🔑 ${escapeHtml(order.siteAccessNotes)}</span>` : ''}
+          ${order.siteContactName || order.siteContactPhone ? `<span class="route-sub">📞 ${escapeHtml(order.siteContactName || '')}${order.siteContactName && order.siteContactPhone ? ' · ' : ''}${order.siteContactPhone ? `<a href="tel:${escapeHtml(order.siteContactPhone.replace(/[^\d+]/g, ''))}">${escapeHtml(order.siteContactPhone)}</a>` : ''}</span>` : ''}
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
           ${mapsLink([order.siteAddress, order.sitePostcode].filter(Boolean).join(', ') || order.deliveryPostcode, 'Open delivery in Maps')}
         </div>
@@ -377,7 +380,7 @@ function renderOrderCard(order, pickup) {
       <span class="status-badge status-${order.status}">${statusLabel(order.status, 'driver', order.deliveryMethod)}</span>
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
-        ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
+        ? `<p class="hint small-hint">Delivered to ${escapeHtml(order.deliveryLocation)} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
       ${fulfilmentSummary(order) ? `<p class="hint small-hint">${fulfilmentSummary(order)}</p>` : ''}
       ${actionHtml}
       ${['collected', 'delivered'].includes(order.status) || getPhotoCountForOrder(order.id)

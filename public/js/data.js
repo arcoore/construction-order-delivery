@@ -9,6 +9,17 @@
 // availability estimate, category icons, and small display helpers used
 // well beyond the ordering flow.
 
+// Escape user-controlled text before interpolating into innerHTML. Most of
+// this codebase builds HTML from template literals; anywhere a value can
+// carry text a user typed (display names, custom variant sizes, site
+// address/notes, rejection/cancellation reasons, shortfall notes) it must
+// pass through here first. Catalogue/enum/id values don't need it.
+export function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export function formatPrice(amount) {
   // Null-safe on purpose: a few call sites render a price that can legitimately
   // be absent (an order or line item whose unit price never got set), and a

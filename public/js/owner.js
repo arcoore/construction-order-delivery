@@ -1,4 +1,4 @@
-import { formatPrice, getInitials, getCategoryIcon, timeAgo } from './data.js';
+import { formatPrice, getInitials, getCategoryIcon, timeAgo, escapeHtml } from './data.js';
 import { getProduct } from './products.js';
 import {
   getActiveCommunityId, getActiveCommunity, getJoinRequests, decideJoinRequest, subscribeCommunities,
@@ -226,7 +226,7 @@ function renderSitesSummary(communityId, inCommunity) {
     ).length;
     return `
       <button type="button" class="result-card" data-summary-site-id="${s.id}">
-        <span class="result-name">${s.name}</span>
+        <span class="result-name">${escapeHtml(s.name)}</span>
         <span class="result-meta">${memberCount} ${memberCount === 1 ? 'employee' : 'employees'} &middot; ${openCount} open order${openCount === 1 ? '' : 's'}</span>
       </button>
     `;
@@ -450,7 +450,7 @@ function renderAnalytics(communityId, inCommunity) {
     bySite.set(o.siteName || 'No site', (bySite.get(o.siteName || 'No site') || 0) + amt);
     bySupplier.set(o.stockistName || 'Unknown', (bySupplier.get(o.stockistName || 'Unknown') || 0) + amt);
   }
-  const row = ([name, amt]) => `<div class="activity-item"><span class="activity-text">${name}</span><span class="activity-time">${formatPrice(amt)}</span></div>`;
+  const row = ([name, amt]) => `<div class="activity-item"><span class="activity-text">${escapeHtml(name)}</span><span class="activity-time">${formatPrice(amt)}</span></div>`;
   const sorted = map => [...map.entries()].sort((a, b) => b[1] - a[1]);
   analyticsSitesEl.innerHTML = sorted(bySite).map(row).join('');
   analyticsSuppliersEl.innerHTML = sorted(bySupplier).slice(0, 8).map(row).join('');
@@ -540,7 +540,7 @@ function renderTeam(communityId) {
     } else if (teamActionState && teamActionState.membershipId === m.id && teamActionState.action === 'transfer') {
       actionsHtml = `
         <div class="reject-form">
-          <p class="field-hint">Make <strong>${displayName}</strong> the owner of this company? They take full control. You stay on as an owner-level member, but only they can transfer it again after this.</p>
+          <p class="field-hint">Make <strong>${escapeHtml(displayName)}</strong> the owner of this company? They take full control. You stay on as an owner-level member, but only they can transfer it again after this.</p>
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-team-action="cancel" data-team-mid="${m.id}">Cancel</button>
             <button class="btn btn-primary" data-team-action="transfer-confirm" data-team-id="${memberId}" data-team-mid="${m.id}">Transfer ownership</button>
@@ -552,8 +552,8 @@ function renderTeam(communityId) {
       actionsHtml = `
         <div class="reject-form">
           <p class="field-hint">${isRemove
-            ? `Remove <strong>${displayName}</strong> from this company? This also removes their owner and buyer access and every site assignment. They can ask to rejoin later.`
-            : `Suspend <strong>${displayName}</strong>? They lose all access until you restore them. Their owner/buyer access and site assignments are kept.`}</p>
+            ? `Remove <strong>${escapeHtml(displayName)}</strong> from this company? This also removes their owner and buyer access and every site assignment. They can ask to rejoin later.`
+            : `Suspend <strong>${escapeHtml(displayName)}</strong>? They lose all access until you restore them. Their owner/buyer access and site assignments are kept.`}</p>
           <label class="field-label" for="team-reason-input">Reason (optional — the member can see this)</label>
           <input type="text" id="team-reason-input" class="text-input" maxlength="300" placeholder="e.g. left the company, on leave, performance review" />
           <div class="reject-form-actions">
@@ -580,13 +580,13 @@ function renderTeam(communityId) {
     return `
       <div class="order-card">
         <div class="request-header">
-          <div class="requester-badge" title="${displayName}">
+          <div class="requester-badge" title="${escapeHtml(displayName)}">
             <span class="requester-avatar">${getInitials(displayName)}</span>
-            <span class="requester-name">${displayName}</span>
+            <span class="requester-name">${escapeHtml(displayName)}</span>
           </div>
           <div class="order-card-main">
             <strong>${badges}</strong>
-            ${suspended && m.statusReason ? `<span class="field-hint">Reason: ${m.statusReason}</span>` : ''}
+            ${suspended && m.statusReason ? `<span class="field-hint">Reason: ${escapeHtml(m.statusReason)}</span>` : ""}
           </div>
         </div>
         ${actionsHtml}
@@ -775,14 +775,14 @@ function renderOrderDetail(order) {
   const events = getOrderEvents(order.id);
 
   const peopleRows = [
-    order.requestedBy ? `<p class="hint"><strong>Requested by</strong> ${order.requestedBy}</p>` : '',
-    order.approvedBy ? `<p class="hint"><strong>${order.secondApprovedBy ? 'First approval' : 'Approved by'}</strong> ${order.approvedBy}</p>` : '',
-    order.secondApprovedBy ? `<p class="hint"><strong>Second approval</strong> ${order.secondApprovedBy}</p>` : '',
-    order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${order.rejectedBy}${order.rejectionReason ? ` — ${order.rejectionReason}` : ''}</p>` : '',
-    order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${order.purchasedBy}</p>` : '',
-    order.driver ? `<p class="hint"><strong>Driver</strong> ${order.driver}</p>` : '',
-    order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${order.cancelledBy}${order.cancellationReason ? ` — ${order.cancellationReason}` : ''}</p>` : '',
-    order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${order.orderCancelledBy}${order.orderCancellationReason ? ` — ${order.orderCancellationReason}` : ''}</p>` : '',
+    order.requestedBy ? `<p class="hint"><strong>Requested by</strong> ${escapeHtml(order.requestedBy)}</p>` : '',
+    order.approvedBy ? `<p class="hint"><strong>${order.secondApprovedBy ? 'First approval' : 'Approved by'}</strong> ${escapeHtml(order.approvedBy)}</p>` : '',
+    order.secondApprovedBy ? `<p class="hint"><strong>Second approval</strong> ${escapeHtml(order.secondApprovedBy)}</p>` : '',
+    order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${escapeHtml(order.rejectedBy)}${order.rejectionReason ? ` — ${escapeHtml(order.rejectionReason)}` : ''}</p>` : '',
+    order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${escapeHtml(order.purchasedBy)}</p>` : '',
+    order.driver ? `<p class="hint"><strong>Driver</strong> ${escapeHtml(order.driver)}</p>` : '',
+    order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${escapeHtml(order.cancelledBy)}${order.cancellationReason ? ` — ${escapeHtml(order.cancellationReason)}` : ''}</p>` : '',
+    order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${escapeHtml(order.orderCancelledBy)}${order.orderCancellationReason ? ` — ${escapeHtml(order.orderCancellationReason)}` : ''}</p>` : '',
   ].filter(Boolean).join('');
 
   const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
@@ -808,10 +808,10 @@ function renderOrderDetail(order) {
     </div>
 
     <h2>Site</h2>
-    <p class="hint">${order.siteName || 'Unknown site'}${[order.siteAddress, order.sitePostcode].filter(Boolean).length ? `<br>${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ')}` : ''}${order.siteDeliveryInstructions ? `<br>${order.siteDeliveryInstructions}` : ''}</p>
+    <p class="hint">${escapeHtml(order.siteName || 'Unknown site')}${[order.siteAddress, order.sitePostcode].filter(Boolean).length ? `<br>${escapeHtml([order.siteAddress, order.sitePostcode].filter(Boolean).join(' · '))}` : ''}${order.siteDeliveryInstructions ? `<br>${escapeHtml(order.siteDeliveryInstructions)}` : ''}</p>
 
     <h2>Sourcing</h2>
-    <p class="hint">${order.stockistName || 'Not yet chosen'}${order.stockistWebsite ? ` &middot; ${order.stockistWebsite}` : ''}${order.stockistPostcode ? ` &middot; ${order.stockistPostcode}` : ''}</p>
+    <p class="hint">${escapeHtml(order.stockistName || 'Not yet chosen')}${order.stockistWebsite ? ` &middot; ${escapeHtml(order.stockistWebsite)}` : ''}${order.stockistPostcode ? ` &middot; ${escapeHtml(order.stockistPostcode)}` : ''}</p>
 
     <h2>People</h2>
     ${peopleRows || '<p class="empty-hint">No actions taken yet.</p>'}
@@ -871,7 +871,7 @@ function renderJoinRequests(communityId) {
         ${activeSites.map(s => `
           <label class="checkbox-field checkbox-field-inline">
             <input type="checkbox" data-assign-site="${s.id}" data-assign-for="${r.id}" />
-            <span>${s.name}</span>
+            <span>${escapeHtml(s.name)}</span>
           </label>
         `).join('')}
       </div>
@@ -879,9 +879,9 @@ function renderJoinRequests(communityId) {
     return `
     <div class="order-card">
       <div class="request-header">
-        <div class="requester-badge" title="${displayName}">
+        <div class="requester-badge" title="${escapeHtml(displayName)}">
           <span class="requester-avatar">${getInitials(displayName)}</span>
-          <span class="requester-name">${displayName}</span>
+          <span class="requester-name">${escapeHtml(displayName)}</span>
         </div>
         <div class="order-card-main">
           <strong>Wants to join this company</strong>
@@ -947,9 +947,9 @@ function renderBuyerRequests(communityId) {
     return `
     <div class="order-card">
       <div class="request-header">
-        <div class="requester-badge" title="${displayName}">
+        <div class="requester-badge" title="${escapeHtml(displayName)}">
           <span class="requester-avatar">${getInitials(displayName)}</span>
-          <span class="requester-name">${displayName}</span>
+          <span class="requester-name">${escapeHtml(displayName)}</span>
         </div>
         <div class="order-card-main">
           <strong>Wants buyer access</strong>
@@ -971,7 +971,8 @@ function renderBuyerRequests(communityId) {
 }
 
 function renderOrderCard(order) {
-  const requesterName = order.requestedBy || 'Unknown';
+  const requesterNameRaw = order.requestedBy || 'Unknown';
+  const requesterName = escapeHtml(requesterNameRaw);
   const product = getProduct(order.items[0] ? order.items[0].productId : null);
   const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
   const nextAction = nextActionFor(order, 'owner', { pendingCancellationRequest: pendingCancellation });
@@ -1031,7 +1032,7 @@ function renderOrderCard(order) {
     <div class="order-card driver-card status-${order.status}" data-order-id="${order.id}">
       <div class="request-header">
         <div class="requester-badge" title="Requested by ${requesterName}">
-          <span class="requester-avatar">${getInitials(requesterName)}</span>
+          <span class="requester-avatar">${getInitials(requesterNameRaw)}</span>
           <span class="requester-name">${requesterName}</span>
         </div>
         <div class="order-card-main">
@@ -1049,24 +1050,24 @@ function renderOrderCard(order) {
       <div class="driver-route">
         <div class="route-step">
           <span class="route-label">Buy from</span>
-          <span class="route-value">${order.stockistName || 'Unknown'}</span>
-          ${order.stockistName ? `<span class="route-sub">${order.stockistWebsite} &middot; ${order.stockistPostcode}</span>` : ''}
+          <span class="route-value">${escapeHtml(order.stockistName || "Unknown")}</span>
+          ${order.stockistName ? `<span class="route-sub">${escapeHtml(order.stockistWebsite)} &middot; ${escapeHtml(order.stockistPostcode)}</span>` : ''}
           ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
         </div>
         <div class="route-arrow">&rarr;</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
-          <span class="route-value">${order.siteName || order.deliveryPostcode}</span>
+          <span class="route-value">${escapeHtml(order.siteName || order.deliveryPostcode)}</span>
           ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
         </div>
       </div>
-      ${order.status === 'rejected' ? `<p class="rejection-reason">Rejected by ${order.rejectedBy || 'owner'}${order.rejectionReason ? `: ${order.rejectionReason}` : ''}</p>` : ''}
-      ${order.status === 'cancelled' ? `<p class="rejection-reason">Cancelled by ${order.orderCancelledBy || 'the worker'}${order.orderCancellationReason ? `: ${order.orderCancellationReason}` : ''}</p>` : ''}
+      ${order.status === 'rejected' ? `<p class="rejection-reason">Rejected by ${escapeHtml(order.rejectedBy || "owner")}${order.rejectionReason ? `: ${escapeHtml(order.rejectionReason)}` : ""}</p>` : ''}
+      ${order.status === 'cancelled' ? `<p class="rejection-reason">Cancelled by ${escapeHtml(order.orderCancelledBy || "the worker")}${order.orderCancellationReason ? `: ${escapeHtml(order.orderCancellationReason)}` : ""}</p>` : ''}
       ${order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected' || order.status === 'delivered'
-        ? `<p class="hint small-hint">Purchased by ${order.purchasedBy || 'a buyer'}${order.driver ? ` &middot; driver: ${order.driver}` : ''}</p>` : ''}
+        ? `<p class="hint small-hint">Purchased by ${escapeHtml(order.purchasedBy || "a buyer")}${order.driver ? ` &middot; driver: ${escapeHtml(order.driver)}` : ""}</p>` : ''}
       ${order.cancelledAt ? `<p class="rejection-reason">Cancelled by ${order.cancelledBy || 'a driver'}: ${order.cancellationReason || ''}</p>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
-        ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()} (confirmed by ${order.driver || 'driver'})</p>` : ''}
+        ? `<p class="hint small-hint">Delivered to ${escapeHtml(order.deliveryLocation)} at ${new Date(order.deliveryTime).toLocaleString()} (confirmed by ${escapeHtml(order.driver || "driver")})</p>` : ''}
       ${actionHtml}
     </div>
   `;

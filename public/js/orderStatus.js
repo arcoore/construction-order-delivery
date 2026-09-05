@@ -20,6 +20,7 @@
 // value to real, short, role-appropriate English.
 
 import { neededByUrgency } from './deadline.js';
+import { escapeHtml } from './data.js';
 
 // --- Edit-diff helpers (order_edited event rendering) -------------------
 
@@ -35,7 +36,7 @@ function describeItemsChange(from, to) {
   const key = it => `${it.productName || ''}||${it.variant || ''}`;
   const fromMap = new Map(fromArr.map(it => [key(it), it]));
   const toMap = new Map(toArr.map(it => [key(it), it]));
-  const name = it => `${it.productName || 'item'}${it.variant ? ` (${it.variant})` : ''}`;
+  const name = it => `${escapeHtml(it.productName || 'item')}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}`;
 
   const bits = [];
   for (const [k, it] of toMap) {
@@ -150,16 +151,20 @@ export function fulfilmentSummary(order) {
   if (!order || order.fulfilmentStatus !== 'partial') return '';
   const short = (order.items || []).filter(it => it.deliveredShort);
   if (short.length === 0) return 'Delivered partial — some items were short';
-  return `Delivered partial — short: ${short.map(it => `${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.shortfallNote ? ` — ${it.shortfallNote}` : ''}`).join('; ')}`;
+  // it.variant can be worker free-text; shortfallNote always is.
+  return `Delivered partial — short: ${short.map(it => `${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.shortfallNote ? ` — ${escapeHtml(it.shortfallNote)}` : ''}`).join('; ')}`;
 }
 
+// These return strings interpolated straight into innerHTML by callers, and
+// it.variant can be worker-entered free text ("None of these — custom
+// size"), so every interpolated field is escaped here.
 export function itemsSummary(order) {
   const items = (order && order.items) || [];
   if (items.length === 0) {
-    return order && order.productName ? order.productName : '—';
+    return order && order.productName ? escapeHtml(order.productName) : '—';
   }
   return items
-    .map(it => `${it.quantity} × ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}`)
+    .map(it => `${escapeHtml(it.quantity)} × ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}`)
     .join(', ');
 }
 
@@ -167,9 +172,9 @@ export function itemsSummary(order) {
 export function itemsShortSummary(order) {
   const items = (order && order.items) || [];
   if (items.length === 0) {
-    return order && order.productName ? order.productName : '—';
+    return order && order.productName ? escapeHtml(order.productName) : '—';
   }
-  const first = `${items[0].productName}${items[0].variant ? ` (${items[0].variant})` : ''}`;
+  const first = `${escapeHtml(items[0].productName)}${items[0].variant ? ` (${escapeHtml(items[0].variant)})` : ''}`;
   return items.length === 1 ? first : `${first} + ${items.length - 1} more`;
 }
 
@@ -216,7 +221,7 @@ export const EVENT_RENDER = {
   delivery_cancelled: (e, label) => ({ icon: '⚠️', text: `${e.actorName || 'A driver'} cancelled ${label}${e.reason ? ` — ${e.reason}` : ''}` }),
   delivery_returned_to_pool: (e, label) => ({ icon: '🔁', text: `${label} is back in the driver pool` }),
   collected: (e, label) => ({ icon: '📦', text: `${e.actorName || 'Driver'} collected ${label}` }),
-  delivered: (e, label) => ({ icon: '🏁', text: `${label} delivered to ${e.meta?.deliveryLocation || 'site'}` }),
+  delivered: (e, label) => ({ icon: '🏁', text: `${label} delivered to ${escapeHtml(e.meta?.deliveryLocation || 'site')}` }),
   // Phase 7B/7C — Worker corrections & cancellation.
   order_edited: (e, label) => {
     const changes = e.meta?.changes || {};
@@ -238,7 +243,7 @@ export const EVENT_RENDER = {
     const skip = new Set(['siteId', 'siteAddress', 'sitePostcode', 'siteDeliveryInstructions', 'siteContactName', 'siteContactPhone', 'siteAccessNotes', 'stockistId', 'stockistWebsite', 'stockistPostcode', 'pickupEstimate', 'productId', 'unit', 'neededBy']);
     const parts = Object.entries(changes)
       .filter(([field, v]) => !skip.has(field) && field !== 'items' && field !== 'neededByType' && v && typeof v === 'object')
-      .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${from ?? '—'} → ${to ?? '—'}`);
+      .map(([field, { from, to }]) => `${fieldLabels[field] || field} ${escapeHtml(from ?? '—')} → ${escapeHtml(to ?? '—')}`);
     // needed-by: edit_order only ever records the *type* (asap/deadline), not
     // the timestamp — so a Today→Tomorrow change (both 'deadline') would
     // otherwise read "needed by deadline → deadline". Say something honest
@@ -276,7 +281,19 @@ export const EVENT_RENDER = {
 // shouldn't be one — all 16 real order_events types are covered — but this
 // mirrors the exact fallback owner.js already used, rather than silently
 // rendering nothing for a genuinely unknown type).
+//
+// The renderers' `.text` is interpolated into innerHTML by every caller, and
+// pulls in user-controlled strings (actorName, reason, and the label —
+// which carries product/variant). Escape them here, once, rather than in
+// 16 renderers: the event is shallow-copied with actorName/reason escaped,
+// and the label is escaped before it's passed in.
 export function describeEvent(event, label) {
   const render = EVENT_RENDER[event.type];
-  return render ? render(event, label) : { icon: '•', text: `${event.type} on ${label}` };
+  const safeEvent = {
+    ...event,
+    actorName: event.actorName == null ? event.actorName : escapeHtml(event.actorName),
+    reason: event.reason == null ? event.reason : escapeHtml(event.reason),
+  };
+  const safeLabel = escapeHtml(label);
+  return render ? render(safeEvent, safeLabel) : { icon: '•', text: `${escapeHtml(event.type)} on ${safeLabel}` };
 }
