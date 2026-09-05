@@ -1,4 +1,22 @@
-# Session build log — migrations 0024–0039 (local only, unpushed)
+# Session build log — migrations 0024–0040 (local only, unpushed)
+
+> **2FA / account security (migration `0040`, config.toml):** email
+> confirmation is now **required** on signup (`enable_confirmations = true`
+> — locally caught in Inbucket; on hosted it's the dashboard toggle + SMTP).
+> Optional **TOTP two-factor** (Supabase-native, `[auth.mfa.totp]`): opt-in
+> from Profile (QR + setup key), and once a factor is verified, login
+> requires the 6-digit code — client gate (`isMfaChallengePending`, same
+> shape as password recovery) **plus** a `BEFORE INSERT/UPDATE/DELETE`
+> trigger (`_enforce_mfa_aal2`) on every write-bearing table that refuses an
+> aal1 write when the caller has a verified factor, so a stolen password +
+> a raw API call past the frontend still can't write. New auth.js fns:
+> `startMfaEnrollment` / `confirmMfaEnrollment` / `verifyMfaLogin` /
+> `disableMfa` / `getMfaEnabled` / `isMfaChallengePending`. New login view
+> `#mfa-challenge-form`, new Profile section. SMS/text 2FA deliberately not
+> included (needs a paid provider + 18+ account). pgTAP now **34 files /
+> 582 tests**.
+
+## Migrations 0024–0039
 
 Everything below was built in one session, committed **locally**, and is
 **not on `origin/main` and not applied to hosted `sitestock-dev`**. Full
