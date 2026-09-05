@@ -157,7 +157,7 @@ function renderCancellationRequests() {
           ${decidingAction === 'rejected'
             ? `<label class="field-label" for="cancel-decision-reason-input">Reason (optional)</label>
                <input type="text" id="cancel-decision-reason-input" class="text-input" placeholder="e.g. Already collecting this afternoon" />`
-            : `<p class="hint small-hint">This cancels the order inside SiteStock — it doesn't process a refund or contact the supplier for you.</p>`}
+            : `<p class="hint small-hint">This cancels the order inside SiteStock — it doesn't process a refund or contact the supplier for you.${order.status === 'collected' ? ' The driver has already collected it and will be asked to arrange the return.' : ''}</p>`}
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-cancel-action="never-mind" data-req-id="${r.id}">Never mind</button>
             <button class="btn btn-primary" data-cancel-action="confirm" data-req-id="${r.id}">${decidingAction === 'rejected' ? 'Confirm rejection' : 'Confirm cancellation'}</button>

@@ -14,7 +14,7 @@
 -- multi-connection race test is a reasonable later addition once real
 -- infrastructure exists to run one (see the Phase 8A report).
 begin;
-select plan(17);
+select plan(18);
 
 select tests.create_user('owner-c@test.local', 'Owner C')   as owner_c \gset
 select tests.create_user('worker-c@test.local', 'Worker C') as worker_c \gset
@@ -168,18 +168,25 @@ select tests.authenticate_as(:'worker_c');
 select request_cancellation(:'order3_id', 'Wrong item') as request_result \gset
 select (:'request_result'::cancellation_requests).id as request3_id \gset
 
--- driver collects BEFORE the buyer decides
+-- driver collects BEFORE the buyer decides — since migration 0035 the buyer
+-- CAN still approve a collected order's cancellation; the order is cancelled
+-- and the driver is asked to arrange the return (auto-close now only applies
+-- once the order is actually delivered — covered in 28_post_collection_cancellation).
 select tests.authenticate_as(:'driver_2');
 select mark_collected(:'order3_id');
 
 select tests.authenticate_as(:'buyer_c');
 select decide_cancellation_request(:'request3_id', 'approved', 'Approving late') as decision \gset
-select is( (:'decision'::jsonb) ->> 'autoClosed', 'true',
-  'a decision that arrives after collection is safely auto-closed, not silently approved (item 16)' );
-select is( (select status from orders where id = :'order3_id')::text, 'collected',
-  'the order itself is untouched — still collected, never falsely cancelled (item 16)' );
-select is( (select status from cancellation_requests where id = :'request3_id')::text, 'rejected',
-  'the request is deterministically closed as rejected, not left pending forever (item 16)' );
+select is( (:'decision'::jsonb) ->> 'result', 'cancelled',
+  'a cancellation approved after collection now cancels the order (migration 0035) (item 16)' );
+select is( (select status from orders where id = :'order3_id')::text, 'cancelled',
+  'the collected order is moved to cancelled (item 16)' );
+select is( (select status from cancellation_requests where id = :'request3_id')::text, 'approved',
+  'the request is recorded as approved (item 16)' );
+select is(
+  (select (meta->>'wasCollected')::boolean from order_events where order_id = :'order3_id' and type = 'order_cancelled'),
+  true,
+  'the order_cancelled event records wasCollected=true (item 16)' );
 
 -- ---------------------------------------------------- 18: order_events immutability
 select tests.authenticate_as(:'owner_c');

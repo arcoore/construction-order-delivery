@@ -630,7 +630,9 @@ function canEditOrCancelDirectly(order) {
 }
 
 function canRequestCancellation(order) {
-  return order.status === 'purchased' || order.status === 'claimed';
+  // Migration 0035 — 'collected' is now allowed too; the Buyer's approval
+  // then asks the driver to arrange the return. 'delivered' stays out.
+  return order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected';
 }
 
 function cancellationStateHint(order) {
@@ -692,7 +694,7 @@ function renderRequestCancelForm(order) {
     <div class="reject-form">
       <label class="field-label" for="request-cancel-reason-input">Why do you want to cancel? (required)</label>
       <input type="text" id="request-cancel-reason-input" class="text-input" placeholder="e.g. Site plan changed, no longer needed" />
-      <p class="hint small-hint">This has already been purchased, so it sends a request to the Buyer to decide — it doesn't automatically refund or cancel anything with the supplier.</p>
+      <p class="hint small-hint">This has already been purchased, so it sends a request to the Buyer to decide — it doesn't automatically refund or cancel anything with the supplier.${order.status === 'collected' ? ' The driver has already collected it, so if approved they\'ll be asked to arrange the return.' : ''}</p>
       <div class="reject-form-actions">
         <button class="btn btn-secondary" data-worker-action="request-cancel-never-mind" data-id="${order.id}">Never mind</button>
         <button class="btn btn-primary" data-worker-action="request-cancel-submit" data-id="${order.id}">Send request</button>

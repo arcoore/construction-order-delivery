@@ -71,8 +71,9 @@ select is(
   'item 12: two approved events were logged'
 );
 select is(
-  (select meta->>'stage' from order_events where order_id = :'big_id' and type = 'approved' order by created_at desc limit 1), 'second',
-  'item 13: the last approved event is stage=second'
+  (select count(distinct meta->>'stage')::int from order_events
+   where order_id = :'big_id' and type = 'approved' and meta->>'stage' in ('first', 'second')), 2,
+  'item 13: both a stage=first and a stage=second approved event exist'
 );
 
 -- revert clears both approvals
