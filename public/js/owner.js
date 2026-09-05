@@ -144,6 +144,11 @@ function renderDashboard(inCommunity, communityId) {
   const awaitingApproval = inCommunity.filter(o => o.status === 'pending_approval').length;
   const outForDelivery = inCommunity.filter(o => o.status === 'claimed' || o.status === 'collected').length;
   const delivered = inCommunity.filter(o => o.status === 'delivered').length;
+  // Open (not yet delivered/rejected/cancelled) orders whose deadline has
+  // already passed — computed fresh from the stored needed_by, never a
+  // stored "overdue" flag (see deadline.js's neededByUrgency).
+  const OPEN = o => !['delivered', 'rejected', 'cancelled'].includes(o.status);
+  const overdue = inCommunity.filter(o => OPEN(o) && neededByUrgency(o.neededByType, o.neededBy, o.status) === 'overdue').length;
   const totalSpend = inCommunity
     .filter(o => o.purchasedAt != null)
     .reduce((sum, o) => sum + (o.totalPrice || 0), 0);
@@ -152,6 +157,7 @@ function renderDashboard(inCommunity, communityId) {
     { value: approvedMemberCount(communityId), label: 'Members' },
     { value: pendingJoinCount, label: 'Pending Join Requests', highlight: pendingJoinCount > 0 },
     { value: awaitingApproval, label: 'Awaiting Order Approval', highlight: awaitingApproval > 0 },
+    { value: overdue, label: 'Overdue', highlight: overdue > 0 },
     { value: outForDelivery, label: 'Out for Delivery' },
     { value: delivered, label: 'Delivered' },
     { value: formatPrice(totalSpend), label: 'Total Spend (Purchased)' },

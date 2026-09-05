@@ -147,7 +147,12 @@ function render() {
   } else if (activeTab === 'mine') {
     filtered = orders.filter(o => o.driverId === currentDriverId() && ['claimed', 'collected'].includes(o.status));
   } else {
-    filtered = orders.filter(o => o.status === 'delivered' && o.driverId === currentDriverId());
+    // Completed: most recently delivered first, capped so a long-serving
+    // driver's history stays a glance, not an endless scroll.
+    filtered = orders
+      .filter(o => o.status === 'delivered' && o.driverId === currentDriverId())
+      .sort((a, b) => (b.deliveredAt || 0) - (a.deliveredAt || 0))
+      .slice(0, 25);
   }
 
   if (filtered.length === 0) {
