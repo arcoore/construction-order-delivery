@@ -17,6 +17,8 @@ import {
 import { statusLabel, nextActionFor, describeEvent, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
 import { subscribeOrderMessages, getMessageCountForOrder } from './orderMessages.js';
+import { renderDeliveryPhotos } from './deliveryPhotosView.js';
+import { getPhotoCountForOrder } from './deliveryPhotos.js';
 
 const siteSelectPanel = document.getElementById('site-select-panel');
 const workerSitesList = document.getElementById('worker-sites-list');
@@ -883,9 +885,12 @@ function openMessagesPanel(orderId) {
   orderFormEl.innerHTML = `
     <h1>Messages</h1>
     <p class="hint">${order ? itemsShortSummary(order) : 'this order'}</p>
+    ${getPhotoCountForOrder(orderId) ? '<h2>Delivery photos</h2><div id="worker-order-photos"></div>' : ''}
     <div id="worker-order-thread"></div>
   `;
   renderOrderThread(document.getElementById('worker-order-thread'), orderId);
+  const photosEl = document.getElementById('worker-order-photos');
+  if (photosEl) renderDeliveryPhotos(photosEl, orderId, { canUpload: false });
 }
 function closeMessagesPanel() {
   messagesOrderId = null;

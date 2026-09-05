@@ -25,6 +25,8 @@ import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
 import { subscribeOrderMessages } from './orderMessages.js';
+import { renderDeliveryPhotos } from './deliveryPhotosView.js';
+import { subscribeDeliveryPhotos } from './deliveryPhotos.js';
 
 const tabsEl = document.getElementById('owner-tabs');
 const ordersPanel = document.getElementById('owner-orders-panel');
@@ -787,6 +789,7 @@ function renderOrderDetail(order) {
       <h2>Delivery</h2>
       <p class="hint">Delivered to ${order.deliveryLocation || 'an unrecorded location'} at ${order.deliveryTime ? new Date(order.deliveryTime).toLocaleString() : 'an unrecorded time'}${order.deliveredAt ? ` &middot; confirmed ${new Date(order.deliveredAt).toLocaleString()}` : ''}.</p>
       ${order.fulfilmentStatus === 'partial' ? `<p class="hint"><strong>${fulfilmentSummary(order)}</strong></p>` : order.fulfilmentStatus === 'full' ? '<p class="hint">Delivered in full.</p>' : ''}
+      <div id="owner-order-photos"></div>
     ` : ''}
 
     <h2>Timeline</h2>
@@ -808,6 +811,8 @@ function renderOrderDetail(order) {
   `;
 
   renderOrderThread(document.getElementById('owner-order-thread'), order.id);
+  const photosEl = document.getElementById('owner-order-photos');
+  if (photosEl) renderDeliveryPhotos(photosEl, order.id, { canUpload: false });
 }
 
 // Roadmap Step 5 — an Owner can optionally assign a new Worker to one or
@@ -1111,6 +1116,12 @@ subscribeOrderMessages(() => {
   if (selectedOrderId && !orderDetailPanel.hidden) {
     const el = document.getElementById('owner-order-thread');
     if (el) renderOrderThread(el, selectedOrderId);
+  }
+});
+subscribeDeliveryPhotos(() => {
+  if (selectedOrderId && !orderDetailPanel.hidden) {
+    const el = document.getElementById('owner-order-photos');
+    if (el) renderDeliveryPhotos(el, selectedOrderId, { canUpload: false });
   }
 });
 // Roadmap Step 4 — a pending cancellation request now feeds the card's

@@ -86,6 +86,7 @@ import { refreshOrderCache } from './orderLifecycle.js';
 import { refreshCommunityCache } from './community.js';
 import { refreshSitesCache } from './sites.js';
 import { refreshMessageCache } from './orderMessages.js';
+import { refreshPhotoCache } from './deliveryPhotos.js';
 
 // --- Coalescing ----------------------------------------------------------
 // A single lifecycle RPC can produce more than one Realtime event in quick
@@ -109,6 +110,7 @@ function coalesce(fn, ms = 150) {
 const coalescedRefreshNotifications = coalesce(refreshNotificationCache);
 const coalescedRefreshOrders = coalesce(refreshOrderCache);
 const coalescedRefreshMessages = coalesce(refreshMessageCache);
+const coalescedRefreshPhotos = coalesce(refreshPhotoCache);
 // Permission-relevant tables (sites/site_memberships/community_memberships/
 // owner_grants/buyer_grants/buyer_requests/communities) always refresh BOTH
 // caches together, deliberately — the exact same defensive pairing
@@ -207,6 +209,17 @@ function createCommunityChannel(communityId) {
     () => {
       if (myGeneration !== communityGeneration) return;
       coalescedRefreshMessages();
+    }
+  );
+
+  // delivery_photos — same shape; a photo added by the driver shows on an
+  // already-open order detail without a manual refresh.
+  channel = channel.on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'delivery_photos', filter },
+    () => {
+      if (myGeneration !== communityGeneration) return;
+      coalescedRefreshPhotos();
     }
   );
 

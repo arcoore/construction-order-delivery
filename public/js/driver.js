@@ -9,6 +9,8 @@ import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
 import { subscribeOrderMessages, getMessageCountForOrder } from './orderMessages.js';
+import { renderDeliveryPhotos } from './deliveryPhotosView.js';
+import { subscribeDeliveryPhotos, getPhotoCountForOrder } from './deliveryPhotos.js';
 
 const locateBtn = document.getElementById('locate-btn');
 const locationStatus = document.getElementById('location-status');
@@ -242,6 +244,14 @@ function render() {
     if (el) renderOrderThread(el, threadOrderId, threadDraft);
   }
   threadDraft = '';
+
+  listEl.querySelectorAll('[data-photos-for]').forEach(el => {
+    const oid = el.dataset.photosFor;
+    const order = latestOrders.find(o => o.id === oid);
+    renderDeliveryPhotos(el, oid, {
+      canUpload: order && order.driverId === currentDriverId() && ['collected', 'delivered'].includes(order.status),
+    });
+  });
 }
 
 // A plain Google Maps "search" link — opens in the browser or hands off to
@@ -370,6 +380,8 @@ function renderOrderCard(order, pickup) {
         ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}
       ${fulfilmentSummary(order) ? `<p class="hint small-hint">${fulfilmentSummary(order)}</p>` : ''}
       ${actionHtml}
+      ${['collected', 'delivered'].includes(order.status) || getPhotoCountForOrder(order.id)
+        ? `<div class="delivery-photos-wrap" data-photos-for="${order.id}"></div>` : ''}
       <button type="button" class="link-btn" data-toggle-thread="${order.id}">
         ${threadOrderId === order.id ? 'Hide messages' : `Messages${getMessageCountForOrder(order.id) ? ` (${getMessageCountForOrder(order.id)})` : ''}`}
       </button>
@@ -467,3 +479,4 @@ subscribe(orders => {
 });
 
 subscribeOrderMessages(render);
+subscribeDeliveryPhotos(render);
