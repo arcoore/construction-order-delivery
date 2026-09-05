@@ -742,6 +742,21 @@ export async function renameCommunity(communityId, name) {
   return { ok: true };
 }
 
+// Permanent company deletion (migration 0038) — creator only, and only for
+// a company with no orders, no sites, and no other members/grants. The
+// server enforces every one of those; this just relays and cleans the cache.
+export async function deleteCommunity(communityId) {
+  const { error } = await supabase.rpc('delete_community', { p_community_id: communityId });
+  if (error) return { ok: false, error: error.message };
+  cache.communities = cache.communities.filter(c => c.id !== communityId);
+  cache.memberships = cache.memberships.filter(m => m.communityId !== communityId);
+  cache.ownerGrants = cache.ownerGrants.filter(g => g.communityId !== communityId);
+  cache.buyerGrants = cache.buyerGrants.filter(g => g.communityId !== communityId);
+  cache.buyerRequests = cache.buyerRequests.filter(r => r.communityId !== communityId);
+  notify();
+  return { ok: true };
+}
+
 export function getBuyerGrants() {
   return cache.buyerGrants;
 }

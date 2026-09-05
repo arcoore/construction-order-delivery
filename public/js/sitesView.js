@@ -3,7 +3,7 @@ import { subscribe } from './orderLifecycle.js';
 import { itemsShortSummary } from './orderStatus.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
-  archiveSite, changeSiteStatus, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
+  archiveSite, changeSiteStatus, deleteSite, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
 } from './sites.js';
 import { getActiveCommunityId, approvedMembers, subscribeCommunities } from './community.js';
 import { getCurrentUserId, resolveDisplayName } from './identity.js';
@@ -282,6 +282,9 @@ function renderSiteInfo(site) {
       <button class="btn btn-secondary" id="site-edit-btn">Edit</button>
       ${siteStatusButtons(site)}
     </div>
+    ${latestOrders.some(o => o.siteId === site.id) ? '' : `
+      <p class="hint small-hint">This site has no orders — it can be deleted permanently instead of archived.</p>
+      <button type="button" class="link-btn link-btn-danger" id="site-delete-btn">Delete this site permanently</button>`}
   `;
 }
 
@@ -374,6 +377,17 @@ function wireDetailActions(site) {
     editBtn.addEventListener('click', () => {
       editingSite = true;
       render();
+    });
+  }
+
+  const deleteBtn = document.getElementById('site-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!window.confirm(`Permanently delete "${site.name}"? This cannot be undone.`)) return;
+      deleteBtn.disabled = true;
+      const result = await deleteSite(site.id, currentActorId());
+      if (!result.ok) { deleteBtn.disabled = false; alert(result.error); return; }
+      showList();
     });
   }
 

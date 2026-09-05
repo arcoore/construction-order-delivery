@@ -5,7 +5,7 @@ import {
   approvedMemberCount, isCreator, isOwner, approvedMembers, hasOwnerGrant, grantOwnerAccess, revokeOwnerAccess, transferOwnership,
   hasBuyerGrant, grantBuyerAccess, revokeBuyerAccess, getBuyerRequests, decideBuyerRequest,
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink, renameCommunity,
-  getApprovalThreshold, setApprovalThreshold,
+  getApprovalThreshold, setApprovalThreshold, deleteCommunity,
   teamMemberships, suspendMember, restoreMember, removeMember,
   fetchMembershipEvents, getMembershipById,
 } from './community.js';
@@ -20,7 +20,7 @@ import {
 // sitesView.js, reached via the sitestock:show-sites event below.
 // Roadmap Step 5 adds one real write, addSiteMember, reused as-is (not
 // reimplemented) for the optional "assign a site at approval time" flow.
-import { subscribeSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
+import { subscribeSites, getSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
@@ -52,6 +52,10 @@ const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
 const setupChecklistPanel = document.getElementById('owner-setup-checklist-panel');
 const setupChecklistList = document.getElementById('owner-setup-checklist-list');
 const invitePanel = document.getElementById('owner-invite-panel');
+const deleteCompanyWrap = document.getElementById('owner-delete-company-wrap');
+const deleteCompanyInput = document.getElementById('owner-delete-company-input');
+const deleteCompanyBtn = document.getElementById('owner-delete-company-btn');
+const deleteCompanyStatus = document.getElementById('owner-delete-company-status');
 const companyNameInput = document.getElementById('owner-company-name-input');
 const renameCompanyBtn = document.getElementById('owner-rename-company-btn');
 const renameCompanyStatus = document.getElementById('owner-rename-company-status');
@@ -345,7 +349,36 @@ function renderInvitePanel(communityId) {
   inviteLinkInput.value = buildInviteLink(community.code);
   inviteCodeText.textContent = community.code;
   discoverableToggle.checked = !!community.discoverable;
+
+  // Delete-company: creator only, and only while genuinely empty (the server
+  // enforces every condition; this just decides whether to offer it).
+  const otherMembers = teamMemberships(communityId, currentOwnerId()).length;
+  const eligible = isCreator(communityId, currentOwnerId())
+    && !latestOrders.some(o => o.communityId === communityId)
+    && getSites(communityId).length === 0
+    && otherMembers === 0;
+  deleteCompanyWrap.hidden = !eligible;
 }
+
+deleteCompanyBtn.addEventListener('click', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  if ((deleteCompanyInput.value || '').trim().toUpperCase() !== 'DELETE') {
+    deleteCompanyStatus.textContent = 'Type DELETE to confirm.';
+    deleteCompanyStatus.className = 'form-status error';
+    return;
+  }
+  deleteCompanyBtn.disabled = true;
+  const result = await deleteCommunity(communityId);
+  if (!result.ok) {
+    deleteCompanyBtn.disabled = false;
+    deleteCompanyStatus.textContent = result.error;
+    deleteCompanyStatus.className = 'form-status error';
+    return;
+  }
+  // Gone — route out of it.
+  window.dispatchEvent(new CustomEvent('sitestock:active-community-gone'));
+});
 
 renameCompanyBtn.addEventListener('click', async () => {
   const communityId = getActiveCommunityId();

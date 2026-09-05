@@ -249,6 +249,22 @@ export async function restoreSite(siteId, actorId) {
   return setSiteStatus(siteId, 'active', actorId);
 }
 
+// Permanent site deletion (migration 0038) — only for a site that no order
+// has ever referenced (the server enforces this; orders.site_id's FK would
+// block it anyway). For anything with history, archive is the model.
+export async function deleteSite(siteId, actorId) {
+  const site = getSite(siteId);
+  if (site && !isOwner(site.communityId, actorId)) {
+    return { ok: false, error: 'Only the owner can delete a site.' };
+  }
+  const { error } = await supabase.rpc('delete_site', { p_site_id: siteId });
+  if (error) return { ok: false, error: error.message };
+  cache.sites = cache.sites.filter(s => s.id !== siteId);
+  cache.memberships = cache.memberships.filter(m => m.siteId !== siteId);
+  notify();
+  return { ok: true };
+}
+
 // Migration 0027 — 'paused' (temporarily on hold) and 'completed' (project
 // finished) both behave exactly like 'archived' for ordering: getActiveSites
 // (and everything that builds on it — the worker site picker, order

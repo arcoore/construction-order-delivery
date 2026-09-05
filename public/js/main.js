@@ -782,6 +782,12 @@ window.addEventListener('sitestock:logout', async () => {
 
 window.addEventListener('sitestock:go-to-auth', () => showAuth());
 window.addEventListener('sitestock:show-profile', () => showProfile());
+// The active company was deleted from under us — drop it and go to the picker.
+window.addEventListener('sitestock:active-community-gone', () => {
+  setActiveCommunityId(null);
+  setActiveRole(null);
+  showCommunityPicker();
+});
 
 subscribeIdentity(checkForNewOwnerGrant);
 

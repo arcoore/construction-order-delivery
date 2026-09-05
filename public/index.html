@@ -285,6 +285,16 @@
       </div>
       <p id="approval-threshold-status" class="form-status" aria-live="polite"></p>
       <p class="hint small-hint">Only applies while owner approval is on. An order above this amount needs two different owners to approve it before it reaches a buyer.</p>
+
+      <div id="owner-delete-company-wrap" hidden>
+        <h3 class="settings-subhead">Delete company</h3>
+        <p class="hint small-hint">Only possible while the company has no orders, no sites, and no other members. Type DELETE to confirm — this cannot be undone.</p>
+        <div class="invite-link-row">
+          <input type="text" id="owner-delete-company-input" class="text-input" placeholder="DELETE" />
+          <button type="button" class="btn btn-secondary link-btn-danger" id="owner-delete-company-btn">Delete company</button>
+        </div>
+        <p id="owner-delete-company-status" class="form-status" aria-live="polite"></p>
+      </div>
     </div>
 
     <div class="panel" id="owner-people-panel" hidden>
