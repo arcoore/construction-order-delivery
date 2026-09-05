@@ -1,0 +1,92 @@
+-- Stale-intent hardening: a database-wide statement_timeout, with the
+-- `postgres` superuser role explicitly exempted.
+--
+-- Background (see PROGRESS.md "Known issues / rough edges" for the full
+-- incident): during Workforce Lifecycle Phase C's live production QA, two
+-- RPC calls (restore_member, rerequest_membership) sat queued server-side
+-- for as long as ~90 minutes after the client gave up waiting, then executed
+-- against whatever state they eventually found, using their original (by
+-- then stale) input.
+--
+-- IMPORTANT — read before assuming this migration "fixes" the incident:
+-- investigating this properly (live two-connection testing, not just
+-- reasoning about it) surfaced that Supabase's own platform defaults
+-- already configure the `authenticator` role — the role PostgREST actually
+-- logs in as, on both local and hosted `sitestock-dev` (confirmed via
+-- pg_db_role_setting on both) — with `statement_timeout=8s` AND
+-- `lock_timeout=8s`, independent of anything this app has ever configured.
+-- A live two-connection reproduction (one session holding a
+-- `community_memberships` row's FOR UPDATE lock, a second session
+-- connecting genuinely as `authenticator` + `SET ROLE authenticated` and
+-- calling `suspend_member` on that same row — the exact real PostgREST
+-- connection pattern) confirmed the call is correctly cancelled at ~8.4s
+-- ("canceling statement due to statement timeout ... while locking tuple
+-- ... in relation community_memberships ... suspend_member") rather than
+-- hanging. That means the specific "blocked on a row lock" class of
+-- staleness was ALREADY bounded to 8 seconds, by Supabase's own baseline
+-- configuration, for the entire lifetime of this app, including during the
+-- original incident.
+--
+-- The practical conclusion: a plain Postgres-level lock wait is very
+-- unlikely to have been the true mechanism behind a 90-*minute* delay,
+-- since that class of delay was already capped at ~8s. The far more likely
+-- explanation is a layer BELOW Postgres's own query execution — most
+-- plausibly the connection pooler (Supavisor) queuing the request while
+-- waiting for a free backend connection, before any statement (and
+-- therefore before statement_timeout/lock_timeout) ever starts running.
+-- No SQL-level timeout — this migration's, or Supabase's own pre-existing
+-- one — can bound time spent waiting for a pool connection; that would
+-- require a pooler/PostgREST-level setting (e.g. Supavisor's pool size or
+-- a `db-pool-acquisition-timeout`), configured via the Supabase project
+-- dashboard, not a database migration. That remains a genuinely open,
+-- separate follow-up — not implemented or further investigated here.
+--
+-- What this migration actually adds, honestly: a database-wide default
+-- (`setrole = 0`, i.e. applies to any role, including any future role that
+-- might reach these functions via a path other than authenticator+SET ROLE)
+-- with the same 8s bound, plus an explicit unlimited-timeout exemption for
+-- the `postgres` role specifically (so migrations and admin tooling — the
+-- Supabase CLI's `db push`/`db reset`/`test db`/`db query --linked`, all of
+-- which connect directly as `postgres` — are never affected). This is
+-- legitimate defense-in-depth, verified working, but it is largely
+-- redundant with protection Supabase already provides by default for the
+-- actual production request path — it is not a complete fix for the
+-- original incident's true (still-unconfirmed, most-likely-pooler-level)
+-- root cause.
+--
+-- THE MECHANISM THAT ACTUALLY WORKS, exactly as verified live (do not
+-- reintroduce the two approaches proven NOT to work below):
+--   * `alter function <fn> set statement_timeout = ...` (function-local GUC
+--     override) does NOT bound the call — verified with a trivial isolated
+--     function (pg_sleep(10) with a 2s function-local override) that ran
+--     the full 10s uninterrupted. The override does not take effect early
+--     enough to bound the outer statement's already-computed deadline.
+--   * `alter role authenticated set statement_timeout = ...` does NOT apply
+--     via PostgREST's actual connection pattern (a pooled connection logged
+--     in as `authenticator`, then `SET ROLE <target>` per request) — role-
+--     level `ALTER ROLE ... SET` defaults are only loaded at genuine
+--     session/login start, not by a later `SET ROLE`. Verified live: a
+--     session that opened as `postgres` then ran `set role authenticated`
+--     did NOT pick up authenticated's role-level default.
+--   * `alter database <db> set statement_timeout = ...` DOES work — it is
+--     loaded as the session default the moment ANY connection to that
+--     database is established, before any subsequent `SET ROLE` — UNLESS
+--     the connecting role has its own role-level override (role-level beats
+--     database-level at session start), which is exactly why `postgres`
+--     needed its own explicit exemption below, and exactly why
+--     `authenticator` was already unaffected by needing this at all — its
+--     own pre-existing role-level 8s already wins over the database
+--     default for its own sessions.
+--   * `alter role postgres set statement_timeout = 0` correctly overrides
+--     the database default for genuine direct logins as `postgres`
+--     (verified live) — this is how the Supabase CLI's own migration
+--     runner and admin tooling connect.
+--
+-- Any future attempt to re-verify or extend this must test via a genuine
+-- login as the target role (e.g. `psql -h 127.0.0.1 -p 5432 -U
+-- authenticator ...` locally, password auth, not `-U postgres` + `SET
+-- ROLE` — the latter is silently exempted by postgres's own override below
+-- and will falsely appear to show no timeout is enforced for anyone).
+
+alter database postgres set statement_timeout = '8s';
+alter role postgres set statement_timeout = 0;
