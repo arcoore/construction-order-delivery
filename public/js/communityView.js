@@ -60,7 +60,7 @@ createBtn.addEventListener('click', async () => {
   const userId = getCurrentUserId();
   const communityName = createInput.value.trim();
   if (!communityName) {
-    setStatus(createStatus, 'Enter a community name.', 'error');
+    setStatus(createStatus, 'Enter a company name.', 'error');
     return;
   }
   createBtn.disabled = true;
@@ -203,7 +203,7 @@ function render() {
     return `
       <div class="community-card">
         <div class="community-card-info">
-          <strong>${community ? community.name : 'Unknown community'}</strong>
+          <strong>${community ? community.name : 'Unknown company'}</strong>
           <span>Requested ${timeAgo(r.requestedAt)} &middot; waiting for approval</span>
         </div>
       </div>
@@ -220,9 +220,9 @@ function render() {
 
   let emptyMessage = null;
   if (all.length === 0) {
-    emptyMessage = 'No communities exist yet — create the first one above.';
+    emptyMessage = 'No companies exist yet — create the first one above.';
   } else if (visible.length === 0) {
-    emptyMessage = `No communities match "${browseSearchInput.value.trim()}".`;
+    emptyMessage = `No companies match "${browseSearchInput.value.trim()}".`;
   }
 
   browseList.innerHTML = emptyMessage

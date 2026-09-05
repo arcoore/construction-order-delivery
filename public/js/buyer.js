@@ -4,7 +4,7 @@ import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import {
   subscribe, startPurchase, abandonPurchase, completePurchase, decideCancellationRequest,
-  getCancellationRequests, subscribeCancellationRequests,
+  getCancellationRequests, subscribeCancellationRequests, confirmDirectDelivery,
 } from './orderLifecycle.js';
 import { canPurchaseForSite } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
@@ -17,6 +17,8 @@ const detailEl = document.getElementById('buyer-detail');
 const backBtn = document.getElementById('buyer-back-btn');
 const cancellationRequestsPanel = document.getElementById('buyer-cancellation-requests-panel');
 const cancellationRequestsList = document.getElementById('buyer-cancellation-requests-list');
+const directDeliveriesPanel = document.getElementById('buyer-direct-deliveries-panel');
+const directDeliveriesList = document.getElementById('buyer-direct-deliveries-list');
 
 const HOLD_MS = 3000;
 
@@ -189,6 +191,97 @@ function renderCancellationRequests() {
   });
   const reasonInput = cancellationRequestsList.querySelector('#cancel-decision-reason-input');
   if (reasonInput) reasonInput.focus();
+}
+
+// YYYY-MM-DDTHH:mm in local time, for a datetime-local input's default
+// value — identical helper to driver.js's own (deliberately not shared,
+// same as this file's other small presentational helpers already aren't).
+function nowForDateTimeInput() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+let confirmingDirectDeliveryId = null;
+
+// direct_supplier orders this Buyer personally purchased, still sitting at
+// 'purchased' — there is no driver leg for these at all (see
+// confirm_direct_delivery in orderLifecycle.js), so they'd otherwise never
+// resolve to 'delivered' without this panel.
+function renderDirectDeliveries() {
+  const userId = getCurrentUserId();
+  const communityId = getActiveCommunityId();
+  const awaiting = latestOrders.filter(
+    o => o.communityId === communityId && o.status === 'purchased'
+      && o.deliveryMethod === 'direct_supplier' && o.purchasedById === userId
+  );
+  directDeliveriesPanel.hidden = awaiting.length === 0;
+  if (awaiting.length === 0) return;
+
+  directDeliveriesList.innerHTML = awaiting.map(o => `
+    <div class="order-card" data-order-id="${o.id}">
+      <div class="order-card-main">
+        <strong>${o.productName}${o.variant ? ` (${o.variant})` : ''}</strong>
+        <span>${o.siteName ? `${o.siteName} &middot; ` : ''}${o.quantity} &times; ${o.unit} &middot; from ${o.stockistName || 'the supplier'}</span>
+      </div>
+      ${confirmingDirectDeliveryId === o.id ? `
+        <div class="reject-form">
+          <label class="field-label" for="direct-delivery-time-input">Delivered at</label>
+          <input type="datetime-local" id="direct-delivery-time-input" class="text-input" value="${nowForDateTimeInput()}" />
+          <label class="field-label" for="direct-delivery-location-input">Delivered to (location)</label>
+          <input type="text" id="direct-delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${o.deliveryPostcode || ''}" />
+          <div class="reject-form-actions">
+            <button class="btn btn-secondary" data-direct-action="never-mind" data-order-id="${o.id}">Never mind</button>
+            <button class="btn btn-primary" data-direct-action="confirm" data-order-id="${o.id}">Confirm delivered</button>
+          </div>
+          <p id="direct-delivery-status" class="form-status"></p>
+        </div>
+      ` : `
+        <div class="owner-actions">
+          <button class="btn btn-primary" data-direct-action="start" data-order-id="${o.id}">Mark delivered</button>
+        </div>
+      `}
+    </div>
+  `).join('');
+
+  directDeliveriesList.querySelectorAll('[data-direct-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleDirectDeliveryAction(btn.dataset.directAction, btn.dataset.orderId));
+  });
+  const locationInput = directDeliveriesList.querySelector('#direct-delivery-location-input');
+  if (locationInput) locationInput.focus();
+}
+
+let directDeliveryInFlight = false;
+
+async function handleDirectDeliveryAction(action, orderId) {
+  if (action === 'start') {
+    confirmingDirectDeliveryId = orderId;
+    renderDirectDeliveries();
+    return;
+  }
+  if (action === 'never-mind') {
+    confirmingDirectDeliveryId = null;
+    renderDirectDeliveries();
+    return;
+  }
+  if (action === 'confirm') {
+    if (directDeliveryInFlight) return;
+    const timeInput = document.getElementById('direct-delivery-time-input');
+    const locationInput = document.getElementById('direct-delivery-location-input');
+    const statusEl = document.getElementById('direct-delivery-status');
+    directDeliveryInFlight = true;
+    const result = await confirmDirectDelivery(orderId, timeInput ? timeInput.value : '', locationInput ? locationInput.value : '');
+    directDeliveryInFlight = false;
+    if (!result.ok) {
+      if (statusEl) {
+        statusEl.textContent = result.error;
+        statusEl.className = 'form-status error';
+      }
+      return;
+    }
+    confirmingDirectDeliveryId = null;
+    renderDirectDeliveries();
+  }
 }
 
 let decisionInFlight = false;
@@ -538,6 +631,7 @@ subscribe(orders => {
   latestOrders = orders;
   render();
   renderCancellationRequests();
+  renderDirectDeliveries();
 });
 
 subscribeCancellationRequests(renderCancellationRequests);

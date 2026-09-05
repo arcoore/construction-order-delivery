@@ -138,7 +138,12 @@ function render() {
   const orders = latestOrders.filter(o => o.communityId === communityId);
   let filtered;
   if (activeTab === 'available') {
-    filtered = orders.filter(o => o.status === 'purchased');
+    // direct_supplier orders never enter the driver pool at all — the
+    // merchant delivers straight to site, so there is no leg for a driver
+    // to claim (confirm_direct_delivery is the buyer's own action instead;
+    // claim_delivery itself also refuses this server-side, this is just the
+    // matching UI-level filter so one is never even shown as claimable).
+    filtered = orders.filter(o => o.status === 'purchased' && o.deliveryMethod !== 'direct_supplier');
   } else if (activeTab === 'mine') {
     filtered = orders.filter(o => o.driverId === currentDriverId() && ['claimed', 'collected'].includes(o.status));
   } else {
@@ -289,7 +294,7 @@ function renderOrderCard(order, pickup) {
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
         </div>
       </div>
-      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'driver')}</span>
+      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'driver', order.deliveryMethod)}</span>
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
         ? `<p class="hint small-hint">Delivered to ${order.deliveryLocation} at ${new Date(order.deliveryTime).toLocaleString()}</p>` : ''}

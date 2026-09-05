@@ -226,8 +226,8 @@ select throws_ok(
 -- ================================================================
 
 select ok(
-  to_regprocedure('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)') is not null,
-  'item 28: create_order signature is exactly the one migration 0019 left it as (18 args)'
+  to_regprocedure('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)') is not null,
+  'item 28: create_order signature is exactly the one migration 0026 left it as (19 args, delivery_method added)'
 );
 select ok(
   to_regprocedure('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)') is not null,

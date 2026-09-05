@@ -2,7 +2,7 @@ import { getInitials, formatPrice, timeAgo } from './data.js';
 import { subscribe } from './orderLifecycle.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
-  archiveSite, restoreSite, getSiteMembers, isSiteMember, addSiteMember, removeSiteMember,
+  archiveSite, restoreSite, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
 } from './sites.js';
 import { getActiveCommunityId, approvedMembers, subscribeCommunities } from './community.js';
 import { getCurrentUserId, resolveDisplayName } from './identity.js';
@@ -14,6 +14,8 @@ const createNameInput = document.getElementById('site-name-input');
 const createAddressInput = document.getElementById('site-address-input');
 const createPostcodeInput = document.getElementById('site-postcode-input');
 const createInstructionsInput = document.getElementById('site-instructions-input');
+const createStartDateInput = document.getElementById('site-start-date-input');
+const createEndDateInput = document.getElementById('site-end-date-input');
 const createBtn = document.getElementById('create-site-btn');
 const createStatusEl = document.getElementById('create-site-status');
 const detailPanel = document.getElementById('site-detail-panel');
@@ -24,6 +26,9 @@ let activeTab = 'active';
 let selectedSiteId = null;
 let editingSite = false;
 let latestOrders = [];
+// Bulk-assign checkbox selection state, reset whenever the detail view is
+// (re-)entered for a site — see showDetail below.
+let bulkSelectedMemberIds = new Set();
 
 function currentActorId() {
   return getCurrentUserId();
@@ -40,6 +45,7 @@ function showList() {
 function showDetail(siteId) {
   selectedSiteId = siteId;
   editingSite = false;
+  bulkSelectedMemberIds = new Set();
   listView.hidden = true;
   detailPanel.hidden = false;
   render();
@@ -66,6 +72,8 @@ createBtn.addEventListener('click', async () => {
       address: createAddressInput.value,
       postcode: createPostcodeInput.value,
       deliveryInstructions: createInstructionsInput.value,
+      projectStartDate: createStartDateInput.value,
+      projectEndDate: createEndDateInput.value,
     }, currentActorId());
 
     if (!result.ok) {
@@ -77,6 +85,8 @@ createBtn.addEventListener('click', async () => {
     createAddressInput.value = '';
     createPostcodeInput.value = '';
     createInstructionsInput.value = '';
+    createStartDateInput.value = '';
+    createEndDateInput.value = '';
     createStatusEl.textContent = `"${result.site.name}" created.`;
     createStatusEl.className = 'form-status success';
   } finally {
@@ -152,6 +162,10 @@ function renderSiteInfo(site) {
         <input type="text" id="site-edit-postcode-input" class="text-input" value="${site.postcode}" />
         <label class="field-label" for="site-edit-instructions-input">Delivery instructions</label>
         <input type="text" id="site-edit-instructions-input" class="text-input" value="${site.deliveryInstructions || ''}" />
+        <label class="field-label" for="site-edit-start-date-input">Project start date</label>
+        <input type="date" id="site-edit-start-date-input" class="text-input" value="${site.projectStartDate || ''}" />
+        <label class="field-label" for="site-edit-end-date-input">Project end date</label>
+        <input type="date" id="site-edit-end-date-input" class="text-input" value="${site.projectEndDate || ''}" />
         <p id="site-edit-status" class="form-status"></p>
         <div class="reject-form-actions">
           <button class="btn btn-secondary" id="site-edit-cancel-btn">Cancel</button>
@@ -174,6 +188,11 @@ function renderSiteInfo(site) {
       <span class="profile-label">Delivery instructions</span>
       <span class="profile-value">${site.deliveryInstructions || '—'}</span>
     </div>
+    ${(site.projectStartDate || site.projectEndDate) ? `
+    <div class="profile-field">
+      <span class="profile-label">Project dates</span>
+      <span class="profile-value">${site.projectStartDate || 'Not set'} &ndash; ${site.projectEndDate || 'ongoing'}</span>
+    </div>` : ''}
     ${site.status === 'archived'
       ? `<p class="hint small-hint">Archived ${timeAgo(site.archivedAt)} by ${site.archivedById ? resolveDisplayName(site.archivedById) : 'the owner'}.</p>`
       : ''}
@@ -190,14 +209,26 @@ function renderMembers(site) {
   const communityId = site.communityId;
   const members = approvedMembers(communityId);
   if (members.length === 0) {
-    return '<p class="empty-hint">No approved community members yet.</p>';
+    return '<p class="empty-hint">No approved company members yet.</p>';
   }
-  return members.map(userId => {
+  const unassignedCount = members.filter(userId => !isSiteMember(site.id, userId)).length;
+
+  const bulkBar = unassignedCount > 0 ? `
+    <div class="owner-actions" id="bulk-assign-bar">
+      <button class="btn btn-primary" id="bulk-assign-btn" ${bulkSelectedMemberIds.size === 0 ? 'disabled' : ''}>
+        Assign ${bulkSelectedMemberIds.size || ''} selected
+      </button>
+      <p id="bulk-assign-status" class="form-status"></p>
+    </div>
+  ` : '';
+
+  const rows = members.map(userId => {
     const displayName = resolveDisplayName(userId);
     const assigned = isSiteMember(site.id, userId);
     return `
       <div class="order-card">
         <div class="request-header">
+          ${!assigned ? `<input type="checkbox" class="bulk-assign-checkbox" data-bulk-member-id="${userId}" ${bulkSelectedMemberIds.has(userId) ? 'checked' : ''} aria-label="Select ${displayName} for bulk assignment" />` : ''}
           <div class="requester-badge" title="${displayName}">
             <span class="requester-avatar">${getInitials(displayName)}</span>
             <span class="requester-name">${displayName}</span>
@@ -214,6 +245,8 @@ function renderMembers(site) {
       </div>
     `;
   }).join('');
+
+  return bulkBar + rows;
 }
 
 function renderOrders(site) {
@@ -309,6 +342,8 @@ function wireDetailActions(site) {
         address: document.getElementById('site-edit-address-input').value,
         postcode: document.getElementById('site-edit-postcode-input').value,
         deliveryInstructions: document.getElementById('site-edit-instructions-input').value,
+        projectStartDate: document.getElementById('site-edit-start-date-input').value,
+        projectEndDate: document.getElementById('site-edit-end-date-input').value,
       }, currentActorId());
       if (!result.ok) {
         saveBtn.disabled = false;
@@ -333,10 +368,39 @@ function wireDetailActions(site) {
         btn.disabled = false;
         alert(result.error);
       } else {
+        bulkSelectedMemberIds.delete(userId);
         render();
       }
     });
   });
+
+  detailEl.querySelectorAll('.bulk-assign-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const userId = cb.dataset.bulkMemberId;
+      if (cb.checked) bulkSelectedMemberIds.add(userId);
+      else bulkSelectedMemberIds.delete(userId);
+      render();
+    });
+  });
+
+  const bulkAssignBtn = document.getElementById('bulk-assign-btn');
+  if (bulkAssignBtn) {
+    bulkAssignBtn.addEventListener('click', async () => {
+      bulkAssignBtn.disabled = true;
+      const statusEl = document.getElementById('bulk-assign-status');
+      const result = await addSiteMembers(site.id, Array.from(bulkSelectedMemberIds), currentActorId());
+      if (!result.ok) {
+        bulkAssignBtn.disabled = false;
+        if (statusEl) {
+          statusEl.textContent = result.error;
+          statusEl.className = 'form-status error';
+        }
+        return;
+      }
+      bulkSelectedMemberIds = new Set();
+      render();
+    });
+  }
 }
 
 // Phase 8E: an optional siteId (from the owner dashboard's Sites summary,

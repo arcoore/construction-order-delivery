@@ -125,7 +125,7 @@ const NOTIF_ICONS = {
 const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
 
 const ROLE_META = {
-  owner: { icon: '👑', label: 'Owner', desc: 'Approve worker requests and community join requests' },
+  owner: { icon: '👑', label: 'Owner', desc: 'Approve worker requests and company join requests' },
   worker: { icon: '🧑‍🔧', label: 'Worker', desc: 'Search for materials and place order requests' },
   driver: { icon: '🚚', label: 'Driver', desc: 'Pick up approved orders and deliver them' },
   buyer: { icon: '🛒', label: 'Buyer', desc: 'Purchase approved orders and confirm the purchase' },

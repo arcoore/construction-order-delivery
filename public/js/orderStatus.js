@@ -49,7 +49,14 @@ const DRIVER_STATUS_LABELS = {
 // the base (Worker/Owner-shared) wording for any role without its own
 // override, and to the raw status string only if it's somehow not one of
 // the 9 known order_status values (defensive — should never happen).
-export function statusLabel(status, role) {
+// deliveryMethod is optional (existing call sites needed no change) — when
+// it's 'direct_supplier' and the order is 'purchased', "waiting for a
+// driver" would be actively wrong (there is no driver leg on this path at
+// all), so that one combination gets its own honest wording.
+export function statusLabel(status, role, deliveryMethod) {
+  if (status === 'purchased' && deliveryMethod === 'direct_supplier') {
+    return 'Purchased — waiting for the supplier to deliver';
+  }
   if (role === 'driver' && DRIVER_STATUS_LABELS[status]) return DRIVER_STATUS_LABELS[status];
   return BASE_STATUS_LABELS[status] || status;
 }
@@ -80,6 +87,9 @@ export function nextActionFor(order, role, options = {}) {
     case 'purchase_in_progress':
       return 'Buyer confirming purchase';
     case 'purchased':
+      if (order.deliveryMethod === 'direct_supplier') {
+        return role === 'buyer' ? 'Confirm once the supplier delivers' : 'Waiting for the supplier to deliver';
+      }
       return role === 'driver' ? 'Ready to claim' : 'Waiting for a driver';
     case 'claimed':
       return role === 'driver' ? 'Next: mark as collected' : 'Driver collecting';

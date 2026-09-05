@@ -103,14 +103,14 @@ select ok(
   'item 8: the obsolete 16-arg create_order and 17-arg edit_order signatures no longer exist'
 );
 select ok(
-  to_regprocedure('public.create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)') is not null
+  to_regprocedure('public.create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)') is not null
   and to_regprocedure('public.edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)') is not null,
   'item 9: the new 18-arg create_order and 19-arg edit_order signatures resolve to real functions (catches drift/typos in this file itself)'
 );
 
 select ok(
   has_function_privilege('authenticated',
-    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)', 'EXECUTE'),
+    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)', 'EXECUTE'),
   'item 10: authenticated can execute the new create_order signature'
 );
 select ok(
@@ -121,14 +121,14 @@ select ok(
 
 select ok(
   not has_function_privilege('anon',
-    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)', 'EXECUTE')
+    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)', 'EXECUTE')
   and not has_function_privilege('anon',
     'edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)', 'EXECUTE'),
   'item 12: anon cannot execute either new signature'
 );
 select ok(
   not has_function_privilege('public',
-    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)', 'EXECUTE')
+    'create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)', 'EXECUTE')
   and not has_function_privilege('public',
     'edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)', 'EXECUTE'),
   'item 13: neither new signature retains a bare PUBLIC execute grant (the root cause 0013 originally closed for every other lifecycle RPC)'

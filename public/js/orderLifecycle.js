@@ -120,6 +120,13 @@ function mapOrderRow(r) {
     // orders_needed_by_valid_state constraint for the full semantics.
     neededByType: r.needed_by_type,
     neededBy: r.needed_by ? new Date(r.needed_by).getTime() : null,
+    // Product-audit gap fix: 'driver' (default — SiteStock's own driver pool
+    // collects and delivers, unchanged) or 'direct_supplier' (the merchant
+    // delivers straight to site — no claim/collect leg at all, see
+    // confirmDirectDelivery below). Set once at creation, never editable —
+    // not in EDITABLE_ORDER_FIELDS, same "lock it at creation" precedent
+    // this module already applies to other structural fields.
+    deliveryMethod: r.delivery_method,
     version: r.version,
   };
 }
@@ -362,6 +369,10 @@ export async function createOrder(fields) {
     // ISO here, at the RPC boundary, same as every other timestamp field.
     p_needed_by_type: fields.neededByType ?? null,
     p_needed_by: fields.neededBy != null ? new Date(fields.neededBy).toISOString() : null,
+    // 'driver' (default) or 'direct_supplier' — see mapOrderRow's comment.
+    // Set once here, never accepted by editOrder (EDITABLE_ORDER_FIELDS below
+    // deliberately excludes it).
+    p_delivery_method: fields.deliveryMethod ?? 'driver',
   });
   if (error) return handleRpcFailure(error);
 
@@ -577,6 +588,28 @@ export async function deliverOrder(orderId, deliveryTime, deliveryLocation) {
 
   // The order_delivered notification (to both the buyer and the requester)
   // is written server-side by mark_delivered itself.
+  return { ok: true, order };
+}
+
+// The direct-supplier-delivery counterpart to deliverOrder — only legal on
+// an order whose deliveryMethod is 'direct_supplier', only callable by the
+// buyer who purchased it (confirm_direct_delivery re-checks both server-
+// side), and moves purchased -> delivered directly with no claim/collect
+// leg at all, since there is no SiteStock driver involved on this path.
+export async function confirmDirectDelivery(orderId, deliveryTime, deliveryLocation) {
+  if (!deliveryTime) return { ok: false, error: 'A delivery time is required.' };
+  if (!deliveryLocation || !deliveryLocation.trim()) return { ok: false, error: 'A delivery location is required.' };
+
+  const { data, error } = await supabase.rpc('confirm_direct_delivery', {
+    p_order_id: orderId,
+    p_delivery_time: new Date(deliveryTime).toISOString(),
+    p_delivery_location: deliveryLocation.trim(),
+  });
+  if (error) return handleRpcFailure(error, { orderId });
+  const order = upsertOrder(mapOrderRow(data));
+
+  // The order_delivered notification (to the requester) is written
+  // server-side by confirm_direct_delivery itself.
   return { ok: true, order };
 }
 

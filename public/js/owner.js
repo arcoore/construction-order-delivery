@@ -607,7 +607,7 @@ function renderOrderDetail(order) {
 
   orderDetailEl.innerHTML = `
     <h1>${label}</h1>
-    <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner')}</span>
+    <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner', order.deliveryMethod)}</span>
     ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
 
     <div class="product-preview">
@@ -687,7 +687,7 @@ function renderJoinRequests(communityId) {
           <span class="requester-name">${displayName}</span>
         </div>
         <div class="order-card-main">
-          <strong>Wants to join this community</strong>
+          <strong>Wants to join this company</strong>
         </div>
       </div>
       ${siteCheckboxes}
@@ -827,7 +827,7 @@ function renderOrderCard(order) {
         </div>
         <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
       </div>
-      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner')}</span>
+      <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner', order.deliveryMethod)}</span>
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       <div class="driver-route">
         <div class="route-step">

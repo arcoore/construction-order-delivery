@@ -28,7 +28,7 @@ select plan(15);
 -- fails loudly as itself, not as a silent false "no anon access" result.
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)'),
     ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
@@ -52,7 +52,7 @@ select is(
 -- --------------------------------------------------- A: grant-privilege audit
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)'),
     ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
@@ -78,7 +78,7 @@ select is(
 
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)'),
     ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),
@@ -104,7 +104,7 @@ select is(
 
 with lifecycle_fns(sig) as (
   values
-    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz)'),
+    ('create_order(uuid, uuid, text, text, text, numeric, text, text, double precision, double precision, text, text, text, text, text, numeric, text, timestamptz, text)'),
     ('edit_order(uuid, integer, text, text, text, numeric, text, text, double precision, double precision, uuid, text, text, text, text, text, numeric, text, timestamptz)'),
     ('approve_order(uuid)'),
     ('reject_order(uuid, text)'),

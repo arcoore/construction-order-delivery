@@ -300,16 +300,31 @@ function renderDetailsStep(product, variant, prefill = null) {
 
     ${renderNeededByControl(neededByChoice)}
 
+    <label class="field-label">Delivery</label>
+    <div class="role-toggle-group" id="delivery-method-group">
+      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') !== 'direct_supplier' ? ' active' : ''}" data-delivery-method="driver">A driver collects &amp; delivers it</button>
+      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') === 'direct_supplier' ? ' active' : ''}" data-delivery-method="direct_supplier">The supplier delivers direct to site</button>
+    </div>
+
     <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order this from</button>
     <p id="order-form-status" class="form-status"></p>
   `;
 
   wireNeededByControl(orderFormEl, neededByUiKeyFor(neededByChoice), choice => { neededByChoice = choice; });
 
-  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(product, variant, neededByChoice));
+  let deliveryMethod = (prefill && prefill.deliveryMethod) || 'driver';
+  const deliveryMethodGroup = document.getElementById('delivery-method-group');
+  deliveryMethodGroup.addEventListener('click', e => {
+    const btn = e.target.closest('[data-delivery-method]');
+    if (!btn) return;
+    deliveryMethod = btn.dataset.deliveryMethod;
+    deliveryMethodGroup.querySelectorAll('[data-delivery-method]').forEach(b => b.classList.toggle('active', b === btn));
+  });
+
+  document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(product, variant, neededByChoice, deliveryMethod));
 }
 
-async function goToSourceStep(product, variant, neededByChoice) {
+async function goToSourceStep(product, variant, neededByChoice, deliveryMethod) {
   const statusEl = document.getElementById('order-form-status');
   const qty = Number(document.getElementById('qty-input').value) || 1;
   const postcode = document.getElementById('postcode-input').value.trim();
@@ -345,6 +360,7 @@ async function goToSourceStep(product, variant, neededByChoice) {
     requestedById: getCurrentUserId(),
     neededByType: neededByChoice.type,
     neededBy: neededByChoice.date ? neededByChoice.date.getTime() : null,
+    deliveryMethod: deliveryMethod || 'driver',
   };
 
   renderSourceStep(product, variant, details);
@@ -454,6 +470,7 @@ function renderConfirmStep(product, variant, details, branch) {
 
     <p class="hint">Delivering ${details.quantity} &times; ${product.unit} to <strong>${details.deliveryPostcode}</strong>.</p>
     <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(details.neededByType, details.neededBy)}</p>
+    <p class="hint"><strong>Delivery:</strong> ${details.deliveryMethod === 'direct_supplier' ? 'Supplier delivers direct to site' : 'A driver collects & delivers it'}</p>
 
     <button id="confirm-order-btn" class="btn btn-primary btn-block">Confirm order</button>
   `;
@@ -491,6 +508,7 @@ async function submitOrder(product, variant, details, branch, avail, confirmBtn)
     unitPrice: product.unitPrice,
     neededByType: details.neededByType,
     neededBy: details.neededBy,
+    deliveryMethod: details.deliveryMethod,
   });
 
   if (!result.ok) {
@@ -504,7 +522,7 @@ async function submitOrder(product, variant, details, branch, avail, confirmBtn)
     <h2>Request sent</h2>
     <p class="hint">${product.name}${variant ? ` — ${variant}` : ''} from ${branch.name}, delivering to ${details.deliveryPostcode}. ${stillApprovalRequired
       ? 'Waiting for the owner to approve it before a buyer can purchase it.'
-      : 'It\'s gone straight to a buyer to purchase — this community doesn\'t require owner approval.'}</p>
+      : 'It\'s gone straight to a buyer to purchase — this company doesn\'t require owner approval.'}</p>
   `;
   backBtn.hidden = true;
 
@@ -1116,7 +1134,7 @@ function renderSiteOrders() {
         ${o.status === 'cancelled' ? `<span class="rejection-reason">Cancelled by ${o.orderCancelledBy || 'you'}${o.orderCancellationReason ? `: ${o.orderCancellationReason}` : ''}</span>` : ''}
         ${o.status === 'delivered' && o.deliveryLocation ? `<span>Delivered to ${o.deliveryLocation} at ${new Date(o.deliveryTime).toLocaleString()}</span>` : ''}
       </div>
-      <span class="status-badge status-${o.status}">${statusLabel(o.status, 'worker')}</span>
+      <span class="status-badge status-${o.status}">${statusLabel(o.status, 'worker', o.deliveryMethod)}</span>
       ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
       ${cancellationStateHint(o)}
       ${isOwn ? renderHistoryToggle(o) : ''}

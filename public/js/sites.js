@@ -50,6 +50,12 @@ function mapSite(r) {
     updatedAt: new Date(r.updated_at).getTime(),
     archivedAt: r.archived_at ? new Date(r.archived_at).getTime() : null,
     archivedById: r.archived_by_id,
+    // Product-audit gap fix (migration 0025) — plain nullable date strings
+    // ('YYYY-MM-DD'), display-only, never used in any permission/lifecycle
+    // decision. Both null means "no project dates set", the pre-existing
+    // default behavior for every site created before this existed.
+    projectStartDate: r.project_start_date,
+    projectEndDate: r.project_end_date,
   };
 }
 
@@ -143,6 +149,8 @@ export async function createSite(communityId, fields, actorId) {
     postcode: (fields.postcode || '').trim(),
     delivery_instructions: (fields.deliveryInstructions || '').trim(),
     created_by_id: actorId,
+    project_start_date: fields.projectStartDate || null,
+    project_end_date: fields.projectEndDate || null,
   }).select().single();
   if (error) return { ok: false, error: error.message };
   const site = mapSite(data);
@@ -166,6 +174,8 @@ export async function updateSite(siteId, patch, actorId) {
   if (patch.address !== undefined) updates.address = (patch.address || '').trim();
   if (patch.postcode !== undefined) updates.postcode = (patch.postcode || '').trim();
   if (patch.deliveryInstructions !== undefined) updates.delivery_instructions = (patch.deliveryInstructions || '').trim();
+  if (patch.projectStartDate !== undefined) updates.project_start_date = patch.projectStartDate || null;
+  if (patch.projectEndDate !== undefined) updates.project_end_date = patch.projectEndDate || null;
 
   const { data, error } = await supabase.from('sites').update(updates).eq('id', siteId).select().single();
   if (error) return { ok: false, error: error.message };
@@ -254,7 +264,7 @@ export async function addSiteMember(siteId, userId, actorId) {
     return { ok: false, error: 'Only the owner can assign employees to a site.' };
   }
   if (!isApprovedMember(site.communityId, userId)) {
-    return { ok: false, error: 'Only approved members of this community can be assigned to a site.' };
+    return { ok: false, error: 'Only approved members of this company can be assigned to a site.' };
   }
   if (cache.memberships.some(m => m.siteId === siteId && m.userId === userId)) {
     return { ok: true, alreadyMember: true };
@@ -272,6 +282,46 @@ export async function addSiteMember(siteId, userId, actorId) {
   const { error: notifyError } = await supabase.rpc('notify_site_member_added', { p_site_id: siteId, p_recipient_id: userId });
   if (notifyError) console.error('notify_site_member_added failed:', notifyError.message);
   return { ok: true };
+}
+
+// Bulk employee assignment (product-audit gap fix) — assigns several
+// approved members to a site in one round trip instead of one addSiteMember
+// call per person. Genuinely bulk (a single insert, not a client-side loop
+// over addSiteMember): a loop would mean a partial failure silently leaves
+// some members assigned and others not with no way to tell the caller which
+// succeeded, whereas one insert either adds everyone requested or reports
+// one clear error. Members already assigned or not eligible are simply
+// skipped rather than failing the whole batch — same "already a member is a
+// no-op, not an error" rule addSiteMember already applies, just batched.
+export async function addSiteMembers(siteId, userIds, actorId) {
+  const site = getSite(siteId);
+  if (!site) return { ok: false, error: 'Site not found.' };
+  if (!isOwner(site.communityId, actorId)) {
+    return { ok: false, error: 'Only the owner can assign employees to a site.' };
+  }
+  const eligible = Array.from(new Set(userIds)).filter(
+    userId => isApprovedMember(site.communityId, userId) && !isSiteMember(siteId, userId)
+  );
+  if (eligible.length === 0) {
+    return { ok: true, addedCount: 0 };
+  }
+  const { data, error } = await supabase.from('site_memberships').insert(
+    eligible.map(userId => ({
+      site_id: siteId,
+      community_id: site.communityId,
+      user_id: userId,
+      added_by_id: actorId,
+    }))
+  ).select();
+  if (error) return { ok: false, error: error.message };
+  cache.memberships.push(...data.map(mapMembership));
+  notify();
+
+  await Promise.all(eligible.map(async userId => {
+    const { error: notifyError } = await supabase.rpc('notify_site_member_added', { p_site_id: siteId, p_recipient_id: userId });
+    if (notifyError) console.error('notify_site_member_added failed:', notifyError.message);
+  }));
+  return { ok: true, addedCount: eligible.length };
 }
 
 // Phase 8D.1 hardening (0015): the removal and its notification are now one

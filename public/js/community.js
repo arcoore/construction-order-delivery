@@ -421,7 +421,7 @@ export async function requestToJoin(communityId, userId) {
 export async function requestToJoinByCode(code, userId) {
   const { data, error } = await supabase.rpc('request_join_by_invite_code', { p_code: code.trim() });
   if (error) return { error: error.message };
-  if (!data.ok) return { error: 'No community found with that invite code.' };
+  if (!data.ok) return { error: 'No company found with that invite code.' };
 
   const community = { id: data.communityId, name: data.communityName };
   if (data.status === 'owner') return { error: `You're already the owner of "${community.name}".` };
