@@ -117,14 +117,23 @@ export async function createAccount(email, password, displayName, defaultRole) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName, default_role: defaultRole } },
+    options: {
+      data: { display_name: displayName, default_role: defaultRole },
+      // Where the confirmation link lands after Supabase verifies the token.
+      // Computed from window.location (never hardcoded) so the same build
+      // works on localhost and on the deployed site — matches how
+      // requestPasswordReset / requestEmailChange already do it. Every origin
+      // this can produce is in config.toml's additional_redirect_urls.
+      emailRedirectTo: window.location.origin + window.location.pathname,
+    },
   });
   if (error) return { error: friendlyAuthError(error) };
-  // Local dev has email confirmations disabled, so signUp returns a real
-  // session immediately. If a cloud project has confirmations ON, `data.session`
-  // comes back null and the user must click a link in their inbox before they
-  // can log in — a normal, non-error outcome the caller shows as an info state,
-  // not a red error (see authView.js).
+  // Email confirmation is required (config.toml enable_confirmations = true):
+  // signUp returns no session, and the user must click the link in their
+  // inbox before they can log in — a normal, non-error outcome the caller
+  // shows as an info state, not a red error (see authView.js). Locally the
+  // link's email is captured in Mailpit (http://127.0.0.1:54324) unless a
+  // real SMTP provider is set in supabase/.env.
   if (!data.session) {
     return { needsConfirmation: true, message: 'Account created. Check your email for a confirmation link, then log in.' };
   }

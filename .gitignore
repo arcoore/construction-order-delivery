@@ -1,0 +1,3 @@
+.foglamp/
+supabase/.env
+.env

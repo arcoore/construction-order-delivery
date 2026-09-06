@@ -8,17 +8,48 @@ major_version = 15
 
 [auth]
 enabled = true
-# Confirmation / recovery links redirect here (the local dev server).
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000", "http://127.0.0.1:3000"]
+# The canonical app URL. Every auth email flow in this app (signup
+# confirmation, password reset, email change) passes its OWN
+# emailRedirectTo/redirectTo computed from window.location at call time, so
+# the same build works on localhost and on the deployed site. Supabase only
+# honours a redirect that also appears in additional_redirect_urls below —
+# keep both the local dev origins and the live GitHub Pages URL listed.
+site_url = "https://arcoore.github.io/construction-order-delivery/"
+additional_redirect_urls = [
+  "https://arcoore.github.io/construction-order-delivery/",
+  "https://arcoore.github.io",
+  "http://localhost:3000",
+  "http://localhost:3000/",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3000/",
+]
 
 [auth.email]
 enable_signup = true
 # Account security (2026-09): a new account can't be used until the user
-# clicks the confirmation link emailed to them. Locally these emails land in
-# Inbucket (http://127.0.0.1:54324); on hosted this is the Supabase
-# dashboard's "Confirm email" toggle + a real SMTP/email provider.
+# clicks the confirmation link emailed to them.
 enable_confirmations = true
+
+# Real outbound email for auth (confirmation + password-reset links).
+# Without this: the LOCAL stack captures every message in Mailpit
+# (http://127.0.0.1:54324) and never sends it anywhere; the HOSTED project's
+# built-in sender only reaches addresses in your own Supabase org and is
+# heavily rate-limited. So a real provider is required to email actual users
+# in either place.
+#
+# Provider: Brevo — free tier is 300 emails/day (9,000/month), sends to any
+# recipient, and needs no custom domain (you verify the single sender
+# address). Credentials are read from supabase/.env (git-ignored) — copy
+# supabase/.env.example and fill it in. `supabase config push` carries this
+# whole block, and the URLs above, to the hosted project.
+[auth.email.smtp]
+enabled = true
+host = "env(SMTP_HOST)"
+port = "env(SMTP_PORT)"
+user = "env(SMTP_USER)"
+pass = "env(SMTP_PASS)"
+admin_email = "env(SMTP_ADMIN_EMAIL)"
+sender_name = "SiteStock"
 
 [auth.mfa]
 max_enrolled_factors = 10
