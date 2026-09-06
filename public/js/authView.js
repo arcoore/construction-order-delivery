@@ -35,6 +35,15 @@ const mfaChallengeCancelBtn = document.getElementById('mfa-challenge-cancel-btn'
 
 let selectedRegisterRole = null;
 
+// "Create account" stays disabled until the Terms/Privacy box is ticked —
+// index.html ships the button disabled, this keeps it in sync. The submit
+// handler still re-checks (defence in depth), but the button is the real
+// gate the user sees.
+function syncRegisterSubmitEnabled() {
+  registerSubmitBtn.disabled = !registerTermsCheckbox.checked;
+}
+registerTermsCheckbox.addEventListener('change', syncRegisterSubmitEnabled);
+
 registerRoleGroup.addEventListener('click', e => {
   const btn = e.target.closest('.role-toggle-btn');
   if (!btn) return;
@@ -258,6 +267,7 @@ registerForm.addEventListener('submit', async e => {
   } catch (err) {
     setStatus(registerStatus, 'Could not reach the server. Check your connection and try again.', 'error');
   } finally {
-    registerSubmitBtn.disabled = false;
+    // Restore to the checkbox-gated state, not unconditionally enabled.
+    syncRegisterSubmitEnabled();
   }
 });

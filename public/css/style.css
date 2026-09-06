@@ -1862,6 +1862,16 @@ h3 { font-size: 1rem; font-weight: 700; }
 }
 .btn-primary { box-shadow: none; }
 .btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); }
+/* Disabled (e.g. "Create account" before the Terms box is ticked, or any
+   button mid-request): clearly not pressable, and no hover lift. */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn:disabled:hover,
+.btn[disabled]:hover { transform: none; }
 .btn-secondary {
   background: transparent;
   color: var(--navy);
