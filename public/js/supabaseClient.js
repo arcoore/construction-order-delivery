@@ -9,7 +9,15 @@
 // documented buildless usage path, not a workaround. It's the same category
 // of runtime network dependency this app already has for geo.js's
 // postcodes.io calls, just for a library import instead of a fetch.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+//
+// The version is PINNED (not `@2`) on purpose: an immutable esm.sh URL is
+// served from cache and can't be swapped for different code on a later
+// load, which matters because this module runs on the login screen. Bump
+// it deliberately, and re-test auth + realtime, rather than floating it.
+// (A fuller fix — vendoring the SDK into /js/vendor/ so there's no
+// esm.sh request at all — is noted in the compliance review as a
+// follow-up; it needs the whole dependency tree fetched and re-tested.)
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.115.0';
 
 // Local Supabase dev stack values (from `supabase status`), used until a real
 // cloud project exists — see supabase/README.md. The anon/public key is safe

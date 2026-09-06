@@ -1,3 +1,28 @@
+/* Self-hosted fonts — SIL Open Font License 1.1, see /fonts/OFL.txt.
+   Served from this origin so the app makes zero third-party font requests
+   (no Google Fonts connection). Latin subset only. */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("../fonts/manrope-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/dmmono-400-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/dmmono-500-latin.woff2") format("woff2");
+}
+
 :root {
   /* SiteStock editorial palette — blue / orange / brown on warm paper.
      Variable names are kept from the original stylesheet (--navy, --bg,
@@ -6,7 +31,11 @@
   --navy: #12344a;
   --navy-light: #17607f;
   --orange: #f26a2e;
-  --orange-dark: #d2521a;
+  /* --orange-dark is the text/UI-safe orange: ~5:1 with white, ~4.4:1 as a
+     focus outline on the light backgrounds. Bright --orange only clears
+     ~3:1 on white, so it is kept for decorative fills and hover tints
+     only — see the contrast block at the end of this file. */
+  --orange-dark: #bd4c14;
   --bg: #f7efe6;
   --card: #fffaf5;
   --border: rgba(101, 65, 46, 0.22);
@@ -754,7 +783,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .availability-today { color: var(--green); }
 .availability-hours { color: var(--green); }
-.availability-tomorrow { color: #9c7a0e; }
+.availability-tomorrow { color: #8a6000; }
 
 .availability-badge {
   font-size: 0.72rem;
@@ -1937,13 +1966,83 @@ h3 { font-size: 1rem; font-weight: 700; }
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--orange);
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--orange-dark);
   outline-offset: 2px;
+}
+
+/* --- Contrast (WCAG 2.1 AA) ---------------------------------------------
+   Bright --orange (#f26a2e) is ~3:1 on white — fine for a decorative fill
+   or a hover tint, not for text, a focus ring, or a persistent selected
+   state. Those all use --orange-dark (#bd4c14): ~5:1 with white, ~4.4:1
+   as a UI outline on the light grounds. Everything else in the palette
+   was checked and passes (body 13:1, muted 5.3:1, links 6:1, every status
+   chip >5:1). */
+.btn-primary { background: var(--orange-dark); }
+.btn-primary:hover { background: #9a3d0e; }
+.circle-btn-account { background: var(--orange-dark); }
+.tab-btn.active { border-bottom-color: var(--orange-dark); }
+.search-input:focus,
+.text-input:focus,
+.driver-id input:focus,
+.worker-header-panel input:focus { border-color: var(--orange-dark); }
+.notif-row-toggle { color: var(--orange-dark); }
+.order-card-highlight { outline-color: var(--orange-dark); }
+.status-collected { border-left-color: var(--orange-dark); }
+.role-toggle-btn.active,
+.needed-by-btn.active {
+  border-color: var(--orange-dark);
+  box-shadow: inset 0 0 0 1px var(--orange-dark);
 }
 
 /* --- Bootstrap holding screen --- */
 #bootstrap-loading .panel { text-align: left; }
+
+/* --- Skip link (keyboard: first Tab reveals it) --- */
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: -60px;
+  z-index: 200;
+  background: var(--navy);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 2px;
+  font: 500 0.85rem var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 12px; }
+
+/* --- App footer: operator identity + legal links (e-commerce regs) --- */
+.app-footer {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 22px 16px 48px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.app-footer p { margin: 0 0 6px; }
+.app-footer a { color: var(--navy-light); font-weight: 600; }
+.app-footer a:hover { color: var(--orange-dark); }
+.app-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 0;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+.app-footer-note { font-size: 0.75rem; }
 
 @media (max-width: 480px) {
   .tab-btn { font-size: 0.68rem; padding: 10px 9px; letter-spacing: 0.05em; }

@@ -1091,6 +1091,60 @@ notifPrefsCancelBtn.addEventListener('click', () => {
   notifPrefsModal.hidden = true;
 });
 
+// --- Dialog / popup keyboard behaviour -------------------------------
+// Escape closes whatever transient surface is open (the two modal
+// dialogs, or the two topbar popups), a modal takes focus on open and
+// hands it back on close, and Tab is kept inside an open modal. The
+// toggle buttons report their state with aria-expanded. Additive — the
+// existing click handlers still own opening/closing.
+const DIALOGS = [
+  { el: ownerUpgradeModal, close: () => ownerUpgradeOkBtn.click() },
+  { el: notifPrefsModal, close: () => notifPrefsCancelBtn.click() },
+];
+let dialogOpener = null;
+
+function dialogFocusables(el) {
+  return [...el.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+    .filter(n => n.offsetParent !== null);
+}
+
+DIALOGS.forEach(({ el }) => {
+  new MutationObserver(() => {
+    if (!el.hidden && dialogOpener === null) {
+      dialogOpener = document.activeElement;
+      (dialogFocusables(el)[0] || el).focus();
+    } else if (el.hidden && dialogOpener) {
+      if (typeof dialogOpener.focus === 'function') dialogOpener.focus();
+      dialogOpener = null;
+    }
+  }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+
+  el.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const f = dialogFocusables(el);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const openDialog = DIALOGS.find(d => !d.el.hidden);
+  if (openDialog) { openDialog.close(); return; }
+  if (!accountMenu.hidden) { accountMenu.hidden = true; accountCircleBtn.focus(); return; }
+  if (!notifPanel.hidden) { notifPanel.hidden = true; notifBellBtn.focus(); }
+});
+
+// Keep aria-expanded on the two topbar toggles in sync with their popup.
+new MutationObserver(() => {
+  accountCircleBtn.setAttribute('aria-expanded', String(!accountMenu.hidden));
+}).observe(accountMenu, { attributes: true, attributeFilter: ['hidden'] });
+new MutationObserver(() => {
+  notifBellBtn.setAttribute('aria-expanded', String(!notifPanel.hidden));
+}).observe(notifPanel, { attributes: true, attributeFilter: ['hidden'] });
+
 // --- Phase 8B bootstrap ------------------------------------------------
 // Explicit async gate: nothing routes until the real Supabase session has
 // been restored AND the community/site caches have loaded at least once —

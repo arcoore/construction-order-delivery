@@ -1,15 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SiteStock &mdash; Orders &amp; Deliveries</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+
+<a href="#app" class="skip-link">Skip to main content</a>
 
 <header class="topbar">
   <div class="brand">
@@ -20,10 +19,10 @@
     <button type="button" class="pill-btn" id="communities-pill-btn" hidden>Companies</button>
     <button type="button" class="pill-btn" id="sites-pill-btn" hidden>Sites</button>
     <div class="notif-wrap" id="notif-wrap" hidden>
-      <button type="button" class="circle-btn circle-btn-notif" id="notif-bell-btn" title="Notifications">
-        🔔<span class="notif-badge" id="notif-badge" hidden>0</span>
+      <button type="button" class="circle-btn circle-btn-notif" id="notif-bell-btn" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif-panel">
+        <span aria-hidden="true">🔔</span><span class="notif-badge" id="notif-badge" hidden>0</span>
       </button>
-      <div class="notif-panel" id="notif-panel" hidden>
+      <div class="notif-panel" id="notif-panel" role="dialog" aria-label="Notifications" hidden>
         <div class="notif-panel-header">
           <strong>Notifications</strong>
           <button type="button" class="link-btn" id="notif-mark-all-btn">Mark all as read</button>
@@ -38,12 +37,12 @@
     <div class="session-bar" id="session-bar" hidden>
       <span class="session-label" id="session-label"></span>
       <div class="session-actions">
-        <button type="button" class="circle-btn circle-btn-community" id="community-circle-btn" title="Switch company"></button>
+        <button type="button" class="circle-btn circle-btn-community" id="community-circle-btn" aria-label="Switch company"></button>
         <div class="account-menu-wrap">
-          <button type="button" class="circle-btn circle-btn-account" id="account-circle-btn" title="Menu">Menu</button>
-          <div class="account-menu" id="account-menu" hidden>
-            <button type="button" class="account-menu-item" id="menu-switch-role-btn">Switch role</button>
-            <button type="button" class="account-menu-item" id="menu-logout-btn">Log out</button>
+          <button type="button" class="circle-btn circle-btn-account" id="account-circle-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">Menu</button>
+          <div class="account-menu" id="account-menu" role="menu" aria-label="Account" hidden>
+            <button type="button" class="account-menu-item" id="menu-switch-role-btn" role="menuitem">Switch role</button>
+            <button type="button" class="account-menu-item" id="menu-logout-btn" role="menuitem">Log out</button>
           </div>
         </div>
       </div>
@@ -83,7 +82,7 @@
 
         <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">Log in</button>
         <button type="button" class="link-btn" id="forgot-password-link">Forgot password?</button>
-        <p id="login-status" class="form-status"></p>
+        <p id="login-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
       <form id="reset-request-form" class="auth-form" hidden>
@@ -93,7 +92,7 @@
         <label class="field-label" for="reset-request-email-input">Email</label>
         <input type="email" id="reset-request-email-input" class="text-input" autocomplete="email" />
         <button type="submit" class="btn btn-primary btn-block" id="reset-request-submit-btn">Send reset link</button>
-        <p id="reset-request-status" class="form-status"></p>
+        <p id="reset-request-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
       <form id="set-new-password-form" class="auth-form" hidden>
@@ -104,7 +103,7 @@
         <label class="field-label" for="new-password-confirm-input">Confirm new password</label>
         <input type="password" id="new-password-confirm-input" class="text-input" autocomplete="new-password" />
         <button type="submit" class="btn btn-primary btn-block" id="new-password-submit-btn">Set new password</button>
-        <p id="new-password-status" class="form-status"></p>
+        <p id="new-password-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
       <form id="mfa-challenge-form" class="auth-form" hidden>
@@ -114,7 +113,7 @@
         <input type="text" id="mfa-challenge-input" class="text-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
         <button type="submit" class="btn btn-primary btn-block" id="mfa-challenge-submit-btn">Verify</button>
         <button type="button" class="link-btn" id="mfa-challenge-cancel-btn">Cancel and sign out</button>
-        <p id="mfa-challenge-status" class="form-status"></p>
+        <p id="mfa-challenge-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
       <form id="register-form" class="auth-form" hidden>
@@ -131,14 +130,16 @@
         <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
         <p class="hint small-hint">This is the name others in your company will see &mdash; it can be different from your email.</p>
 
-        <label class="field-label">What do you mainly do?</label>
-        <div class="role-toggle-group" id="register-role-group">
-          <button type="button" class="role-toggle-btn" data-role="worker">🧑&zwj;🔧 Worker</button>
-          <button type="button" class="role-toggle-btn" data-role="driver">🚚 Driver</button>
-          <button type="button" class="role-toggle-btn" data-role="buyer">🛒 Buyer</button>
-          <button type="button" class="role-toggle-btn" data-role="owner">👑 Owner</button>
+        <span class="field-label" id="register-role-label">What do you mainly do?</span>
+        <div class="role-toggle-group" id="register-role-group" role="group" aria-labelledby="register-role-label">
+          <button type="button" class="role-toggle-btn" data-role="worker"><span aria-hidden="true">🧑&zwj;🔧</span> Worker</button>
+          <button type="button" class="role-toggle-btn" data-role="driver"><span aria-hidden="true">🚚</span> Driver</button>
+          <button type="button" class="role-toggle-btn" data-role="buyer"><span aria-hidden="true">🛒</span> Buyer</button>
+          <button type="button" class="role-toggle-btn" data-role="owner"><span aria-hidden="true">👑</span> Owner</button>
         </div>
         <p class="hint small-hint">You can switch later — this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
+
+        <p class="hint small-hint">We use your email to sign you in and to send account and order notifications, and your name so your team can see who placed an order. We don't use analytics or advertising. Full detail is in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
 
         <label class="checkbox-field" id="register-terms-field">
           <input type="checkbox" id="register-terms-checkbox" />
@@ -146,7 +147,7 @@
         </label>
 
         <button type="submit" class="btn btn-primary btn-block" id="register-submit-btn">Create account</button>
-        <p id="register-status" class="form-status"></p>
+        <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
 
       <p class="hint small-hint" id="auth-legal-links">
@@ -194,7 +195,7 @@
       <label class="field-label" for="create-community-input">Company name</label>
       <input type="text" id="create-community-input" class="text-input" placeholder="e.g. Riverside Construction" />
       <button id="create-community-btn" class="btn btn-primary btn-block">Create company</button>
-      <p id="create-community-status" class="form-status"></p>
+      <p id="create-community-status" class="form-status" role="status" aria-live="polite"></p>
     </div>
 
     <div class="panel" id="join-code-panel" hidden>
@@ -202,13 +203,13 @@
       <label class="field-label" for="join-code-input">Invite code</label>
       <input type="text" id="join-code-input" class="text-input" placeholder="e.g. XJ4K9P" style="text-transform:uppercase" />
       <button id="join-code-btn" class="btn btn-secondary btn-block">Request to join</button>
-      <p id="join-code-status" class="form-status"></p>
+      <p id="join-code-status" class="form-status" role="status" aria-live="polite"></p>
     </div>
 
     <div class="panel" id="browse-communities-panel" hidden>
       <h2>Browse companies</h2>
       <p class="hint">Requests need the owner's approval before you get in.</p>
-      <input type="text" id="browse-communities-search" class="text-input" placeholder="Search companies…" autocomplete="off" />
+      <input type="text" id="browse-communities-search" class="text-input" placeholder="Search companies…" autocomplete="off" aria-label="Search companies" />
       <div id="browse-communities-list" class="community-list"></div>
     </div>
   </section>
@@ -244,7 +245,7 @@
       <p class="hint">Ordering for <strong id="worker-active-site-label"></strong> &middot; <button type="button" class="link-btn" id="worker-change-site-btn">Change site</button></p>
       <h1>What do you need on site?</h1>
       <p class="hint">Start typing &mdash; e.g. &ldquo;cement&rdquo;, &ldquo;timber post&rdquo;, &ldquo;hi-vis&rdquo;, &ldquo;drill&rdquo;&hellip;</p>
-      <input type="text" id="search-input" class="search-input" placeholder="Search for materials, tools, PPE&hellip;" autocomplete="off" />
+      <input type="text" id="search-input" class="search-input" placeholder="Search for materials, tools, PPE&hellip;" autocomplete="off" aria-label="Search for materials, tools, or PPE" />
       <div id="search-results" class="results-list"></div>
     </div>
 
@@ -416,12 +417,13 @@
         <input type="text" id="site-contact-name-input" class="text-input" placeholder="e.g. Dave — site manager" />
         <label class="field-label" for="site-contact-phone-input">Contact phone (optional)</label>
         <input type="tel" id="site-contact-phone-input" class="text-input" placeholder="e.g. 07700 900123" />
+        <p class="hint small-hint">Only add someone else's name and number if they're happy to be the delivery contact for this site. It's shared with buyers and drivers working on it.</p>
         <label class="field-label" for="site-access-notes-input">Access notes (optional)</label>
         <input type="text" id="site-access-notes-input" class="text-input" placeholder="e.g. Gate code 1234, deliveries before 3pm" />
         <label class="field-label" for="site-budget-input">Monthly budget &pound; (optional)</label>
         <input type="number" id="site-budget-input" class="text-input" min="0" step="1" placeholder="e.g. 5000 — orders over this are blocked until you raise it" />
         <button type="button" id="create-site-btn" class="btn btn-primary btn-block">Create site</button>
-        <p id="create-site-status" class="form-status"></p>
+        <p id="create-site-status" class="form-status" role="status" aria-live="polite"></p>
       </div>
 
       <div class="panel">
@@ -495,18 +497,32 @@
 
 </main>
 
-<div class="modal-overlay" id="owner-upgrade-modal" hidden>
+<footer class="app-footer">
+  <p class="app-footer-legal">
+    SiteStock is operated by Archie Moore &middot; 23 Grange Mansions, Kingston Road, Surrey &middot;
+    <a href="mailto:arcooreacc@gmail.com">arcooreacc@gmail.com</a>
+  </p>
+  <nav class="app-footer-links" aria-label="Legal">
+    <a href="terms.html" target="_blank" rel="noopener">Terms</a>
+    <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+    <a href="refunds.html" target="_blank" rel="noopener">Refunds</a>
+    <a href="accessibility.html" target="_blank" rel="noopener">Accessibility</a>
+  </nav>
+  <p class="app-footer-note">Early-stage software, provided as is &mdash; see the Terms.</p>
+</footer>
+
+<div class="modal-overlay" id="owner-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="owner-upgrade-title" hidden>
   <div class="modal-box">
     <span class="modal-icon" aria-hidden="true">👑</span>
-    <h2>You have been upgraded to owner level</h2>
+    <h2 id="owner-upgrade-title">You have been upgraded to owner level</h2>
     <p class="hint" id="owner-upgrade-message"></p>
     <button type="button" class="btn btn-primary btn-block" id="owner-upgrade-ok-btn">Got it</button>
   </div>
 </div>
 
-<div class="modal-overlay" id="notif-prefs-modal" hidden>
+<div class="modal-overlay" id="notif-prefs-modal" role="dialog" aria-modal="true" aria-labelledby="notif-prefs-title" hidden>
   <div class="modal-box">
-    <h2>Notification settings</h2>
+    <h2 id="notif-prefs-title">Notification settings</h2>
     <div class="notif-prefs-list">
       <label class="checkbox-field">
         <input type="checkbox" id="pref-order-updates" />
