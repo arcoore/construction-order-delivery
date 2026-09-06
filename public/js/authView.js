@@ -39,7 +39,11 @@ registerRoleGroup.addEventListener('click', e => {
   const btn = e.target.closest('.role-toggle-btn');
   if (!btn) return;
   selectedRegisterRole = btn.dataset.role;
-  registerRoleGroup.querySelectorAll('.role-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+  registerRoleGroup.querySelectorAll('.role-toggle-btn').forEach(b => {
+    const on = b === btn;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
 });
 
 // Roadmap Step 5 — which of the four auth-view forms is visible. The two
