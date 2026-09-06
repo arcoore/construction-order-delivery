@@ -1949,3 +1949,100 @@ summary:focus-visible {
   .tab-btn { font-size: 0.68rem; padding: 10px 9px; letter-spacing: 0.05em; }
   h1 { font-size: 1.35rem; }
 }
+
+/* ============================================================================
+   LEGAL PAGES  (terms.html, privacy.html)
+   Standalone documents — not part of the SPA. They pull in this same
+   stylesheet for the palette/fonts/panel, and add the long-form reading
+   styles below. No JS.
+   ========================================================================= */
+.legal-page { padding-top: 28px; }
+
+.legal-doc {
+  padding: 32px 30px 40px;
+  line-height: 1.62;
+}
+.legal-doc > .link-btn { margin-bottom: 18px; }
+
+.legal-kicker {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.66rem;
+  color: var(--orange-dark);
+  margin: 0 0 6px;
+}
+.legal-doc h1 { font-size: 1.7rem; margin: 0 0 6px; }
+.legal-meta {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  margin: 0 0 22px;
+}
+
+.legal-note {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--orange);
+  background: #fbe8dc;
+  border-radius: 2px;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  margin: 0 0 26px;
+}
+.legal-note strong { color: var(--navy); }
+
+.legal-doc h2 {
+  font-size: 1.02rem;
+  margin: 28px 0 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.legal-doc h2:first-of-type { border-top: none; padding-top: 0; }
+.legal-doc h3 { font-size: 0.92rem; margin: 16px 0 4px; }
+
+.legal-doc p { margin: 0 0 12px; }
+.legal-doc ul, .legal-doc ol { margin: 0 0 12px; padding-left: 22px; }
+.legal-doc li { margin-bottom: 6px; }
+.legal-doc a { color: var(--navy-light); font-weight: 600; }
+.legal-doc a:hover { color: var(--orange-dark); }
+
+.legal-doc dl { margin: 0 0 12px; }
+.legal-doc dt { font-weight: 700; color: var(--navy); margin-top: 10px; }
+.legal-doc dd { margin: 2px 0 0; }
+
+.legal-footer {
+  margin-top: 30px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Signup agreement checkbox (index.html #register-form) */
+#register-terms-field { align-items: flex-start; margin: 4px 0 12px; font-size: 0.9rem; }
+#register-terms-field input[type="checkbox"] { margin-top: 2px; }
+#auth-legal-links {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+/* The app otherwise uses .link-btn buttons, not anchors — give the few real
+   <a>s in body copy (agreement line, legal-page cross-links, hint text) the
+   palette treatment instead of the browser default blue. */
+.hint a,
+#register-terms-field a,
+#auth-legal-links a,
+.profile-value a {
+  color: var(--navy-light);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.hint a:hover,
+#register-terms-field a:hover,
+#auth-legal-links a:hover { color: var(--orange-dark); }

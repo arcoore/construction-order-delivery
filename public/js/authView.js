@@ -18,6 +18,7 @@ const registerStatus = document.getElementById('register-status');
 const loginSubmitBtn = document.getElementById('login-submit-btn');
 const registerSubmitBtn = document.getElementById('register-submit-btn');
 const registerRoleGroup = document.getElementById('register-role-group');
+const registerTermsCheckbox = document.getElementById('register-terms-checkbox');
 const forgotPasswordLink = document.getElementById('forgot-password-link');
 const resetRequestForm = document.getElementById('reset-request-form');
 const resetRequestBackBtn = document.getElementById('reset-request-back-btn');
@@ -224,6 +225,11 @@ registerForm.addEventListener('submit', async e => {
 
   if (!selectedRegisterRole) {
     setStatus(registerStatus, "Please choose whether you're a worker, driver, buyer, or owner.", 'error');
+    return;
+  }
+
+  if (!registerTermsCheckbox.checked) {
+    setStatus(registerStatus, 'Please agree to the Terms of Service and Privacy Policy to continue.', 'error');
     return;
   }
 
