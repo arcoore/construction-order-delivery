@@ -1633,6 +1633,11 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   border-bottom: 1px solid var(--border);
 }
 
+/* A plain class rule of equal specificity beats the UA [hidden] rule — so
+   #auth-tabs.hidden (password recovery / 2FA / confirm-your-email screens)
+   needs this or it stays on screen. */
+.driver-tabs[hidden] { display: none; }
+
 .tab-btn {
   background: none;
   border: none;
@@ -2155,3 +2160,36 @@ summary:focus-visible,
 .hint a:hover,
 #register-terms-field a:hover,
 #auth-legal-links a:hover { color: var(--orange-dark); }
+
+/* --- Password show/hide toggle (authView.js decorates every password
+   field in #auth-view with one of these) --- */
+.pw-field { position: relative; margin-bottom: 12px; }
+.pw-field > .text-input { margin-bottom: 0; padding-right: 46px; }
+.pw-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 0 2px 2px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pw-toggle:hover { color: var(--navy); }
+.pw-toggle svg { display: block; }
+
+/* --- "Confirm your email" screen shown after signup (#check-email-panel) --- */
+.check-email-icon { font-size: 2.6rem; line-height: 1; margin: 4px 0 10px; }
+.check-email-steps {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  line-height: 1.55;
+}
+.check-email-steps li { margin-bottom: 6px; }
+#check-email-panel .btn-block { margin-top: 8px; }
+#check-email-panel .link-btn { display: block; margin: 10px auto 0; }

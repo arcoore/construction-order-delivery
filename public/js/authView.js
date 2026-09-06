@@ -6,10 +6,12 @@
 // same .form-status element the rest of the app already uses.
 import {
   createAccount, login, requestPasswordReset, completePasswordReset,
-  inPasswordRecoveryContext, subscribeAuth,
+  inPasswordRecoveryContext, subscribeAuth, resendConfirmation,
   isMfaChallengePending, verifyMfaLogin, logout,
 } from './auth.js';
 
+const authView = document.getElementById('auth-view');
+const authIntro = document.getElementById('auth-intro');
 const authTabs = document.getElementById('auth-tabs');
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
@@ -32,8 +34,40 @@ const mfaChallengeInput = document.getElementById('mfa-challenge-input');
 const mfaChallengeStatus = document.getElementById('mfa-challenge-status');
 const mfaChallengeSubmitBtn = document.getElementById('mfa-challenge-submit-btn');
 const mfaChallengeCancelBtn = document.getElementById('mfa-challenge-cancel-btn');
+const checkEmailPanel = document.getElementById('check-email-panel');
+const checkEmailAddress = document.getElementById('check-email-address');
+const checkEmailResendBtn = document.getElementById('check-email-resend-btn');
+const checkEmailLoginBtn = document.getElementById('check-email-login-btn');
+const checkEmailStatus = document.getElementById('check-email-status');
 
 let selectedRegisterRole = null;
+let pendingConfirmEmail = null;
+
+// --- Show/hide toggle on every password field in the auth view -----------
+const EYE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m1 1 22 22"/></svg>';
+
+authView.querySelectorAll('input[type="password"]').forEach(input => {
+  if (input.closest('.pw-field')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'pw-field';
+  input.replaceWith(wrap);
+  wrap.appendChild(input);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'pw-toggle';
+  btn.setAttribute('aria-label', 'Show password');
+  btn.setAttribute('aria-pressed', 'false');
+  btn.innerHTML = EYE_SVG;
+  btn.addEventListener('click', () => {
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
+    btn.innerHTML = reveal ? EYE_OFF_SVG : EYE_SVG;
+    btn.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
+    btn.setAttribute('aria-pressed', String(reveal));
+  });
+  wrap.appendChild(btn);
+});
 
 // "Create account" stays disabled until the Terms/Privacy box is ticked —
 // index.html ships the button disabled, this keeps it in sync. The submit
@@ -66,7 +100,12 @@ function showAuthForm(which) {
   resetRequestForm.hidden = which !== 'reset-request';
   setNewPasswordForm.hidden = which !== 'set-new-password';
   mfaChallengeForm.hidden = which !== 'mfa-challenge';
-  authTabs.hidden = which === 'reset-request' || which === 'set-new-password' || which === 'mfa-challenge';
+  checkEmailPanel.hidden = which !== 'check-email';
+  // The login/register tabs and the "Log in to SiteStock" intro only make
+  // sense on those two forms — the rest are one-shot flows with their own
+  // heading (password recovery, 2FA, confirm-your-email).
+  authTabs.hidden = which !== 'login' && which !== 'register';
+  authIntro.hidden = authTabs.hidden;
 }
 
 // A pending 2FA challenge (from login() or a mid-challenge page refresh)
@@ -117,6 +156,29 @@ forgotPasswordLink.addEventListener('click', () => {
 
 resetRequestBackBtn.addEventListener('click', () => {
   showAuthForm('login');
+});
+
+checkEmailLoginBtn.addEventListener('click', () => {
+  authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
+  showAuthForm('login');
+});
+
+checkEmailResendBtn.addEventListener('click', async () => {
+  if (!pendingConfirmEmail) return;
+  checkEmailResendBtn.disabled = true;
+  setStatus(checkEmailStatus, 'Sending…', '');
+  try {
+    const result = await resendConfirmation(pendingConfirmEmail);
+    if (result.error) {
+      setStatus(checkEmailStatus, result.error, 'error');
+      return;
+    }
+    setStatus(checkEmailStatus, `Sent again to ${pendingConfirmEmail}. Check your inbox, and your spam folder.`, 'success');
+  } catch (err) {
+    setStatus(checkEmailStatus, 'Could not reach the server. Check your connection and try again.', 'error');
+  } finally {
+    checkEmailResendBtn.disabled = false;
+  }
 });
 
 function loggedIn() {
@@ -255,11 +317,14 @@ registerForm.addEventListener('submit', async e => {
       return;
     }
     if (result.needsConfirmation) {
-      // Cloud project with email confirmation on — no session yet. Send them
-      // to the login form with an info (not error) message.
-      showAuthForm('login');
+      // Email confirmation is on — no session yet. Show the dedicated
+      // "confirm your email" screen (clearer than a one-line message on the
+      // login form) rather than bouncing to login.
+      pendingConfirmEmail = result.email;
+      checkEmailAddress.textContent = result.email;
+      checkEmailStatus.textContent = '';
       authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
-      setStatus(loginStatus, result.message, 'success');
+      showAuthForm('check-email');
       registerStatus.textContent = '';
       return;
     }

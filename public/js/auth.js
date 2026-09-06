@@ -135,11 +135,31 @@ export async function createAccount(email, password, displayName, defaultRole) {
   // link's email is captured in Mailpit (http://127.0.0.1:54324) unless a
   // real SMTP provider is set in supabase/.env.
   if (!data.session) {
-    return { needsConfirmation: true, message: 'Account created. Check your email for a confirmation link, then log in.' };
+    return { needsConfirmation: true, email };
   }
   currentSession = data.session;
   notify();
   return { account: accountFromSession(data.session) };
+}
+
+// Re-send the signup confirmation email — the "Resend" button on the
+// check-your-email screen. Supabase rate-limits this; a 429 becomes a
+// friendly "wait a moment" rather than a raw error.
+export async function resendConfirmation(email) {
+  email = (email || '').trim();
+  if (!email) return { error: 'No email address to resend to.' };
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+  });
+  if (error) {
+    if (error.code === 'over_email_send_rate_limit' || /rate limit|too many/i.test(error.message || '')) {
+      return { error: 'Please wait a minute before asking for another email.' };
+    }
+    return { error: friendlyAuthError(error) };
+  }
+  return { ok: true };
 }
 
 export async function login(email, password) {

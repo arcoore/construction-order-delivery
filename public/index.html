@@ -65,8 +65,10 @@
 
   <section id="auth-view" class="view">
     <div class="panel">
-      <h1>Log in to SiteStock</h1>
-      <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) &mdash; the same login works from any browser or device. An account is required to continue.</p>
+      <div id="auth-intro">
+        <h1>Log in to SiteStock</h1>
+        <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) &mdash; the same login works from any browser or device. An account is required to continue.</p>
+      </div>
 
       <div class="driver-tabs" id="auth-tabs">
         <button class="tab-btn active" data-auth-tab="login">Log in</button>
@@ -149,6 +151,20 @@
         <button type="submit" class="btn btn-primary btn-block" id="register-submit-btn" disabled aria-describedby="register-terms-field">Create account</button>
         <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
+
+      <div id="check-email-panel" class="auth-form" hidden>
+        <div class="check-email-icon" aria-hidden="true">&#9993;&#65039;</div>
+        <h2>Confirm your email</h2>
+        <p class="hint">We've sent a confirmation link to <strong id="check-email-address"></strong>. Your account isn't active until you open it.</p>
+        <ol class="check-email-steps">
+          <li>Open that email and click <strong>Confirm email address</strong>.</li>
+          <li>That activates your account &mdash; then log in below.</li>
+        </ol>
+        <p class="hint small-hint">No email yet? It can take a minute, and it may be in your spam or promotions folder.</p>
+        <button type="button" class="btn btn-primary btn-block" id="check-email-login-btn">Go to log in</button>
+        <button type="button" class="link-btn" id="check-email-resend-btn">Resend the email</button>
+        <p id="check-email-status" class="form-status" role="status" aria-live="polite"></p>
+      </div>
 
       <p class="hint small-hint" id="auth-legal-links">
         <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>
