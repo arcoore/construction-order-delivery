@@ -15,13 +15,12 @@ enabled = true
 # honours a redirect that also appears in additional_redirect_urls below —
 # keep both the local dev origins and the live GitHub Pages URL listed.
 site_url = "https://arcoore.github.io/construction-order-delivery/"
+# Wildcard (**) patterns so any path works (the app builds redirect URLs as
+# origin + window.location.pathname, e.g. .../ or .../index.html).
 additional_redirect_urls = [
-  "https://arcoore.github.io/construction-order-delivery/",
-  "https://arcoore.github.io",
-  "http://localhost:3000",
-  "http://localhost:3000/",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3000/",
+  "https://arcoore.github.io/construction-order-delivery/**",
+  "http://localhost:3000/**",
+  "http://127.0.0.1:3000/**",
 ]
 
 [auth.email]
@@ -51,7 +50,13 @@ pass = "env(SMTP_PASS)"
 admin_email = "env(SMTP_ADMIN_EMAIL)"
 sender_name = "SiteStock"
 
-[auth.mfa]
+[auth.rate_limit]
+# Confirmation / reset emails allowed per hour. Supabase's default is 2 (built
+# for the throwaway built-in sender) — far too low once real signups happen.
+# Raising it needs auth.email.smtp enabled (above). Brevo's own 300/day free
+# cap is the real ceiling; 60/hour just stops Supabase blocking a launch-day
+# burst first.
+email_sent = 60
 max_enrolled_factors = 10
 
 # TOTP (authenticator-app) two-factor. Opt-in per account from the Profile
