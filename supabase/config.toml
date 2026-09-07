@@ -51,18 +51,32 @@ pass = "env(SMTP_PASS)"
 admin_email = "env(SMTP_ADMIN_EMAIL)"
 sender_name = "SiteStock"
 
+# Anti-abuse rate limits, enforced server-side by GoTrue, per client IP.
+# These are also Supabase's own defaults - stated explicitly here so they're
+# version-controlled and carried to the hosted project by `config push`,
+# rather than living only as an unstated default that a dashboard change
+# could quietly move.
 [auth.rate_limit]
-# Confirmation / reset emails allowed per hour. Supabase's default is 2 (built
-# for the throwaway built-in sender) — far too low once real signups happen.
-# Raising it needs auth.email.smtp enabled (above). Brevo's own 300/day free
-# cap is the real ceiling; 60/hour just stops Supabase blocking a launch-day
-# burst first.
+# Login + signup + token requests: 30 per 5-minute window per IP. A whole
+# construction crew logging in from one office IP in the morning fits; a
+# script hammering the endpoint does not.
+sign_in_sign_ups = 30
+# Confirmation- / reset-link verifications: 30 per 5-minute window per IP.
+token_verifications = 30
+# Access-token refreshes: 150 per 5-minute window per IP.
+token_refresh = 150
+# Confirmation / reset emails per hour. Supabase's own default is 2 (built
+# for the throwaway built-in sender); raising it needs auth.email.smtp
+# enabled (above). Brevo's own 300/day free cap is the real ceiling - 60/hour
+# just stops Supabase blocking a launch-day burst first.
 email_sent = 60
+
+[auth.mfa]
 max_enrolled_factors = 10
 
 # TOTP (authenticator-app) two-factor. Opt-in per account from the Profile
 # screen; once a verified factor exists, login requires the 6-digit code
-# (client gate + an aal2 check on the sensitive write RPCs — migration 0040).
+# (client gate + an aal2 check on the sensitive write RPCs - migration 0040).
 [auth.mfa.totp]
 enroll_enabled = true
 verify_enabled = true
