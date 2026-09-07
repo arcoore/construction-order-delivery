@@ -66,7 +66,64 @@ authView.querySelectorAll('input[type="password"]').forEach(input => {
   wrap.appendChild(btn);
 });
 
-// "Create account" stays disabled until the Terms/Privacy box is ticked - 
+// --- Cloudflare Turnstile CAPTCHA (login / register / reset / resend) ----
+// OFF unless window.SITESTOCK_TURNSTILE_KEY is set (env.js) AND [auth.captcha]
+// is enabled in supabase/config.toml - that is the current default, and in
+// that state every helper below is a no-op and NO third-party script loads.
+//
+// When ON: challenges.cloudflare.com/turnstile/v0/api.js is injected once
+// (allowed by the page CSP's script-src + frame-src), a widget is rendered
+// into each .captcha-slot, and the freshest token per form is kept in the
+// map. Turnstile tokens are single-use and expire after ~5 minutes, so the
+// widget is reset after every submit that reached the network.
+const TURNSTILE_SITE_KEY = window.SITESTOCK_TURNSTILE_KEY || '';
+const captchaOn = !!TURNSTILE_SITE_KEY;
+const captchaSlots = new Map(); // formKey -> { el, widgetId, token }
+
+if (captchaOn) {
+  authView.querySelectorAll('.captcha-slot').forEach(el => {
+    captchaSlots.set(el.dataset.captchaForm, { el, widgetId: null, token: null });
+  });
+  window.__sitestockTurnstileReady = () => {
+    for (const slot of captchaSlots.values()) {
+      if (slot.widgetId !== null || !window.turnstile) continue;
+      slot.widgetId = window.turnstile.render(slot.el, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: t => { slot.token = t; },
+        'expired-callback': () => { slot.token = null; },
+        'error-callback': () => { slot.token = null; },
+      });
+    }
+  };
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__sitestockTurnstileReady&render=explicit';
+  s.async = true;
+  s.defer = true;
+  document.head.appendChild(s);
+}
+
+function captchaToken(formKey) {
+  if (!captchaOn) return '';
+  return (captchaSlots.get(formKey) || {}).token || '';
+}
+
+// True only when captcha is on for this form and the user hasn't solved it.
+function captchaMissing(formKey) {
+  return captchaOn && !captchaToken(formKey);
+}
+
+// Consume-and-refresh: call right after a submit that used the token so the
+// next attempt gets a fresh, unused one.
+function resetCaptcha(formKey) {
+  if (!captchaOn) return;
+  const slot = captchaSlots.get(formKey);
+  if (slot && slot.widgetId !== null && window.turnstile) {
+    window.turnstile.reset(slot.widgetId);
+    slot.token = null;
+  }
+}
+
+// "Create account" stays disabled until the Terms/Privacy box is ticked -
 // index.html ships the button disabled, this keeps it in sync. The submit
 // handler still re-checks (defence in depth), but the button is the real
 // gate the user sees.
@@ -162,10 +219,14 @@ checkEmailLoginBtn.addEventListener('click', () => {
 
 checkEmailResendBtn.addEventListener('click', async () => {
   if (!pendingConfirmEmail) return;
+  if (captchaMissing('resend')) {
+    setStatus(checkEmailStatus, 'Please complete the "I\'m not a robot" check first.', 'error');
+    return;
+  }
   checkEmailResendBtn.disabled = true;
   setStatus(checkEmailStatus, 'Sending…', '');
   try {
-    const result = await resendConfirmation(pendingConfirmEmail);
+    const result = await resendConfirmation(pendingConfirmEmail, captchaToken('resend'));
     if (result.error) {
       setStatus(checkEmailStatus, result.error, 'error');
       return;
@@ -175,6 +236,7 @@ checkEmailResendBtn.addEventListener('click', async () => {
     setStatus(checkEmailStatus, 'Could not reach the server. Check your connection and try again.', 'error');
   } finally {
     checkEmailResendBtn.disabled = false;
+    resetCaptcha('resend');
   }
 });
 
@@ -192,10 +254,15 @@ loginForm.addEventListener('submit', async e => {
   const email = document.getElementById('login-email-input').value;
   const password = document.getElementById('login-password-input').value;
 
+  if (captchaMissing('login')) {
+    setStatus(loginStatus, 'Please complete the "I\'m not a robot" check first.', 'error');
+    return;
+  }
+
   loginSubmitBtn.disabled = true;
   setStatus(loginStatus, 'Logging in…', '');
   try {
-    const result = await login(email, password);
+    const result = await login(email, password, captchaToken('login'));
     if (result.error) {
       setStatus(loginStatus, result.error, 'error');
       return;
@@ -212,6 +279,7 @@ loginForm.addEventListener('submit', async e => {
     setStatus(loginStatus, 'Could not reach the server. Check your connection and try again.', 'error');
   } finally {
     loginSubmitBtn.disabled = false;
+    resetCaptcha('login');
   }
 });
 
@@ -219,10 +287,15 @@ resetRequestForm.addEventListener('submit', async e => {
   e.preventDefault();
   const email = document.getElementById('reset-request-email-input').value;
 
+  if (captchaMissing('reset-request')) {
+    setStatus(resetRequestStatus, 'Please complete the "I\'m not a robot" check first.', 'error');
+    return;
+  }
+
   resetRequestSubmitBtn.disabled = true;
   setStatus(resetRequestStatus, 'Sending…', '');
   try {
-    const result = await requestPasswordReset(email);
+    const result = await requestPasswordReset(email, captchaToken('reset-request'));
     // Always the same message regardless of `result` beyond a genuine
     // network/API-call failure - requestPasswordReset() itself never
     // reveals whether the email is actually registered, and this UI must
@@ -236,6 +309,7 @@ resetRequestForm.addEventListener('submit', async e => {
     setStatus(resetRequestStatus, 'Could not reach the server. Check your connection and try again.', 'error');
   } finally {
     resetRequestSubmitBtn.disabled = false;
+    resetCaptcha('reset-request');
   }
 });
 
@@ -305,10 +379,15 @@ registerForm.addEventListener('submit', async e => {
     return;
   }
 
+  if (captchaMissing('register')) {
+    setStatus(registerStatus, 'Please complete the "I\'m not a robot" check first.', 'error');
+    return;
+  }
+
   registerSubmitBtn.disabled = true;
   setStatus(registerStatus, 'Creating your account…', '');
   try {
-    const result = await createAccount(email, password, displayName, selectedRegisterRole);
+    const result = await createAccount(email, password, displayName, selectedRegisterRole, captchaToken('register'));
     if (result.error) {
       setStatus(registerStatus, result.error, 'error');
       return;
@@ -331,5 +410,6 @@ registerForm.addEventListener('submit', async e => {
   } finally {
     // Restore to the checkbox-gated state, not unconditionally enabled.
     syncRegisterSubmitEnabled();
+    resetCaptcha('register');
   }
 });

@@ -2,6 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://esm.sh https://gc.zgo.at https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://*.goatcounter.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://*.goatcounter.com https://challenges.cloudflare.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SiteStock - Ordering and deliveries for construction sites</title>
 <link rel="preconnect" href="https://esm.sh" crossorigin />
@@ -104,6 +105,7 @@
         <label class="field-label" for="login-password-input">Password</label>
         <input type="password" id="login-password-input" class="text-input" autocomplete="current-password" />
 
+        <div class="captcha-slot" data-captcha-form="login"></div>
         <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">Log in</button>
         <button type="button" class="link-btn" id="forgot-password-link">Forgot password?</button>
         <p id="login-status" class="form-status" role="status" aria-live="polite"></p>
@@ -115,6 +117,7 @@
         <p class="hint">Enter your account email and we'll send you a link to set a new password.</p>
         <label class="field-label" for="reset-request-email-input">Email</label>
         <input type="email" id="reset-request-email-input" class="text-input" autocomplete="email" />
+        <div class="captcha-slot" data-captcha-form="reset-request"></div>
         <button type="submit" class="btn btn-primary btn-block" id="reset-request-submit-btn">Send reset link</button>
         <p id="reset-request-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
@@ -146,6 +149,7 @@
 
         <label class="field-label" for="register-password-input">Password</label>
         <input type="password" id="register-password-input" class="text-input" autocomplete="new-password" />
+        <p class="hint small-hint">At least 10 characters. A passphrase of a few unrelated words is stronger, and easier to remember, than a short one with symbols.</p>
 
         <label class="field-label" for="register-confirm-input">Confirm password</label>
         <input type="password" id="register-confirm-input" class="text-input" autocomplete="new-password" />
@@ -170,6 +174,7 @@
           <span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span>
         </label>
 
+        <div class="captcha-slot" data-captcha-form="register"></div>
         <button type="submit" class="btn btn-primary btn-block" id="register-submit-btn" disabled aria-describedby="register-terms-field">Create account</button>
         <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
       </form>
@@ -182,6 +187,7 @@
           <li>That activates your account. Then log in below.</li>
         </ol>
         <p class="hint small-hint">No email yet? It can take a minute, and it may be in your spam or promotions folder.</p>
+        <div class="captcha-slot" data-captcha-form="resend"></div>
         <button type="button" class="btn btn-primary btn-block" id="check-email-login-btn">Go to log in</button>
         <button type="button" class="link-btn" id="check-email-resend-btn">Resend the email</button>
         <p id="check-email-status" class="form-status" role="status" aria-live="polite"></p>
@@ -238,7 +244,7 @@
     <div class="panel" id="join-code-panel" hidden>
       <h2>Have an invite code?</h2>
       <label class="field-label" for="join-code-input">Invite code</label>
-      <input type="text" id="join-code-input" class="text-input" placeholder="e.g. XJ4K9P" style="text-transform:uppercase" />
+      <input type="text" id="join-code-input" class="text-input text-input-upper" placeholder="e.g. XJ4K9P" />
       <button id="join-code-btn" class="btn btn-secondary btn-block">Request to join</button>
       <p id="join-code-status" class="form-status" role="status" aria-live="polite"></p>
     </div>
@@ -403,7 +409,7 @@
       <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard. Buyer access is separate - grant it to whoever handles purchasing.</p>
       <div id="owner-team-list" class="orders-list"></div>
       <details id="owner-team-activity">
-        <summary><h3 class="settings-subhead" style="display:inline">Team activity</h3></summary>
+        <summary><h3 class="settings-subhead settings-subhead-inline">Team activity</h3></summary>
         <div id="owner-team-activity-list" class="activity-list"></div>
       </details>
     </div>

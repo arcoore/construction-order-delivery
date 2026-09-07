@@ -622,6 +622,10 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   border-color: var(--orange-dark);
 }
 
+/* Replaces two inline style="" attributes removed for the Content-Security-Policy. */
+.text-input-upper { text-transform: uppercase; }
+.settings-subhead-inline { display: inline; }
+
 .text-input[readonly] {
   background: var(--bg);
   color: var(--text);
@@ -2152,6 +2156,12 @@ summary:focus-visible,
   letter-spacing: 0.08em;
 }
 .pw-toggle:hover { color: var(--navy); }
+
+/* Cloudflare Turnstile CAPTCHA holder on the login / register / reset forms.
+   Empty (and so invisible) unless window.SITESTOCK_TURNSTILE_KEY is set and
+   authView.js renders a widget into it. */
+.captcha-slot { margin: 12px 0 4px; min-height: 0; }
+.captcha-slot:empty { display: none; }
 
 /* --- "Confirm your email" screen shown after signup (#check-email-panel) --- */
 .checklist-state {

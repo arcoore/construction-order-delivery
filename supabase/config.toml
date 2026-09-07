@@ -12,9 +12,14 @@ enabled = true
 # confirmation, password reset, email change) passes its OWN
 # emailRedirectTo/redirectTo computed from window.location at call time, so
 # the same build works on localhost and on the deployed site. Supabase only
-# honours a redirect that also appears in additional_redirect_urls below —
+# honours a redirect that also appears in additional_redirect_urls below -
 # keep both the local dev origins and the live GitHub Pages URL listed.
 site_url = "https://arcoore.github.io/construction-order-delivery/"
+
+# Password rules. Following current NIST / NCSC guidance: a longer minimum
+# rather than arbitrary composition rules (which push people toward
+# predictable patterns like "Password1!").
+minimum_password_length = 10
 # Wildcard (**) patterns so any path works (the app builds redirect URLs as
 # origin + window.location.pathname, e.g. .../ or .../index.html).
 additional_redirect_urls = [
@@ -22,6 +27,30 @@ additional_redirect_urls = [
   "http://localhost:3000/**",
   "http://127.0.0.1:3000/**",
 ]
+
+# Bot / brute-force protection for the login and signup forms: Cloudflare
+# Turnstile (free, privacy-friendly, no visible puzzle for most users). The
+# frontend renders the widget and sends the token with signInWithPassword /
+# signUp; GoTrue verifies it here before doing anything else, so a script
+# hammering the endpoint is stopped at the door.
+#
+# Disabled until you set it up (public/js/env.js holds the site key, the
+# secret goes in supabase/.env - see supabase/.env.example):
+#   1. https://dash.cloudflare.com -> Turnstile -> Add site (free).
+#   2. Put the Site Key in public/js/env.js (window.SITESTOCK_TURNSTILE_KEY).
+#   3. Put the Secret Key in supabase/.env as TURNSTILE_SECRET.
+#   4. Flip `enabled` to true below, then restart / `supabase config push`.
+[auth.captcha]
+enabled = false
+provider = "turnstile"
+secret = "env(TURNSTILE_SECRET)"
+
+# Leaked-password protection (rejects passwords found in the Have I Been
+# Pwned breach corpus via a k-anonymised hash prefix - the password never
+# leaves the server). On hosted Supabase this is a Pro-plan feature, toggled
+# under Authentication -> Passwords; left here as a reminder to turn it on.
+# [auth.password]
+# hibp_enabled = true
 
 [auth.email]
 enable_signup = true

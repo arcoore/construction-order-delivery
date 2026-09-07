@@ -102,10 +102,11 @@ function friendlyAuthError(error) {
   if (/invalid login credentials/i.test(msg)) return 'Incorrect email or password.';
   if (/invalid.*(totp|code)|mfa/i.test(msg)) return 'That code isn\'t right - check your authenticator app and try again.';
   if (/password.*(least|short)/i.test(msg)) return msg;
+  if (/captcha/i.test(msg)) return 'Please complete the "I\'m not a robot" check and try again.';
   return msg;
 }
 
-export async function createAccount(email, password, displayName, defaultRole) {
+export async function createAccount(email, password, displayName, defaultRole, captchaToken) {
   email = (email || '').trim();
   displayName = (displayName || '').trim();
   if (!email || !password || !displayName) {
@@ -125,6 +126,11 @@ export async function createAccount(email, password, displayName, defaultRole) {
       // requestPasswordReset / requestEmailChange already do it. Every origin
       // this can produce is in config.toml's additional_redirect_urls.
       emailRedirectTo: window.location.origin + window.location.pathname,
+      // Cloudflare Turnstile token, when the CAPTCHA is switched on
+      // (window.SITESTOCK_TURNSTILE_KEY set + [auth.captcha] enabled in
+      // config.toml). Undefined/omitted when it's off, which is the current
+      // default - GoTrue only enforces it when the project has captcha on.
+      ...(captchaToken ? { captchaToken } : {}),
     },
   });
   if (error) return { error: friendlyAuthError(error) };
@@ -145,13 +151,16 @@ export async function createAccount(email, password, displayName, defaultRole) {
 // Re-send the signup confirmation email - the "Resend" button on the
 // check-your-email screen. Supabase rate-limits this; a 429 becomes a
 // friendly "wait a moment" rather than a raw error.
-export async function resendConfirmation(email) {
+export async function resendConfirmation(email, captchaToken) {
   email = (email || '').trim();
   if (!email) return { error: 'No email address to resend to.' };
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email,
-    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname,
+      ...(captchaToken ? { captchaToken } : {}),
+    },
   });
   if (error) {
     if (error.code === 'over_email_send_rate_limit' || /rate limit|too many/i.test(error.message || '')) {
@@ -162,10 +171,14 @@ export async function resendConfirmation(email) {
   return { ok: true };
 }
 
-export async function login(email, password) {
+export async function login(email, password, captchaToken) {
   email = (email || '').trim();
   if (!email || !password) return { error: 'Please fill in every field.' };
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: captchaToken ? { captchaToken } : undefined,
+  });
   if (error) return { error: friendlyAuthError(error) };
   currentSession = data.session;
 
@@ -337,11 +350,14 @@ export async function deleteAccount() {
 // hardcoded) so the same code works unmodified on localhost, GitHub Pages,
 // or any future host - matching env.js's existing "no build-time env
 // injection, read the actual runtime location" approach.
-export async function requestPasswordReset(email) {
+export async function requestPasswordReset(email, captchaToken) {
   email = (email || '').trim();
   if (!email) return { error: 'Please enter your email.' };
   const redirectTo = window.location.origin + window.location.pathname;
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+    ...(captchaToken ? { captchaToken } : {}),
+  });
   // A real send failure (bad request, rate limit, network) is shown as an
   // error; anything else - including "no such account" - must never be
   // distinguishable from success, so only a genuine `error` from the call

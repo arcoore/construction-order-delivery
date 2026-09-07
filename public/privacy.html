@@ -2,6 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://esm.sh https://gc.zgo.at https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://*.goatcounter.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://*.goatcounter.com https://challenges.cloudflare.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Privacy Policy - SiteStock</title>
 <meta name="description" content="What personal data SiteStock collects, why, who can see it, how long it is kept, and your rights under UK data protection law." />
@@ -89,8 +90,9 @@
       <dt>Technical information</dt>
       <dd>
         Standard server and security logs kept by our infrastructure providers,
-        such as IP address, request times, and error information. We do not use
-        analytics, advertising, or third-party tracking.
+        such as IP address, request times, and error information. We use one
+        cookieless, privacy-preserving page-view counter (see section 5); we do
+        not use advertising or cross-site tracking of any kind.
       </dd>
     </dl>
 
@@ -143,8 +145,10 @@
       The Service does not use tracking or advertising cookies, and does not
       set any cookie that needs your consent. It stores a small amount of data
       in your browser purely to keep you signed in and to remember which
-      company and role you last used. Blocking this data will stop the Service
-      working.
+      company and role you last used. Your sign-in token is held in
+      <strong>session storage</strong>, which your browser clears when you close
+      the tab; it is never written to disk by us. Blocking this data will stop
+      the Service working.
     </p>
     <p>
       We use <strong>GoatCounter</strong> for basic page-view analytics. It is
@@ -176,6 +180,14 @@
         Supabase client) from it when the page opens, which involves your IP
         address. No account or personal data is sent, and we pin the exact
         version requested.
+      </dd>
+      <dt>Cloudflare Turnstile</dt>
+      <dd>
+        A privacy-focused &ldquo;are you human&rdquo; check. If it is switched
+        on, you will see it on the sign-in and sign-up screens; your browser
+        contacts Cloudflare to run the check, which involves your IP address and
+        basic browser signals. It does not use tracking cookies and is not used
+        to advertise to you or profile you. No account data is sent to it.
       </dd>
       <dt>GoatCounter</dt>
       <dd>
@@ -238,9 +250,13 @@
       Access to data is enforced at the database level by row-level security, so
       each request only returns what that account is entitled to see. Traffic is
       encrypted in transit. Passwords are hashed by our authentication provider,
-      and optional two-factor authentication is available. No system is
-      perfectly secure, and while the Service is in development you should not
-      store anything in it that you could not tolerate being lost or exposed.
+      have a minimum length, and optional two-factor authentication is
+      available. The site sends a strict Content-Security-Policy that blocks
+      third-party and injected scripts, and your sign-in token is kept in
+      session storage rather than long-lived local storage (see section 5). No
+      system is perfectly secure, and while the Service is in development you
+      should not store anything in it that you could not tolerate being lost or
+      exposed.
     </p>
 
     <h2>9. Your rights</h2>

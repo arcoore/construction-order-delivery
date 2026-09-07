@@ -43,6 +43,28 @@ const SUPABASE_URL = window.SITESTOCK_SUPABASE_URL || 'http://127.0.0.1:54321';
 const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
+// --- Session token storage ---------------------------------------------
+// This is a static site (GitHub Pages) with no server, so the token can't
+// be an httpOnly cookie - it has to live where JS can reach it. What
+// actually stops injected script from reading it is the strict
+// Content-Security-Policy in every page's <head> (no inline/third-party
+// scripts) plus the output-escaping sweep across the render code.
+//
+// Given that, we use sessionStorage, not localStorage: the token is never
+// written to disk and is gone when the tab closes, so it can't be lifted
+// off a shared machine afterwards or survive a browser restart. The cost is
+// that each browser tab is its own session. The two non-secret UI pointers
+// (active company / role) stay in localStorage - see community.js.
+//
+// When SiteStock has its own backend, switch to httpOnly + SameSite=strict
+// cookies via @supabase/ssr. That is the real fix; this is the best a
+// static SPA can do.
+const sessionTokenStorage = {
+  getItem(key) { try { return sessionStorage.getItem(key); } catch { return null; } },
+  setItem(key, value) { try { sessionStorage.setItem(key, value); } catch { /* storage blocked */ } },
+  removeItem(key) { try { sessionStorage.removeItem(key); } catch { /* storage blocked */ } },
+};
+
 // detectSessionInUrl is true (Roadmap Step 5) so a Supabase password-recovery
 // link's URL fragment is picked up automatically and fires a real
 // PASSWORD_RECOVERY auth event (see auth.js) - this app has no other
@@ -55,5 +77,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: sessionTokenStorage,
   },
 });
