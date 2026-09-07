@@ -159,7 +159,68 @@
     </p>
 
     <h2>6. Where your data is stored and processed</h2>
-    <p>We rely on the following providers:</p>
+    <p>
+      At a glance, this is every outside service the Service uses and what
+      each one receives. None of them is used for advertising or to profile
+      you, and none sets a tracking cookie.
+    </p>
+    <div class="data-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Service</th><th>What it receives</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Supabase</td>
+            <td>Everything you and your team enter (account, company, site,
+              order, message and photo data), plus your IP address and request
+              times in its security logs</td>
+            <td>The database, login, and file storage behind the app</td>
+          </tr>
+          <tr>
+            <td>Brevo</td>
+            <td>Your email address and the contents of the account emails we
+              send you (sign-up confirmation, password reset, email change)</td>
+            <td>Delivers those emails on our behalf</td>
+          </tr>
+          <tr>
+            <td>GitHub Pages</td>
+            <td>Your IP address and which pages you request</td>
+            <td>Serves the website files</td>
+          </tr>
+          <tr>
+            <td>postcodes.io</td>
+            <td>A single postcode you type into a site or delivery field -
+              nothing else</td>
+            <td>Converts it to approximate map coordinates</td>
+          </tr>
+          <tr>
+            <td>esm.sh</td>
+            <td>Your IP address, once per page load</td>
+            <td>Delivers one software library (the Supabase client)</td>
+          </tr>
+          <tr>
+            <td>Cloudflare Turnstile</td>
+            <td>Your IP address and basic browser signals, on the sign-in and
+              sign-up screens only (when the check is switched on)</td>
+            <td>Confirms you&rsquo;re a person, not a bot</td>
+          </tr>
+          <tr>
+            <td>Have I Been Pwned</td>
+            <td>The first five characters of a one-way hash of a password you
+              set - never the password, your email, or any account detail</td>
+            <td>Warns you if that password is in a known breach</td>
+          </tr>
+          <tr>
+            <td>GoatCounter</td>
+            <td>The page path and referring page. It does not store your IP
+              address and sets no cookie</td>
+            <td>Counts page views</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>More detail on each:</p>
     <dl>
       <dt>Supabase</dt>
       <dd>
@@ -169,6 +230,14 @@
       </dd>
       <dt>GitHub Pages</dt>
       <dd>Serves the static website files.</dd>
+      <dt>Brevo (Sendinblue)</dt>
+      <dd>
+        Our email provider. When the Service needs to email you - to confirm
+        your address at sign-up, to send a password-reset link, or to confirm
+        an email change - your address and that message are handled by Brevo
+        to deliver it. It is not used for marketing, and we do not add you to
+        any mailing list.
+      </dd>
       <dt>postcodes.io</dt>
       <dd>
         UK postcode lookup, run by a UK non-profit. When a postcode is entered

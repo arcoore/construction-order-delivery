@@ -1,3 +1,7 @@
 .foglamp/
 supabase/.env
 .env
+
+# Database dumps - contain real user data, never commit (see supabase/RESTORE_RUNBOOK.md)
+backups/
+*.dump

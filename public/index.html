@@ -31,6 +31,17 @@
 </head>
 <body>
 
+<!-- Global kill switch (migration 0042). Hidden unless appStatus.js reads
+     app_status.killed = true, in which case main.js shows this instead of
+     routing into the app. -->
+<div id="kill-switch-panel" hidden>
+  <div class="panel">
+    <p class="legal-kicker">SiteStock</p>
+    <h1>Briefly offline</h1>
+    <p class="hint" id="kill-switch-message"></p>
+  </div>
+</div>
+
 <a href="#app" class="skip-link">Skip to main content</a>
 
 <header class="topbar">

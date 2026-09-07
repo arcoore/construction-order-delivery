@@ -29,6 +29,13 @@ import { refreshPhotoCache } from './deliveryPhotos.js';
 import { refreshSupplierCache } from './suppliers.js';
 import { refreshProductsCache } from './products.js';
 import { startRealtimeForSession, stopRealtime } from './realtime.js';
+import { installErrorReporting } from './errorLog.js';
+import { refreshAppStatus, getAppStatus } from './appStatus.js';
+
+// Beta: catch uncaught errors / rejections and log them to Supabase. Done
+// here at module load (not in bootstrap) so an error thrown during bootstrap
+// itself is still captured. Adds two window listeners and nothing else.
+installErrorReporting();
 
 // Phase 8B/8C: identity/company/site/order data is now Supabase-backed and
 // shared across devices, but there's no Realtime subscription yet
@@ -104,6 +111,24 @@ const notifPrefsSaveBtn = document.getElementById('notif-prefs-save-btn');
 const notifPrefsCancelBtn = document.getElementById('notif-prefs-cancel-btn');
 
 const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
+
+const killSwitchPanel = document.getElementById('kill-switch-panel');
+const killSwitchMessage = document.getElementById('kill-switch-message');
+let killScreenShown = false;
+
+// Full-screen maintenance message - shown instead of the app when
+// app_status.killed is true (migration 0042). Tears down Realtime and hides
+// every view; recovery is a page reload (handled by the focus listener when
+// the flag is cleared).
+function showKillScreen(message) {
+  killScreenShown = true;
+  killSwitchMessage.textContent = message
+    || 'SiteStock is briefly offline for maintenance. Please check back shortly.';
+  bootstrapLoadingView.classList.remove('active');
+  ALL_VIEWS.forEach(v => v.classList.remove('active'));
+  killSwitchPanel.hidden = false;
+  try { stopRealtime(); } catch { /* ignore */ }
+}
 
 const ROLE_META = {
   owner: { label: 'Owner', desc: 'Approve worker requests and company join requests' },
@@ -1136,7 +1161,12 @@ async function bootstrap() {
   // known, including the logged-out case (showAuth() first, then this same
   // routeFromTop() logic re-runs after 'sitestock:logged-in').
   consumeJoinIntentFromUrl();
-  await authReady;
+  await Promise.all([authReady, refreshAppStatus()]);
+  // Kill switch: bail before touching any of the data caches or routing.
+  if (getAppStatus().killed) {
+    showKillScreen(getAppStatus().message);
+    return;
+  }
   await Promise.all([loadAllProfiles(), refreshDataCaches()]);
   // Phase 8D.2 - covers session restore (a page load with an existing
   // Supabase session already in localStorage), which never fires
@@ -1160,7 +1190,12 @@ async function bootstrap() {
 // This does not itself force a re-render of every open view - see
 // refreshDataCaches()'s header for why that's an accepted, documented
 // limitation for owner/buyer/driver/site.js specifically.
-window.addEventListener('focus', () => {
+window.addEventListener('focus', async () => {
+  await refreshAppStatus();
+  if (getAppStatus().killed) { showKillScreen(getAppStatus().message); return; }
+  // Flag was cleared while the maintenance screen was up - reload into the
+  // real app rather than trying to re-hydrate a torn-down session in place.
+  if (killScreenShown) { location.reload(); return; }
   if (isAuthenticated()) refreshDataCaches();
 });
 

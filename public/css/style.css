@@ -1987,6 +1987,20 @@ summary:focus-visible,
 /* --- Bootstrap holding screen --- */
 #bootstrap-loading .panel { text-align: left; }
 
+/* --- Global kill switch / maintenance screen (migration 0042) --- */
+#kill-switch-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+#kill-switch-panel[hidden] { display: none; }
+#kill-switch-panel .panel { max-width: 32rem; text-align: left; }
+
 /* --- Skip link (keyboard: first Tab reveals it) --- */
 .skip-link {
   position: fixed;
@@ -2094,6 +2108,22 @@ summary:focus-visible,
 .legal-doc dl { margin: 0 0 12px; }
 .legal-doc dt { font-weight: 700; color: var(--navy); margin-top: 10px; }
 .legal-doc dd { margin: 2px 0 0; }
+
+.legal-doc .data-table-wrap { overflow-x: auto; margin: 0 0 16px; }
+.legal-doc table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 34rem;
+  font-size: 0.86rem;
+}
+.legal-doc th,
+.legal-doc td {
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.legal-doc th { background: var(--sink); font-weight: 700; color: var(--navy); }
 
 .legal-footer {
   margin-top: 30px;
