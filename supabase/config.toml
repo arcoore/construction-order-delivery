@@ -57,8 +57,14 @@ secret = "env(TURNSTILE_SECRET)"
 
 # Leaked-password protection (rejects passwords found in the Have I Been
 # Pwned breach corpus via a k-anonymised hash prefix - the password never
-# leaves the server). On hosted Supabase this is a Pro-plan feature, toggled
-# under Authentication -> Passwords; left here as a reminder to turn it on.
+# leaves in full). On hosted Supabase this is a Pro-plan feature, toggled
+# under Authentication -> Passwords.
+#
+# Until then, public/js/pwnedPassword.js does the SAME check CLIENT-side (same
+# free HIBP range API, same k-anonymity) on the sign-up and reset forms - see
+# that file's header for the client-vs-server trade-off. When you move to Pro,
+# turn the setting below on; the client check can stay as defence in depth or
+# be removed.
 # [auth.password]
 # hibp_enabled = true
 

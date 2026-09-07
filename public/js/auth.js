@@ -11,6 +11,7 @@
 // anyone else. Looking up *other* users' display names is identity.js's
 // job (profiles table), not this module's.
 import { supabase } from './supabaseClient.js';
+import { isPasswordPwned } from './pwnedPassword.js';
 
 let currentSession = null;
 
@@ -114,6 +115,9 @@ export async function createAccount(email, password, displayName, defaultRole, c
   }
   if (!VALID_ROLES.includes(defaultRole)) {
     return { error: 'Please choose your role.' };
+  }
+  if ((await isPasswordPwned(password)).pwned) {
+    return { error: 'That password has appeared in a known data breach - please pick a different one.' };
   }
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -373,6 +377,9 @@ export async function requestPasswordReset(email, captchaToken) {
 // routeFromTop() resumes normal routing immediately afterward.
 export async function completePasswordReset(newPassword) {
   if (!newPassword) return { error: 'Please enter a new password.' };
+  if ((await isPasswordPwned(newPassword)).pwned) {
+    return { error: 'That password has appeared in a known data breach - please pick a different one.' };
+  }
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) return { error: friendlyAuthError(error) };
   inPasswordRecovery = false;
