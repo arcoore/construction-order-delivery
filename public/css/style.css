@@ -38,7 +38,7 @@
   --orange-dark: #bd4c14;
   --bg: #f7efe6;
   --card: #fffaf5;
-  --border: rgba(101, 65, 46, 0.22);
+  --border: rgba(101, 65, 46, 0.38);
   --text: #3f291f;
   --text-muted: #735f53;
   --green: #2e7d46;
@@ -50,7 +50,7 @@
   --brown-dark: #3f291f;
   --sand: #d8c2ae;
   --paper: #f7efe6;
-  --sink: #fdf7f0;
+  --sink: #f4ece0;
 
   --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -611,7 +611,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   width: 100%;
   padding: 12px 14px;
   font-size: 1rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--text-muted);
   border-radius: 0;
   background: var(--sink);
   margin-bottom: 12px;
@@ -619,7 +619,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .search-input:focus, .text-input:focus {
   outline: none;
-  border-color: var(--orange);
+  border-color: var(--orange-dark);
 }
 
 .text-input[readonly] {
@@ -1030,7 +1030,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   white-space: nowrap;
   background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--text-muted);
 }
 
 .status-delivered.status-badge,

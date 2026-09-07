@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://arcoore.github.io/construction-order-delivery/sitemap.xml
