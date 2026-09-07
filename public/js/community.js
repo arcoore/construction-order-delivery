@@ -1,5 +1,5 @@
 // Communities ("Companies" to the user) are now Supabase-backed (Phase 8B)
-// — shared across devices/browsers for the first time, enforced server-side
+// - shared across devices/browsers for the first time, enforced server-side
 // by RLS (see supabase/migrations/0009_rls_policies.sql). Ownership/
 // membership is still keyed by user id, never display name (see
 // identity.js), same as before.
@@ -7,7 +7,7 @@
 // CACHE LIFECYCLE (read this before touching this file):
 // Every read function below (isOwner, isApprovedMember, isBuyer,
 // eligibleRoles, getCommunities, getOwnerIds, getBuyerIds, approvedMembers,
-// etc.) is SYNCHRONOUS on purpose — orderLifecycle.js and the owner/buyer/
+// etc.) is SYNCHRONOUS on purpose - orderLifecycle.js and the owner/buyer/
 // driver/site UI modules call them inline inside synchronous render code,
 // and none of those are being converted to async this phase (see
 // CLAUDE.md's Phase 8B section). They read an in-memory cache
@@ -15,7 +15,7 @@
 // fresh by real Supabase traffic, not by pretending a network call is
 // instant.
 //
-// The cache is NEVER the authorization boundary — RLS is (see
+// The cache is NEVER the authorization boundary - RLS is (see
 // supabase/migrations/0009_rls_policies.sql). A stale cache can at worst
 // show a UI affordance a user is no longer entitled to use; the moment they
 // click it, the real Supabase write is independently checked server-side
@@ -34,12 +34,12 @@ import { getCurrentUserId, primeProfiles } from './identity.js';
 import { subscribeAuth } from './auth.js';
 import { supabase } from './supabaseClient.js';
 
-// --- UI-only local state (NOT retired to Supabase — see CLAUDE.md's
+// --- UI-only local state (NOT retired to Supabase - see CLAUDE.md's
 // "localStorage retirement" note: active community/role are browser session
 // pointers, not security, and stay exactly as they were). --------------
 const ACTIVE_COMMUNITY_KEY = 'sitestock_active_community_id';
 const ACTIVE_ROLE_KEY = 'sitestock_active_role';
-const SEEN_GRANTS_KEY = 'sitestock_seen_grants_v1'; // "have I shown this owner-upgrade popup" — UI state, not data
+const SEEN_GRANTS_KEY = 'sitestock_seen_grants_v1'; // "have I shown this owner-upgrade popup" - UI state, not data
 
 function readLocalList(key) {
   try {
@@ -123,9 +123,9 @@ function mapMembership(r) {
     requestedAt: new Date(r.requested_at).getTime(),
     decidedAt: r.decided_at ? new Date(r.decided_at).getTime() : null,
     decidedById: r.decided_by_id,
-    // Migration 0023 (Workforce Lifecycle) — who changed the status last,
+    // Migration 0023 (Workforce Lifecycle) - who changed the status last,
     // when, and the optional reason (NOT owner-private; the member can see
-    // it — surfaced on the Profile screen and baked into the
+    // it - surfaced on the Profile screen and baked into the
     // membership_suspended/removed notification server-side).
     statusChangedAt: r.status_changed_at ? new Date(r.status_changed_at).getTime() : null,
     statusChangedById: r.status_changed_by_id || null,
@@ -153,10 +153,10 @@ function mapBuyerRequest(r) {
   };
 }
 
-// Full refetch of every table this module owns. Safe to call any time —
+// Full refetch of every table this module owns. Safe to call any time - 
 // called reactively on every auth transition below, and explicitly by
 // main.js on relevant view entry / window focus (Phase 8B "no Realtime yet"
-// freshness strategy — see CLAUDE.md). RLS scopes what actually comes back
+// freshness strategy - see CLAUDE.md). RLS scopes what actually comes back
 // (e.g. community_memberships only returns rows the caller owns or owns the
 // community for) so no client-side filtering by userId is needed here.
 export async function refreshCommunityCache() {
@@ -184,7 +184,7 @@ export async function refreshCommunityCache() {
   communityCacheReady = true;
 
   // Proactively prime display names for every user id this cache load just
-  // surfaced (owners, requesters, grant holders) — avoids a flash of
+  // surfaced (owners, requesters, grant holders) - avoids a flash of
   // "Unknown" the first time each render calls resolveDisplayName for
   // someone the profile cache hasn't seen yet.
   const ids = new Set();
@@ -201,11 +201,11 @@ export async function refreshCommunityCache() {
   notify();
 }
 
-// Refetches on every auth transition (login, logout, account switch) —
+// Refetches on every auth transition (login, logout, account switch) - 
 // clears to empty immediately on logout (see the userId-null branch above),
 // loads fresh on login. This is in addition to main.js's explicit bootstrap
 // await, which exists so the FIRST load is guaranteed complete before any
-// routing happens (see main.js) — this subscription handles every
+// routing happens (see main.js) - this subscription handles every
 // subsequent transition during the session.
 subscribeAuth(() => { refreshCommunityCache(); });
 
@@ -222,7 +222,7 @@ export function getMembershipById(id) {
 }
 
 // Lazy one-shot read of the workforce-lifecycle audit trail
-// (community_membership_events, migration 0023 — RLS lets an owner or the
+// (community_membership_events, migration 0023 - RLS lets an owner or the
 // member themself read it). Deliberately NOT part of the synchronous cache
 // facade: it's a rarely-opened audit log, not render-hot data, so it's
 // fetched on demand when the owner opens the Team activity view rather than
@@ -269,17 +269,17 @@ export function eligibleRoles(communityId, userId) {
   return roles;
 }
 
-// Phase 8E — rewritten to make each rule explicit rather than incidental,
+// Phase 8E - rewritten to make each rule explicit rather than incidental,
 // per the approved routing checklist: exactly-one-role auto-enters, a valid
 // preference is honoured, worker+driver-only ambiguity defaults to worker
 // (unchanged precedent), and genuine multi-role ambiguity with no matching
 // preference returns null so the caller shows the picker instead of
-// guessing. Owner keeps its unconditional top priority — CLAUDE.md's
+// guessing. Owner keeps its unconditional top priority - CLAUDE.md's
 // documented rule ("no matter what they picked at signup") is unchanged.
 export function resolveEntryRole(communityId, userId, preferredRole) {
   if (isOwner(communityId, userId)) return 'owner';
 
-  const roles = eligibleRoles(communityId, userId); // never contains 'owner' here — isOwner already false
+  const roles = eligibleRoles(communityId, userId); // never contains 'owner' here - isOwner already false
   if (roles.length === 0) return null;
   if (roles.length === 1) return roles[0];
   if (preferredRole && roles.includes(preferredRole)) return preferredRole;
@@ -322,7 +322,7 @@ export function getOwnerGrants() {
   return cache.ownerGrants;
 }
 
-// PURE "is there an owner_grants row" check — deliberately NOT membership-
+// PURE "is there an owner_grants row" check - deliberately NOT membership-
 // status-aware, so the Team panel can still show a suspended member's
 // dormant owner grant (badge + Revoke). The membership gate lives in
 // isOwner below, mirroring migration 0023's server-side has_owner_grant
@@ -334,9 +334,9 @@ export function hasOwnerGrant(communityId, userId) {
 
 // True when this user has a community_memberships row here whose status is
 // anything other than 'approved' (suspended / removed / left / pending /
-// declined) — the exact condition migration 0023 uses to make an owner or
+// declined) - the exact condition migration 0023 uses to make an owner or
 // buyer grant dormant. A user with NO membership row is not "non-approved"
-// here (a bare granted owner keeps their grant — unchanged behaviour,
+// here (a bare granted owner keeps their grant - unchanged behaviour,
 // flagged server-side as a separate future question).
 function membershipBlocksGrant(communityId, userId) {
   return cache.memberships.some(
@@ -354,9 +354,9 @@ export function isOwner(communityId, userId) {
 }
 
 // Every user id currently holding owner access in this community (creator +
-// all owner grants) — used to fan out notifications to "the owner(s)"
+// all owner grants) - used to fan out notifications to "the owner(s)"
 // rather than a single assumed owner. Called synchronously from
-// orderLifecycle.js — must stay sync, cache-backed.
+// orderLifecycle.js - must stay sync, cache-backed.
 export function getOwnerIds(communityId) {
   const community = cache.communities.find(c => c.id === communityId);
   const ids = new Set();
@@ -387,7 +387,7 @@ export async function revokeOwnerAccess(communityId, userId) {
   return { ok: true };
 }
 
-// Migration 0028 — hand the company over. Only the true creator can call
+// Migration 0028 - hand the company over. Only the true creator can call
 // this (the RPC re-checks server-side). On success the caller keeps
 // owner-level access via a new owner_grant, and the new owner's own grant
 // (if they had one) is cleared as redundant. A full cache refresh follows
@@ -410,7 +410,7 @@ export function approvedMembers(communityId) {
 
 // Finds a grant made to this user that they haven't been shown the
 // "upgraded to owner" popup for yet. Seen-state stays local/per-device on
-// purpose (a UI "have I shown this" flag, not real data — same category as
+// purpose (a UI "have I shown this" flag, not real data - same category as
 // active community/role).
 export function findUnseenGrantFor(userId) {
   if (!userId) return null;
@@ -441,7 +441,7 @@ export async function requestToJoin(communityId, userId) {
   const existing = cache.memberships.find(r => r.communityId === communityId && r.userId === userId);
   if (existing) {
     // The browse-list "Request to join" button only renders for status
-    // 'none' (no row) — a prior declined/left/removed row uses the separate
+    // 'none' (no row) - a prior declined/left/removed row uses the separate
     // "Request again" button -> rerequestMembership() instead. So this
     // branch is unreachable from the UI; return a clear refusal rather
     // than a silent no-op if it's ever hit another way.
@@ -457,7 +457,7 @@ export async function requestToJoin(communityId, userId) {
   return request;
 }
 
-// Roadmap Step 5 — rewritten to call the server-authoritative
+// Roadmap Step 5 - rewritten to call the server-authoritative
 // request_join_by_invite_code RPC instead of scanning the client-side
 // `cache.communities` array. That client-side scan only ever worked because
 // every community used to be SELECTable by every authenticated user
@@ -466,7 +466,7 @@ export async function requestToJoin(communityId, userId) {
 // caller isn't already related to is no longer in that cache at all, so the
 // old scan would silently never find it. The RPC resolves the code with
 // elevated privilege server-side and returns only the one matched
-// community's id/name plus the caller's own resulting status — never a
+// community's id/name plus the caller's own resulting status - never a
 // list, never enabling enumeration. Same external return shape as before
 // (`{ error }` / `{ community, alreadyMember: true }` /
 // `{ community, alreadyPending: true }` / `{ community, requested: true }`)
@@ -483,14 +483,14 @@ export async function requestToJoinByCode(code, userId) {
   if (data.status === 'owner') return { error: `You're already the owner of "${community.name}".` };
   if (data.status === 'approved') return { community, alreadyMember: true };
   // justCreated distinguishes a genuinely fresh pending row from one that
-  // already existed — both carry status 'pending' with nothing else to
+  // already existed - both carry status 'pending' with nothing else to
   // tell them apart (found live: without this check, a real first-time
   // joiner incorrectly saw "Already requested" instead of "Request sent").
   if (data.status === 'pending' && !data.justCreated) return { community, alreadyPending: true };
   // A prior declined/left/removed row: migration 0023's recreated
   // request_join_by_invite_code resets it to 'pending' and returns
   // justCreated:true, so it falls through to the "requested" success below
-  // exactly like a brand-new request — no special-casing needed.
+  // exactly like a brand-new request - no special-casing needed.
 
   await refreshCommunityCache();
   return { community, requested: true };
@@ -498,7 +498,7 @@ export async function requestToJoinByCode(code, userId) {
 
 // --- Roadmap Step 5: discoverability + shareable invite links ---------
 
-// Plain client-side update, exactly like setApprovalRequired below —
+// Plain client-side update, exactly like setApprovalRequired below - 
 // communities_update_owner_only RLS already scopes this to is_owner, no new
 // RPC needed for a single-column owner-settable toggle.
 export async function setDiscoverable(communityId, value) {
@@ -514,16 +514,16 @@ export async function setDiscoverable(communityId, value) {
   return { ok: true };
 }
 
-// The invite link is a pure wrapper around the existing invite code — no
+// The invite link is a pure wrapper around the existing invite code - no
 // new invite mechanism, just a URL that pre-fills the join form so someone
-// doesn't have to type 6 characters correctly. Query string, not hash — the
+// doesn't have to type 6 characters correctly. Query string, not hash - the
 // hash is reserved for Supabase's own password-recovery link (see
 // supabaseClient.js/auth.js).
 export function buildInviteLink(code) {
   return `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(code)}`;
 }
 
-// Held in memory only (never localStorage) — a one-time intent for this
+// Held in memory only (never localStorage) - a one-time intent for this
 // page load, not session state. Read once at bootstrap (main.js), stripped
 // from the URL immediately via history.replaceState so refreshing/sharing
 // the resulting tab doesn't repeat the join prompt, then carried in memory
@@ -551,14 +551,14 @@ export function clearPendingJoinCode() {
   pendingJoinCode = null;
 }
 
-// Roadmap Step 5 follow-up — rewritten to call the guarded decide_join_request
+// Roadmap Step 5 follow-up - rewritten to call the guarded decide_join_request
 // RPC instead of a plain client update. Closes a real gap: the old direct
 // update had no state-machine guard (a double-click, a replay, or two
 // competing owner sessions could all re-decide the same request with no
 // refusal) and could never have notified the applicant either way, since
 // notifications has no INSERT grant for `authenticated` at all. The RPC
 // now derives the acting owner from auth.uid() server-side, same as every
-// other rewritten write in this codebase — decidedById is kept as a
+// other rewritten write in this codebase - decidedById is kept as a
 // parameter purely so this function's external signature (and therefore
 // every existing call site, e.g. owner.js) needs zero changes; it's no
 // longer read or trusted.
@@ -579,11 +579,11 @@ export async function decideJoinRequest(requestId, decision, decidedById) {
 // Thin wrappers over the five guarded SECURITY DEFINER RPCs. Same shape as
 // decideJoinRequest / revokeBuyerAccess: return { ok } / { ok:false, error },
 // update the local cache from the server's own returned row (never an
-// optimistic guess), and — for the two that cascade server-side (remove,
-// leave) — mirror that cascade in cache.ownerGrants / cache.buyerGrants /
+// optimistic guess), and - for the two that cascade server-side (remove,
+// leave) - mirror that cascade in cache.ownerGrants / cache.buyerGrants /
 // cache.buyerRequests so the owner's Team panel reflects it immediately.
 // site_memberships live in sites.js's cache; the caller (owner.js) refreshes
-// that, and Realtime does too — see the Phase C notes in CLAUDE.md.
+// that, and Realtime does too - see the Phase C notes in CLAUDE.md.
 
 function applyMembershipRow(row) {
   const mapped = mapMembership(row);
@@ -647,7 +647,7 @@ export async function rerequestMembership(communityId) {
 }
 
 // Every membership row this cache holds for a community (any status), for
-// the owner Team panel — which must show suspended members (to Restore
+// the owner Team panel - which must show suspended members (to Restore
 // them), not just approved ones. Excludes the caller and pure pending/
 // declined join requests (those live in the Join-requests panel).
 export function teamMemberships(communityId, viewerId) {
@@ -658,7 +658,7 @@ export function teamMemberships(communityId, viewerId) {
   );
 }
 
-// The current user's suspended memberships — surfaced on the Profile screen
+// The current user's suspended memberships - surfaced on the Profile screen
 // so a suspended user can see which company and why.
 export function mySuspendedMemberships(userId) {
   if (!userId) return [];
@@ -722,7 +722,7 @@ export async function setApprovalThreshold(communityId, value) {
 }
 
 // Owner-settable company rename. Same plain client-update pattern as
-// setApprovalRequired/setDiscoverable — communities_update_owner_only RLS
+// setApprovalRequired/setDiscoverable - communities_update_owner_only RLS
 // already scopes every UPDATE on this table to is_owner, so no RPC is
 // needed for a single owner-editable column. Past orders/notifications
 // snapshot the name at the time they were written and are never rewritten.
@@ -742,7 +742,7 @@ export async function renameCommunity(communityId, name) {
   return { ok: true };
 }
 
-// Permanent company deletion (migration 0038) — creator only, and only for
+// Permanent company deletion (migration 0038) - creator only, and only for
 // a company with no orders, no sites, and no other members/grants. The
 // server enforces every one of those; this just relays and cleans the cache.
 export async function deleteCommunity(communityId) {
@@ -761,20 +761,20 @@ export function getBuyerGrants() {
   return cache.buyerGrants;
 }
 
-// PURE grant-row check (see hasOwnerGrant's note) — the Team panel uses
+// PURE grant-row check (see hasOwnerGrant's note) - the Team panel uses
 // this to show a suspended member's dormant buyer grant.
 export function hasBuyerGrant(communityId, userId) {
   return cache.buyerGrants.some(g => g.communityId === communityId && g.userId === userId);
 }
 
-// The buyer ROLE is only active while the holder is an approved member —
+// The buyer ROLE is only active while the holder is an approved member - 
 // mirrors 0023's can_purchase_for_site, which now also requires
 // is_approved_member. A suspended member's buyer grant is dormant.
 export function isBuyer(communityId, userId) {
   return hasBuyerGrant(communityId, userId) && isApprovedMember(communityId, userId);
 }
 
-// Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
+// Called synchronously from orderLifecycle.js - must stay sync, cache-backed.
 export function getBuyerIds(communityId) {
   return Array.from(new Set(cache.buyerGrants.filter(g => g.communityId === communityId).map(g => g.userId)));
 }
@@ -791,7 +791,7 @@ export async function grantBuyerAccess(communityId, userId, grantedById) {
   notify();
 
   // Best-effort: the grant itself already succeeded and is the thing that
-  // actually matters — a notify failure here is logged, never allowed to
+  // actually matters - a notify failure here is logged, never allowed to
   // make an already-successful grant look like it failed.
   const { error: notifyError } = await supabase.rpc('notify_buyer_access_granted', {
     p_community_id: communityId, p_recipient_id: userId,
@@ -801,7 +801,7 @@ export async function grantBuyerAccess(communityId, userId, grantedById) {
 }
 
 // Phase 8D.1 hardening (0015): the removal and its notification are now one
-// atomic server-side operation (revoke_buyer_access RPC) — the database
+// atomic server-side operation (revoke_buyer_access RPC) - the database
 // itself proves a real grant existed before any notification is created,
 // rather than a client delete followed by a separately-trusted notify call.
 // See 0015_revoke_remove_notification_integrity.sql for the full rationale.
@@ -841,7 +841,7 @@ export async function requestBuyerRole(communityId, userId) {
   return request;
 }
 
-// Approving a buyer request also grants access in one step — grantBuyerAccess
+// Approving a buyer request also grants access in one step - grantBuyerAccess
 // fires its own notification, so the approved path is covered without
 // duplicating it here.
 export async function decideBuyerRequest(requestId, decision, decidedById) {

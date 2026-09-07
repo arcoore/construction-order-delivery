@@ -1,49 +1,49 @@
-// The single entry point for every order state change — Phase 8C rewrite.
+// The single entry point for every order state change - Phase 8C rewrite.
 // Orders, order events, and cancellation requests are now real Supabase
 // tables (RLS-enforced, server-authoritative RPC functions in
 // supabase/migrations/0010_order_lifecycle_functions.sql /
 // 0012_widen_edit_order.sql), replacing store.js and cancellationRequests.js
-// entirely — neither file exists anymore; this module absorbs both.
+// entirely - neither file exists anymore; this module absorbs both.
 //
 // CACHE LIFECYCLE (same contract Phase 8B established for community.js/
-// sites.js — read that pattern first if you haven't):
+// sites.js - read that pattern first if you haven't):
 // Every read export below (getOrders, getOrderEvents, getEventsForCommunity,
 // subscribe, subscribeOrderEvents, the four cancellation-request reads,
-// subscribeCancellationRequests) is SYNCHRONOUS on purpose — owner.js/
+// subscribeCancellationRequests) is SYNCHRONOUS on purpose - owner.js/
 // buyer.js/driver.js/site.js/sitesView.js call them inline inside
 // synchronous render code that isn't being converted to async. They read an
 // in-memory cache (orders/events/cancellationRequests) kept fresh by real
-// Supabase traffic. Every write export is genuinely `async` — call sites in
+// Supabase traffic. Every write export is genuinely `async` - call sites in
 // those five files now `await` them (Phase 8C's whole point was ending the
 // hybrid; unlike Phase 8B, these UI files ARE touched this phase, since
 // several of them synchronously branch on a write's return value in a way
-// that Phase 8B's boolean permission checks never did — see PROGRESS.md's
+// that Phase 8B's boolean permission checks never did - see PROGRESS.md's
 // Phase 8C entry for the full reasoning).
 //
 // NEVER write to localStorage for orders/events/cancellation requests, and
-// never fall back to a local write on a failed Supabase call — the database
+// never fall back to a local write on a failed Supabase call - the database
 // is the only source of truth for this data now. A failed RPC call always
 // resolves { ok: false, error }, never silently succeeds locally.
 //
 // ACTOR IDENTITY: every RPC function derives the acting user from auth.uid()
 // and the acting display name from a server-side profiles lookup
-// (_current_display_name()) — never from a parameter. This module doesn't
+// (_current_display_name()) - never from a parameter. This module doesn't
 // accept or send actorId/actorName to any RPC.
 //
 // NOTIFICATIONS (Phase 8D.1): every order-lifecycle notification is now
 // written server-side, inside the same RPC/transaction as the state change
-// itself and the order_events insert — see
+// itself and the order_events insert - see
 // supabase/migrations/0014_notifications_backend.sql. This module no longer
 // imports or calls notifications.js at all; there is nothing left for it to
 // do here once the RPC call above has resolved.
 //
-// PRICING TRUST BOUNDARY: unit_price is still client-supplied — there is no
+// PRICING TRUST BOUNDARY: unit_price is still client-supplied - there is no
 // server-side product/stockist catalogue (public/js/data.js is a static
 // frontend file with no Postgres table backing it), so the server cannot
 // independently verify a unit_price is the real supplier price. What IS
 // server-enforced: unit_price must be non-negative (a real check constraint,
 // migrations/0012), and total_price is ALWAYS server-computed as
-// unit_price * quantity — this module never sends a total_price to any RPC,
+// unit_price * quantity - this module never sends a total_price to any RPC,
 // and nothing in this file trusts totalPrice for anything numeric.
 import { supabase } from './supabaseClient.js';
 import { getCurrentUserId } from './identity.js';
@@ -51,7 +51,7 @@ import { subscribeAuth } from './auth.js';
 import { refreshCommunityCache } from './community.js';
 import { refreshSitesCache } from './sites.js';
 
-export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000; // documented server-side too (0010's revert_approval) — kept exported since nothing currently reads it, but harmless to preserve for any future UI countdown display.
+export const REVERT_WINDOW_MS = 72 * 60 * 60 * 1000; // documented server-side too (0010's revert_approval) - kept exported since nothing currently reads it, but harmless to preserve for any future UI countdown display.
 
 // --- Cache -----------------------------------------------------------
 let cache = { orders: [], events: [], cancellationRequests: [] };
@@ -60,7 +60,7 @@ export let orderCacheReady = false;
 // Multi-item (migration 0030). Every order now has an `items` array of
 // { productId, productName, variant, quantity, unit, unitPrice, lineTotal }.
 // order.totalPrice stays the authoritative sum; order.productName/variant
-// are a headline for the first item. Drivers must still never see prices —
+// are a headline for the first item. Drivers must still never see prices - 
 // that's enforced where driver.js renders items, not here.
 function mapOrderItemRow(r) {
   return {
@@ -73,7 +73,7 @@ function mapOrderItemRow(r) {
     unitPrice: r.unit_price,
     lineTotal: r.line_total,
     sortOrder: r.sort_order,
-    // Partial fulfilment (migration 0036) — set by the driver on delivery.
+    // Partial fulfilment (migration 0036) - set by the driver on delivery.
     deliveredShort: r.delivered_short,
     shortfallNote: r.shortfall_note,
   };
@@ -93,14 +93,14 @@ function mapOrderRow(r) {
     siteAddress: r.site_address,
     sitePostcode: r.site_postcode,
     siteDeliveryInstructions: r.site_delivery_instructions,
-    // Point-in-time site contact snapshot (migration 0031) — for the driver
+    // Point-in-time site contact snapshot (migration 0031) - for the driver
     // collecting/delivering; never re-read live from the site record.
     siteContactName: r.site_contact_name,
     siteContactPhone: r.site_contact_phone,
     siteAccessNotes: r.site_access_notes,
     // Multi-item (migration 0030): productName/variant are now the
     // denormalised HEADLINE (first item, plus " + N more"). The real line
-    // items live in `items` (attached separately — see attachItems). unit,
+    // items live in `items` (attached separately - see attachItems). unit,
     // quantity, unitPrice per-item are only on items[] now, never the order.
     productName: r.product_name,
     variant: r.variant,
@@ -153,16 +153,16 @@ function mapOrderRow(r) {
     orderCancelledBy: r.order_cancelled_by,
     orderCancelledAt: r.order_cancelled_at ? new Date(r.order_cancelled_at).getTime() : null,
     orderCancellationReason: r.order_cancellation_reason,
-    // Roadmap Step 2 — 'asap' | 'deadline' | null (null = not specified,
+    // Roadmap Step 2 - 'asap' | 'deadline' | null (null = not specified,
     // historical orders only). neededBy stays null for 'asap' (never
-    // now()) and for null — see deadline.js's header and migration 0019's
+    // now()) and for null - see deadline.js's header and migration 0019's
     // orders_needed_by_valid_state constraint for the full semantics.
     neededByType: r.needed_by_type,
     neededBy: r.needed_by ? new Date(r.needed_by).getTime() : null,
-    // Product-audit gap fix: 'driver' (default — SiteStock's own driver pool
+    // Product-audit gap fix: 'driver' (default - SiteStock's own driver pool
     // collects and delivers, unchanged) or 'direct_supplier' (the merchant
-    // delivers straight to site — no claim/collect leg at all, see
-    // confirmDirectDelivery below). Set once at creation, never editable —
+    // delivers straight to site - no claim/collect leg at all, see
+    // confirmDirectDelivery below). Set once at creation, never editable - 
     // not in EDITABLE_ORDER_FIELDS, same "lock it at creation" precedent
     // this module already applies to other structural fields.
     deliveryMethod: r.delivery_method,
@@ -207,7 +207,7 @@ function mapCancellationRequestRow(r) {
 // --- Pub-sub -----------------------------------------------------------
 // Declared before refreshOrderCache/the subscribeAuth wiring below, since
 // subscribeAuth calls its callback synchronously and immediately on
-// subscribe — refreshOrderCache's early-return branch calls notifyOrders()
+// subscribe - refreshOrderCache's early-return branch calls notifyOrders()
 // etc. right away, which would be a temporal-dead-zone error if these were
 // declared any later in the file.
 
@@ -241,7 +241,7 @@ export function subscribeCancellationRequests(fn) {
   return () => cancellationRequestListeners.delete(fn);
 }
 
-// Full refetch of all three tables this module owns — same pattern as
+// Full refetch of all three tables this module owns - same pattern as
 // community.js's refreshCommunityCache. Called reactively on every auth
 // transition, explicitly in main.js's bootstrap, and via main.js's existing
 // refreshDataCaches() on view entry / window focus.
@@ -259,7 +259,7 @@ export async function refreshOrderCache() {
     supabase.from('orders').select('*'),
     supabase.from('order_events').select('*'),
     supabase.from('cancellation_requests').select('*'),
-    // Multi-item (migration 0030) — order_items is not in the realtime
+    // Multi-item (migration 0030) - order_items is not in the realtime
     // publication (like order_events), it rides the `orders` change signal.
     supabase.from('order_items').select('*'),
   ]);
@@ -320,7 +320,7 @@ function getOrder(orderId) {
 
 function upsertOrder(order) {
   const idx = cache.orders.findIndex(o => o.id === order.id);
-  // An RPC-returned `orders` row carries no line items — carry the ones we
+  // An RPC-returned `orders` row carries no line items - carry the ones we
   // already have forward so a UI render between the write and the next full
   // refreshOrderCache never sees `order.items === undefined`. createOrder /
   // editOrder explicitly refetch items (they're the only writes that change
@@ -353,10 +353,10 @@ function upsertCancellationRequest(request) {
   return request;
 }
 
-// Re-fetches a single order/request from Supabase and merges it into cache —
+// Re-fetches a single order/request from Supabase and merges it into cache - 
 // used after a stale/race/permission failure so the UI reflects reality
 // instead of continuing to show a cached state the server just proved
-// wrong. A missing row (RLS no longer returns it — access was revoked) is
+// wrong. A missing row (RLS no longer returns it - access was revoked) is
 // removed from the cache rather than left stale.
 async function refreshOneOrder(orderId) {
   const { data } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
@@ -380,12 +380,12 @@ async function refreshOneCancellationRequest(requestId) {
 
 // Every write function funnels its failure through here. errcodes 40001
 // (stale/lost-a-race), 42704 (not found), and 42501 (permission refused)
-// all mean "the cached state the UI was showing is no longer current" —
+// all mean "the cached state the UI was showing is no longer current" - 
 // refresh the specific row so the UI can re-render off reality, per the
 // approved Phase 8C stale-refresh rule. 42501 additionally refreshes the
 // Phase 8B community/site caches, since a permission refusal here can mean
 // a grant was revoked mid-session, not just an order race. 23514/22023
-// (validation) are pure input problems — no cache is stale, no refresh.
+// (validation) are pure input problems - no cache is stale, no refresh.
 async function handleRpcFailure(error, { orderId, requestId } = {}) {
   const code = error.code;
   if (code === '40001' || code === '42704' || code === '42501') {
@@ -408,7 +408,7 @@ async function handleRpcFailure(error, { orderId, requestId } = {}) {
 // stockistId, stockistName, stockistWebsite, stockistPostcode,
 // pickupEstimate, neededByType, neededBy, deliveryMethod }. Approval-required
 // and site authorization are both derived server-side. total_price is the
-// server-computed sum of every item — never sent from here.
+// server-computed sum of every item - never sent from here.
 function itemsPayload(items) {
   return (items || []).map(it => ({
     productId: it.productId,
@@ -435,7 +435,7 @@ export async function createOrder(fields) {
     p_pickup_estimate: fields.pickupEstimate ?? null,
     p_needed_by_type: fields.neededByType ?? null,
     p_needed_by: fields.neededBy != null ? new Date(fields.neededBy).toISOString() : null,
-    // 'driver' (default) or 'direct_supplier' — see mapOrderRow's comment.
+    // 'driver' (default) or 'direct_supplier' - see mapOrderRow's comment.
     // Set once here, never accepted by editOrder.
     p_delivery_method: fields.deliveryMethod ?? 'driver',
   });
@@ -451,7 +451,7 @@ export async function createOrder(fields) {
 
   // The order_awaiting_approval / order_ready_for_purchase notification is
   // written server-side by create_order itself (see
-  // supabase/migrations/0014_notifications_backend.sql) — nothing to do here.
+  // supabase/migrations/0014_notifications_backend.sql) - nothing to do here.
   return { ok: true, order };
 }
 
@@ -459,7 +459,7 @@ export async function createOrder(fields) {
 
 // fields: same shape as createOrder's minus communityId, plus siteId if it's
 // changing. p_expected_version is read from the current cache automatically
-// — callers don't need to track it themselves, matching the original
+// - callers don't need to track it themselves, matching the original
 // signature's simplicity from the caller's point of view.
 export async function editOrder(orderId, fields) {
   const current = getOrder(orderId);
@@ -478,7 +478,7 @@ export async function editOrder(orderId, fields) {
     p_stockist_website: fields.stockistWebsite ?? null,
     p_stockist_postcode: fields.stockistPostcode ?? null,
     p_pickup_estimate: fields.pickupEstimate ?? null,
-    // Roadmap Step 2 — same shape as createOrder above. edit_order only
+    // Roadmap Step 2 - same shape as createOrder above. edit_order only
     // re-validates "in the future" when this is actually changing from the
     // order's current stored value, so resubmitting the existing (possibly
     // now-past) deadline unchanged never blocks an otherwise-unrelated edit.
@@ -494,7 +494,7 @@ export async function editOrder(orderId, fields) {
 
   // The forced-reapproval order_awaiting_approval notification (when this
   // edit reset an already-approved order) is written server-side by
-  // edit_order itself — see supabase/migrations/0014_notifications_backend.sql.
+  // edit_order itself - see supabase/migrations/0014_notifications_backend.sql.
   return { ok: true, order };
 }
 
@@ -586,7 +586,7 @@ export async function decideCancellationRequest(requestId, decision, decisionRea
   });
   if (error) return handleRpcFailure(error, { requestId });
 
-  // Not an exception — decide_cancellation_request returns a jsonb result
+  // Not an exception - decide_cancellation_request returns a jsonb result
   // even on the deterministic "collected before decision" auto-close, per
   // its own documented design (kept exactly as-is, per the approved Phase
   // 8C decision not to change this RPC's response shape). Refetch both
@@ -601,14 +601,14 @@ export async function decideCancellationRequest(requestId, decision, decisionRea
 
   if (!result.ok) {
     // Deterministic auto-close (order was collected before the decision
-    // landed) — surfaced to the Buyer as a real, specific refusal, never
+    // landed) - surfaced to the Buyer as a real, specific refusal, never
     // faked as success.
     return { ok: false, error: 'This order has already been collected and can no longer be cancelled.' };
   }
 
   // The cancellation_rejected / cancellation_approved notification (to the
   // requester) is written server-side by decide_cancellation_request itself
-  // — never on the auto-close branch above, matching the pre-existing
+  // - never on the auto-close branch above, matching the pre-existing
   // behavior exactly (only a real decision notifies, not the deterministic
   // "collected before decision" close-out).
   return { ok: true, request, order };
@@ -655,7 +655,7 @@ export async function deliverOrder(orderId, deliveryTime, deliveryLocation, shor
   return { ok: true, order };
 }
 
-// The direct-supplier-delivery counterpart to deliverOrder — only legal on
+// The direct-supplier-delivery counterpart to deliverOrder - only legal on
 // an order whose deliveryMethod is 'direct_supplier', only callable by the
 // buyer who purchased it (confirm_direct_delivery re-checks both server-
 // side), and moves purchased -> delivered directly with no claim/collect

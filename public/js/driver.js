@@ -39,10 +39,10 @@ locateBtn.addEventListener('click', async () => {
   locationStatus.className = 'location-status';
   try {
     driverPos = await getCurrentPosition();
-    locationStatus.textContent = `Location set (±GPS) — ${driverPos.lat.toFixed(3)}, ${driverPos.lon.toFixed(3)}`;
+    locationStatus.textContent = `Location set (±GPS) - ${driverPos.lat.toFixed(3)}, ${driverPos.lon.toFixed(3)}`;
     locationStatus.className = 'location-status ok';
   } catch {
-    locationStatus.textContent = 'Location unavailable — enter your postcode instead:';
+    locationStatus.textContent = 'Location unavailable - enter your postcode instead:';
     locationStatus.className = 'location-status error';
     promptManualPostcode();
     return;
@@ -86,12 +86,12 @@ tabsEl.addEventListener('click', e => {
   render();
 });
 
-// Phase B hardening — real numeric coordinates only. A resolved branch can
+// Phase B hardening - real numeric coordinates only. A resolved branch can
 // still have null lat/lon (never required by Phase A/B), and since 0018 a
-// branch can legitimately fail to resolve at all (getBranch returns null —
+// branch can legitimately fail to resolve at all (getBranch returns null - 
 // its supplier or the branch itself went inactive after an in-flight
 // order's stockistId was snapshotted). Never coerce a missing coordinate
-// into 0,0 (JS's `null - lat` silently does exactly that) — return null,
+// into 0,0 (JS's `null - lat` silently does exactly that) - return null,
 // never Infinity/NaN, whenever either point isn't a real coordinate.
 function safeDistanceKm(a, b) {
   if (!a || !b || !Number.isFinite(a.lat) || !Number.isFinite(a.lon) || !Number.isFinite(b.lat) || !Number.isFinite(b.lon)) {
@@ -100,7 +100,7 @@ function safeDistanceKm(a, b) {
   return distanceKm(a, b);
 }
 
-// Defensive fallback only — every order should already carry the stockistId
+// Defensive fallback only - every order should already carry the stockistId
 // the worker chose at creation. Kept in case that's ever missing.
 function nearestBranchFor(order, from) {
   const product = getProduct(order.items && order.items[0] ? order.items[0].productId : null);
@@ -123,7 +123,7 @@ function nearestBranchFor(order, from) {
   return best ? { branch: best, distanceKm: from ? bestDist : null } : null;
 }
 
-// Phase B hardening — order.stockistId can now legitimately fail to
+// Phase B hardening - order.stockistId can now legitimately fail to
 // resolve (see safeDistanceKm's comment above); this never crashes and
 // never invents a distance. Calls getBranch exactly once (the old code
 // called it twice per order, redundantly).
@@ -152,7 +152,7 @@ function render() {
   let filtered;
   let completedRemaining = 0;
   if (activeTab === 'available') {
-    // direct_supplier orders never enter the driver pool at all — the
+    // direct_supplier orders never enter the driver pool at all - the
     // merchant delivers straight to site, so there is no leg for a driver
     // to claim (confirm_direct_delivery is the buyer's own action instead;
     // claim_delivery itself also refuses this server-side, this is just the
@@ -177,7 +177,7 @@ function render() {
 
   const withDistance = filtered.map(o => ({ order: o, pickup: resolvePickup(o, driverPos) }));
 
-  // Roadmap Step 4, Section 11 override — distance stays the PRIMARY sort
+  // Roadmap Step 4, Section 11 override - distance stays the PRIMARY sort
   // whenever a real pickup distance is available (the one trusted, honest
   // ranking signal this app has always had here); urgency is only ever a
   // secondary tie-break in that case, so a distant ASAP order never jumps
@@ -224,7 +224,7 @@ function render() {
   const deliveryLocationInput = listEl.querySelector('#delivery-location-input');
   if (deliveryLocationInput) deliveryLocationInput.focus();
 
-  // Partial fulfilment — a ticked "short" checkbox reveals its note field.
+  // Partial fulfilment - a ticked "short" checkbox reveals its note field.
   listEl.querySelectorAll('.shortfall-check').forEach(cb => {
     cb.addEventListener('change', () => {
       const note = listEl.querySelector(`.shortfall-note[data-note-for="${cb.dataset.itemId}"]`);
@@ -254,7 +254,7 @@ function render() {
   });
 }
 
-// A plain Google Maps "search" link — opens in the browser or hands off to
+// A plain Google Maps "search" link - opens in the browser or hands off to
 // the Maps app on a phone. No API key, no embed, no tracking beyond the
 // query itself. Only rendered when there's a real postcode/address to point
 // at, never a broken link.
@@ -270,15 +270,15 @@ function renderOrderCard(order, pickup) {
   const deliveryDist = branch
     ? safeDistanceKm(branch, { lat: order.deliveryLat, lon: order.deliveryLon })
     : null;
-  // Phase B hardening — when the live branch can't be resolved (deactivated
+  // Phase B hardening - when the live branch can't be resolved (deactivated
   // since this order's stockistId was snapshotted), fall back to the
-  // order's own point-in-time snapshot fields rather than showing nothing —
+  // order's own point-in-time snapshot fields rather than showing nothing - 
   // historical/in-flight order display must never depend on a live supplier
   // row. Pickup distance has no snapshot substitute, so it's simply omitted
   // (Number.isFinite below), matching how this card already silently omits
-  // it when the Driver hasn't set a location — never "Infinity"/"NaN".
+  // it when the Driver hasn't set a location - never "Infinity"/"NaN".
   const buyFromName = branch ? branch.name : (order.stockistName || 'Unknown');
-  // Plain text (escaped by the caller before it hits innerHTML) — a real
+  // Plain text (escaped by the caller before it hits innerHTML) - a real
   // middle-dot, not a &middot; entity, so escaping doesn't mangle it.
   const buyFromSub = branch
     ? `${branch.website} · ${branch.postcode}`
@@ -365,14 +365,14 @@ function renderOrderCard(order, pickup) {
           ${Number.isFinite(dist) ? `<span class="route-dist">${dist.toFixed(1)} km from you</span>` : ''}
           ${mapsLink(branch ? branch.postcode : order.stockistPostcode, 'Open pickup in Maps')}
         </div>
-        <div class="route-arrow">&rarr;</div>
+        <div class="route-arrow">to</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
           <span class="route-value">${escapeHtml(order.siteName || order.deliveryPostcode)}</span>
           ${order.siteName ? `<span class="route-sub">${escapeHtml([order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode)}</span>` : ''}
-          ${order.siteDeliveryInstructions ? `<span class="route-sub">📋 ${escapeHtml(order.siteDeliveryInstructions)}</span>` : ''}
-          ${order.siteAccessNotes ? `<span class="route-sub">🔑 ${escapeHtml(order.siteAccessNotes)}</span>` : ''}
-          ${order.siteContactName || order.siteContactPhone ? `<span class="route-sub">📞 ${escapeHtml(order.siteContactName || '')}${order.siteContactName && order.siteContactPhone ? ' · ' : ''}${order.siteContactPhone ? `<a href="tel:${escapeHtml(order.siteContactPhone.replace(/[^\d+]/g, ''))}">${escapeHtml(order.siteContactPhone)}</a>` : ''}</span>` : ''}
+          ${order.siteDeliveryInstructions ? `<span class="route-sub"><b>Instructions:</b> ${escapeHtml(order.siteDeliveryInstructions)}</span>` : ''}
+          ${order.siteAccessNotes ? `<span class="route-sub"><b>Access:</b> ${escapeHtml(order.siteAccessNotes)}</span>` : ''}
+          ${order.siteContactName || order.siteContactPhone ? `<span class="route-sub"><b>Contact:</b> ${escapeHtml(order.siteContactName || '')}${order.siteContactName && order.siteContactPhone ? ' · ' : ''}${order.siteContactPhone ? `<a href="tel:${escapeHtml(order.siteContactPhone.replace(/[^\d+]/g, ''))}">${escapeHtml(order.siteContactPhone)}</a>` : ''}</span>` : ''}
           ${Number.isFinite(deliveryDist) ? `<span class="route-dist">${deliveryDist.toFixed(1)} km from pickup</span>` : ''}
           ${mapsLink([order.siteAddress, order.sitePostcode].filter(Boolean).join(', ') || order.deliveryPostcode, 'Open delivery in Maps')}
         </div>

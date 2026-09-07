@@ -1,10 +1,10 @@
 // The ONLY place the Supabase client is instantiated. Every other module
-// that needs Supabase imports `supabase` from here — never creates its own
+// that needs Supabase imports `supabase` from here - never creates its own
 // client, never imports the SDK directly. Keeps the boundary from CLAUDE.md's
 // Phase 8B plan real: UI -> data/domain modules -> this client, nothing else
 // talks to Supabase directly.
 //
-// No bundler/npm in this project (see CLAUDE.md) — the Supabase JS SDK is
+// No bundler/npm in this project (see CLAUDE.md) - the Supabase JS SDK is
 // loaded as a plain ES module straight from esm.sh, which is the SDK's own
 // documented buildless usage path, not a workaround. It's the same category
 // of runtime network dependency this app already has for geo.js's
@@ -14,25 +14,25 @@
 // served from cache and can't be swapped for different code on a later
 // load, which matters because this module runs on the login screen. Bump
 // it deliberately, and re-test auth + realtime, rather than floating it.
-// (A fuller fix — vendoring the SDK into /js/vendor/ so there's no
-// esm.sh request at all — is noted in the compliance review as a
+// (A fuller fix - vendoring the SDK into /js/vendor/ so there's no
+// esm.sh request at all - is noted in the compliance review as a
 // follow-up; it needs the whole dependency tree fetched and re-tested.)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.115.0';
 
 // Local Supabase dev stack values (from `supabase status`), used until a real
-// cloud project exists — see supabase/README.md. The anon/public key is safe
+// cloud project exists - see supabase/README.md. The anon/public key is safe
 // to embed in frontend code (Supabase's own security model: RLS is the real
-// boundary, not key secrecy) — this is also literally the fixed, publicly
+// boundary, not key secrecy) - this is also literally the fixed, publicly
 // documented default anon key every local Supabase CLI stack uses, not a
 // secret specific to this machine.
 //
-// Production values are NOT here yet — no cloud project exists (Phase 8B is
+// Production values are NOT here yet - no cloud project exists (Phase 8B is
 // local-only, per explicit direction). When one does, replace these two
 // constants; there's no build step to inject an env var through, so an
 // explicit, obvious constant swap in this one file is the intended
 // mechanism, checked via window.SITESTOCK_SUPABASE_* first so a future
 // deploy-time script tag can override without editing this file.
-// Set by env.js (loaded before this module — see index.html) when the
+// Set by env.js (loaded before this module - see index.html) when the
 // current hostname doesn't match a known environment. Fails closed rather
 // than silently defaulting to local Supabase or guessing a backend.
 if (window.SITESTOCK_SUPABASE_CONFIG_ERROR) {
@@ -45,7 +45,7 @@ const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
 
 // detectSessionInUrl is true (Roadmap Step 5) so a Supabase password-recovery
 // link's URL fragment is picked up automatically and fires a real
-// PASSWORD_RECOVERY auth event (see auth.js) — this app has no other
+// PASSWORD_RECOVERY auth event (see auth.js) - this app has no other
 // URL-fragment/hash usage anywhere to conflict with it. The one other
 // URL-carried signal this phase adds, the invite-link `?join=` query
 // parameter, deliberately uses the query string rather than the fragment for

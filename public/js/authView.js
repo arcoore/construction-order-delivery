@@ -1,5 +1,5 @@
 // Phase 8B: real Supabase accounts, email + password. "Skip for now" has
-// been removed entirely — see auth.js's header for why. Every submit is now
+// been removed entirely - see auth.js's header for why. Every submit is now
 // a real network call, so both forms disable their submit button for the
 // duration (prevents a double-submit firing two signUp/signIn calls before
 // the first one resolves) and show a simple loading/error/success status,
@@ -44,9 +44,6 @@ let selectedRegisterRole = null;
 let pendingConfirmEmail = null;
 
 // --- Show/hide toggle on every password field in the auth view -----------
-const EYE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-const EYE_OFF_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m1 1 22 22"/></svg>';
-
 authView.querySelectorAll('input[type="password"]').forEach(input => {
   if (input.closest('.pw-field')) return;
   const wrap = document.createElement('div');
@@ -58,18 +55,18 @@ authView.querySelectorAll('input[type="password"]').forEach(input => {
   btn.className = 'pw-toggle';
   btn.setAttribute('aria-label', 'Show password');
   btn.setAttribute('aria-pressed', 'false');
-  btn.innerHTML = EYE_SVG;
+  btn.textContent = 'Show';
   btn.addEventListener('click', () => {
     const reveal = input.type === 'password';
     input.type = reveal ? 'text' : 'password';
-    btn.innerHTML = reveal ? EYE_OFF_SVG : EYE_SVG;
+    btn.textContent = reveal ? 'Hide' : 'Show';
     btn.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
     btn.setAttribute('aria-pressed', String(reveal));
   });
   wrap.appendChild(btn);
 });
 
-// "Create account" stays disabled until the Terms/Privacy box is ticked —
+// "Create account" stays disabled until the Terms/Privacy box is ticked - 
 // index.html ships the button disabled, this keeps it in sync. The submit
 // handler still re-checks (defence in depth), but the button is the real
 // gate the user sees.
@@ -89,9 +86,9 @@ registerRoleGroup.addEventListener('click', e => {
   });
 });
 
-// Roadmap Step 5 — which of the four auth-view forms is visible. The two
+// Roadmap Step 5 - which of the four auth-view forms is visible. The two
 // password-recovery forms replace the login/register tabs entirely while
-// active (tabs hidden) rather than becoming a fifth tab — a recovery link
+// active (tabs hidden) rather than becoming a fifth tab - a recovery link
 // is a one-shot flow the user didn't choose to navigate to, not a normal
 // tab a person would click into.
 function showAuthForm(which) {
@@ -102,14 +99,14 @@ function showAuthForm(which) {
   mfaChallengeForm.hidden = which !== 'mfa-challenge';
   checkEmailPanel.hidden = which !== 'check-email';
   // The login/register tabs and the "Log in to SiteStock" intro only make
-  // sense on those two forms — the rest are one-shot flows with their own
+  // sense on those two forms - the rest are one-shot flows with their own
   // heading (password recovery, 2FA, confirm-your-email).
   authTabs.hidden = which !== 'login' && which !== 'register';
   authIntro.hidden = authTabs.hidden;
 }
 
 // A pending 2FA challenge (from login() or a mid-challenge page refresh)
-// replaces the login/register tabs with the code form — same "one-shot flow
+// replaces the login/register tabs with the code form - same "one-shot flow
 // the user didn't navigate to" treatment as the password-recovery forms.
 subscribeAuth(() => {
   if (isMfaChallengePending()) {
@@ -227,7 +224,7 @@ resetRequestForm.addEventListener('submit', async e => {
   try {
     const result = await requestPasswordReset(email);
     // Always the same message regardless of `result` beyond a genuine
-    // network/API-call failure — requestPasswordReset() itself never
+    // network/API-call failure - requestPasswordReset() itself never
     // reveals whether the email is actually registered, and this UI must
     // not undermine that by branching copy on anything else.
     if (result.error) {
@@ -261,7 +258,7 @@ setNewPasswordForm.addEventListener('submit', async e => {
       return;
     }
     setStatus(newPasswordStatus, 'Your password has been updated.', 'success');
-    // completePasswordReset() already cleared the recovery gate — this is
+    // completePasswordReset() already cleared the recovery gate - this is
     // the same "I'm now properly authenticated, proceed" signal login/
     // register already dispatch, so main.js's existing routing takes over
     // exactly as it would after any other successful login.
@@ -275,7 +272,7 @@ setNewPasswordForm.addEventListener('submit', async e => {
 
 // Whenever auth state changes (including the very first check on page
 // load), force the set-new-password form into view if we're in a genuine
-// recovery context — this is what actually shows the right form when a
+// recovery context - this is what actually shows the right form when a
 // recovery link is opened, independent of whatever tab was last active.
 // main.js's own routeFromTop() is the thing that keeps the user ON the auth
 // view at all while this is true (see auth.js's inPasswordRecoveryContext).
@@ -317,7 +314,7 @@ registerForm.addEventListener('submit', async e => {
       return;
     }
     if (result.needsConfirmation) {
-      // Email confirmation is on — no session yet. Show the dedicated
+      // Email confirmation is on - no session yet. Show the dedicated
       // "confirm your email" screen (clearer than a one-line message on the
       // login form) rather than bouncing to login.
       pendingConfirmEmail = result.email;

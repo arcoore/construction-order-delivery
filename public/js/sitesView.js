@@ -32,7 +32,7 @@ let selectedSiteId = null;
 let editingSite = false;
 let latestOrders = [];
 // Bulk-assign checkbox selection state, reset whenever the detail view is
-// (re-)entered for a site — see showDetail below.
+// (re-)entered for a site - see showDetail below.
 let bulkSelectedMemberIds = new Set();
 
 function currentActorId() {
@@ -132,7 +132,7 @@ function renderList() {
 
   if (sites.length === 0) {
     const emptyMsg = {
-      active: 'No sites yet — create one above.',
+      active: 'No sites yet - create one above.',
       paused: 'No paused sites.',
       completed: 'No completed sites.',
       archived: 'No archived sites.',
@@ -162,9 +162,9 @@ const STATUS_LABELS = {
   rejected: 'Rejected by owner',
   pending_purchase: 'Waiting for a buyer to purchase',
   purchase_in_progress: 'Buyer confirming purchase…',
-  purchased: 'Purchased — waiting for a driver',
+  purchased: 'Purchased - waiting for a driver',
   claimed: 'Driver assigned',
-  collected: 'Collected — in transit',
+  collected: 'Collected - in transit',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
 };
@@ -194,7 +194,7 @@ function siteStatusButtons(site) {
 }
 
 // Client-side mirror of the SQL _site_committed_spend helper (migration
-// 0033) — current calendar month, orders that still count (not
+// 0033) - current calendar month, orders that still count (not
 // rejected/cancelled). Display only; the real enforcement is the DB trigger.
 function siteMonthSpend(siteId) {
   const now = new Date();
@@ -244,20 +244,20 @@ function renderSiteInfo(site) {
   return `
     <div class="profile-field">
       <span class="profile-label">Address</span>
-      <span class="profile-value">${escapeHtml(site.address || "—")}</span>
+      <span class="profile-value">${escapeHtml(site.address || " - ")}</span>
     </div>
     <div class="profile-field">
       <span class="profile-label">Postcode</span>
-      <span class="profile-value">${escapeHtml(site.postcode || "—")}</span>
+      <span class="profile-value">${escapeHtml(site.postcode || " - ")}</span>
     </div>
     <div class="profile-field">
       <span class="profile-label">Delivery instructions</span>
-      <span class="profile-value">${escapeHtml(site.deliveryInstructions || "—")}</span>
+      <span class="profile-value">${escapeHtml(site.deliveryInstructions || " - ")}</span>
     </div>
     ${(site.projectStartDate || site.projectEndDate) ? `
     <div class="profile-field">
       <span class="profile-label">Project dates</span>
-      <span class="profile-value">${site.projectStartDate || 'Not set'} &ndash; ${site.projectEndDate || 'ongoing'}</span>
+      <span class="profile-value">${site.projectStartDate || 'Not set'} - ${site.projectEndDate || 'ongoing'}</span>
     </div>` : ''}
     ${site.siteContactName || site.siteContactPhone ? `
     <div class="profile-field">
@@ -272,18 +272,18 @@ function renderSiteInfo(site) {
     ${site.monthlyBudget != null ? `
     <div class="profile-field">
       <span class="profile-label">Monthly budget</span>
-      <span class="profile-value">${formatPrice(siteMonthSpend(site.id))} of ${formatPrice(site.monthlyBudget)} committed this month${siteMonthSpend(site.id) >= site.monthlyBudget ? ' — at limit' : ''}</span>
+      <span class="profile-value">${formatPrice(siteMonthSpend(site.id))} of ${formatPrice(site.monthlyBudget)} committed this month${siteMonthSpend(site.id) >= site.monthlyBudget ? ' - at limit' : ''}</span>
     </div>` : ''}
     <div class="profile-field">
       <span class="profile-label">Status</span>
-      <span class="profile-value">${SITE_STATUS_LABEL[site.status] || site.status}${site.status === 'archived' && site.archivedAt ? ` — ${timeAgo(site.archivedAt)} by ${site.archivedById ? escapeHtml(resolveDisplayName(site.archivedById)) : "the owner"}` : ''}</span>
+      <span class="profile-value">${SITE_STATUS_LABEL[site.status] || site.status}${site.status === 'archived' && site.archivedAt ? ` - ${timeAgo(site.archivedAt)} by ${site.archivedById ? escapeHtml(resolveDisplayName(site.archivedById)) : "the owner"}` : ''}</span>
     </div>
     <div class="owner-actions">
       <button class="btn btn-secondary" id="site-edit-btn">Edit</button>
       ${siteStatusButtons(site)}
     </div>
     ${latestOrders.some(o => o.siteId === site.id) ? '' : `
-      <p class="hint small-hint">This site has no orders — it can be deleted permanently instead of archived.</p>
+      <p class="hint small-hint">This site has no orders - it can be deleted permanently instead of archived.</p>
       <button type="button" class="link-btn link-btn-danger" id="site-delete-btn">Delete this site permanently</button>`}
   `;
 }
@@ -493,7 +493,7 @@ function wireDetailActions(site) {
 
 // Phase 8E: an optional siteId (from the owner dashboard's Sites summary,
 // see main.js's sitestock:show-sites handler) opens straight into that
-// site's existing detail view instead of the default list — same
+// site's existing detail view instead of the default list - same
 // deep-link-on-entry pattern owner.js/buyer.js already use for orders. A
 // stale/foreign id (getSite returns nothing, or it belongs to a different
 // community) just falls through to the normal list, never a broken screen.

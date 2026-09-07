@@ -32,12 +32,12 @@ import { startRealtimeForSession, stopRealtime } from './realtime.js';
 
 // Phase 8B/8C: identity/company/site/order data is now Supabase-backed and
 // shared across devices, but there's no Realtime subscription yet
-// (deliberately deferred — see CLAUDE.md) — freshness comes from explicit
+// (deliberately deferred - see CLAUDE.md) - freshness comes from explicit
 // refetch-on-write (community.js/sites.js/orderLifecycle.js's own writers),
 // refetch-on-view-entry (this helper, called from the routing functions
 // below that actually render community/site/order-dependent content), and
 // refetch-on-window-focus (wired at the bottom of this file). None of this
-// is the security boundary — RLS/the RPC functions are — so a failed/slow
+// is the security boundary - RLS/the RPC functions are - so a failed/slow
 // refresh here degrades to "briefly stale UI," never to a false permission
 // grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
@@ -103,45 +103,20 @@ const prefDeliveryCollected = document.getElementById('pref-delivery-collected')
 const notifPrefsSaveBtn = document.getElementById('notif-prefs-save-btn');
 const notifPrefsCancelBtn = document.getElementById('notif-prefs-cancel-btn');
 
-const NOTIF_ICONS = {
-  order_awaiting_approval: '📝',
-  order_rejected: '🚫',
-  approval_reverted: '↩️',
-  order_ready_for_purchase: '💳',
-  delivery_available: '🚚',
-  delivery_claimed: '🚚',
-  delivery_cancelled: '⚠️',
-  delivery_collected: '📦',
-  order_delivered: '🏁',
-  buyer_access_requested: '🛒',
-  buyer_access_granted: '✅',
-  buyer_access_rejected: '🚫',
-  buyer_access_revoked: '⛔',
-  site_member_added: '📍',
-  site_member_removed: '➖',
-  site_archived: '🗄️',
-  membership_approved: '✅',
-  membership_declined: '🚫',
-  membership_suspended: '⏸️',
-  membership_restored: '▶️',
-  membership_removed: '⛔',
-  member_left: '👋',
-};
-
 const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
 
 const ROLE_META = {
-  owner: { icon: '👑', label: 'Owner', desc: 'Approve worker requests and company join requests' },
-  worker: { icon: '🧑‍🔧', label: 'Worker', desc: 'Search for materials and place order requests' },
-  driver: { icon: '🚚', label: 'Driver', desc: 'Pick up approved orders and deliver them' },
-  buyer: { icon: '🛒', label: 'Buyer', desc: 'Purchase approved orders and confirm the purchase' },
+  owner: { label: 'Owner', desc: 'Approve worker requests and company join requests' },
+  worker: { label: 'Worker', desc: 'Search for materials and place order requests' },
+  driver: { label: 'Driver', desc: 'Pick up approved orders and deliver them' },
+  buyer: { label: 'Buyer', desc: 'Purchase approved orders and confirm the purchase' },
 };
 
 function showOnly(view) {
   ALL_VIEWS.forEach(v => v.classList.toggle('active', v === view));
 }
 
-// True whenever the current user actually owns the active community — a
+// True whenever the current user actually owns the active community - a
 // real permission check (isOwner), not "which role view happens to be on
 // screen right now". This is what lets the Sites pill follow the owner
 // around to Profile/Communities/Role-Select instead of only appearing on
@@ -183,8 +158,8 @@ async function showCommunitiesView() {
   communityIndicator.textContent = 'Orders & Deliveries';
   updateTopRightPills();
   await refreshDataCaches();
-  // Roadmap Step 5 — the one deliberate place a held invite-link code is
-  // actually consumed (read + cleared) — see communityView.js's
+  // Roadmap Step 5 - the one deliberate place a held invite-link code is
+  // actually consumed (read + cleared) - see communityView.js's
   // applyPendingJoinIntent header for why this must NOT be wired into that
   // view's own reactive render() instead.
   applyPendingJoinIntent();
@@ -217,7 +192,7 @@ async function showProfile() {
     buyerStatus: buyerRequestStatus(c.id, userId),
   }));
 
-  // Migration 0023 — a suspended member can still see the company row
+  // Migration 0023 - a suspended member can still see the company row
   // (communities_select_scoped includes 'suspended') and their own
   // membership row (with the reason). Surface it so they know why they've
   // lost access and can't get back in until an owner restores them.
@@ -233,12 +208,12 @@ async function showProfile() {
   profileDetails.innerHTML = `
     <div class="profile-field">
       <span class="profile-label">Display name</span>
-      <span class="profile-value">${escapeHtml(displayName || '—')}</span>
+      <span class="profile-value">${escapeHtml(displayName || ' - ')}</span>
       ${changingName ? `
         <div class="reject-form">
           <label class="field-label" for="change-name-input">New display name</label>
           <input type="text" id="change-name-input" class="text-input" maxlength="60" value="${escapeHtml(displayName || '')}" />
-          <p class="hint small-hint">This is how your name shows on orders and team lists. It's cosmetic only — it never changes your access.</p>
+          <p class="hint small-hint">This is how your name shows on orders and team lists. It's cosmetic only - it never changes your access.</p>
           <div class="reject-form-actions">
             <button class="btn btn-secondary" id="change-name-cancel-btn">Cancel</button>
             <button class="btn btn-primary" id="change-name-confirm-btn">Save</button>
@@ -255,7 +230,7 @@ async function showProfile() {
           <div class="reject-form">
             <label class="field-label" for="change-email-input">New email address</label>
             <input type="email" id="change-email-input" class="text-input" placeholder="you@example.com" />
-            <p class="hint small-hint">We'll send a confirmation link to the new address — the change only takes effect once you follow it.</p>
+            <p class="hint small-hint">We'll send a confirmation link to the new address - the change only takes effect once you follow it.</p>
             <div class="reject-form-actions">
               <button class="btn btn-secondary" id="change-email-cancel-btn">Cancel</button>
               <button class="btn btn-primary" id="change-email-confirm-btn">Send confirmation</button>
@@ -270,10 +245,10 @@ async function showProfile() {
       </div>
       <div class="profile-field">
         <span class="profile-label">Two-factor authentication</span>
-        <span class="profile-value">${mfaOn ? '✅ On — a code from your authenticator app is required at login' : 'Off'}</span>
+        <span class="profile-value">${mfaOn ? 'On. A code from your authenticator app is required at login.' : 'Off'}</span>
         ${mfaEnrollment ? `
           <div class="reject-form">
-            <p class="hint small-hint">1. In your authenticator app (Google Authenticator, Authy, 1Password…), add an account and scan this QR code — or type the key manually.</p>
+            <p class="hint small-hint">1. In your authenticator app (Google Authenticator, Authy, 1Password…), add an account and scan this QR code - or type the key manually.</p>
             <div class="mfa-qr">${mfaEnrollment.qrSvg}</div>
             <p class="hint small-hint">Setup key: <code>${escapeHtml(mfaEnrollment.secret)}</code></p>
             <label class="field-label" for="mfa-enroll-code-input">2. Enter the 6-digit code it shows</label>
@@ -312,7 +287,7 @@ async function showProfile() {
             <div class="profile-community-row profile-community-suspended">
               <strong>${escapeHtml(s.name)}</strong>
               <span class="status-badge status-suspended">Suspended</span>
-              <span class="profile-value">${s.reason ? `Reason: ${escapeHtml(s.reason)}` : 'Your access here is paused'}${s.by ? ` — by ${escapeHtml(s.by)}` : ''}. Ask an owner to restore your access.</span>
+              <span class="profile-value">${s.reason ? `Reason: ${escapeHtml(s.reason)}` : 'Your access here is paused'}${s.by ? ` - by ${escapeHtml(s.by)}` : ''}. Ask an owner to restore your access.</span>
             </div>
           `).join('')}
         </div>
@@ -321,7 +296,7 @@ async function showProfile() {
     <button type="button" class="btn btn-secondary btn-block" id="profile-logout-btn">Log out</button>
     ${confirmingDeleteAccount ? `
       <div class="reject-form">
-        <p class="hint small-hint">This can't be undone. It only works if your account has no activity on file yet (no orders placed, no sites created, and no company you own) — otherwise you'll be asked to contact support instead. Type DELETE to confirm.</p>
+        <p class="hint small-hint">This can't be undone. It only works if your account has no activity on file yet (no orders placed, no sites created, and no company you own) - otherwise you'll be asked to contact support instead. Type DELETE to confirm.</p>
         <input type="text" id="delete-account-confirm-input" class="text-input" placeholder="DELETE" />
         <div class="reject-form-actions">
           <button class="btn btn-secondary" id="delete-account-cancel-btn">Never mind</button>
@@ -444,7 +419,7 @@ async function showProfile() {
         statusEl.className = 'form-status error';
         return;
       }
-      statusEl.textContent = 'Confirmation link sent. Check your new inbox — your email changes once you follow it.';
+      statusEl.textContent = 'Confirmation link sent. Check your new inbox - your email changes once you follow it.';
       statusEl.className = 'form-status success';
     });
   }
@@ -483,7 +458,7 @@ async function showProfile() {
         statusEl.className = 'form-status error';
         return;
       }
-      // deleteAccount() already signed out locally on success — the normal
+      // deleteAccount() already signed out locally on success - the normal
       // auth-state routing takes over from here, same as any other logout.
     });
   }
@@ -540,12 +515,11 @@ async function showRoleSelect() {
     const meta = ROLE_META[role];
     return `
       <button type="button" class="role-select-card" data-role="${role}">
-        <span class="role-select-icon" aria-hidden="true">${meta.icon}</span>
         <span class="role-select-info">
           <strong>${meta.label}</strong>
           <span>${meta.desc}</span>
         </span>
-        <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+        <span class="variant-option-arrow" aria-hidden="true"></span>
       </button>
     `;
   }).join('');
@@ -561,7 +535,7 @@ async function showRoleSelect() {
   sessionBar.hidden = false;
   menuSwitchRoleBtn.hidden = true;
   sessionLabel.textContent = 'Choosing a role…';
-  communityIndicator.textContent = `${community.name} — ${displayName}`;
+  communityIndicator.textContent = `${community.name} - ${displayName}`;
   communityCircleBtn.textContent = getInitials(community.name);
   updateTopRightPills();
 }
@@ -586,10 +560,10 @@ async function showRoleView() {
     return;
   }
 
-  communityIndicator.textContent = `${community.name} — ${displayName}`;
+  communityIndicator.textContent = `${community.name} - ${displayName}`;
   sessionBar.hidden = false;
   // Phase 8E fix: this used to hide "Switch role" whenever the account had
-  // a defaultRole — since every real account now has one (guest mode is
+  // a defaultRole - since every real account now has one (guest mode is
   // gone), that hid it for 100% of accounts, regardless of whether they
   // actually had more than one legitimate role to switch to. The correct
   // condition is simply "is there anything else to switch to."
@@ -613,7 +587,7 @@ async function showRoleView() {
   } else if (role === 'buyer') {
     showOnly(buyerView);
     // Awaited (unlike the other three roles' refresh calls) because
-    // refreshBuyerView is itself async since Phase 8C — it awaits
+    // refreshBuyerView is itself async since Phase 8C - it awaits
     // releaseHoldIfAny(), a real abandonPurchase RPC, before it's safe to
     // treat the Buyer view as actually refreshed.
     await refreshBuyerView(pendingNotifOrderId);
@@ -624,7 +598,7 @@ async function showRoleView() {
 // Sites is reached only from inside an active owner session (the pill
 // itself is only ever visible when hasActiveOwnerSession() is true), so
 // this deliberately doesn't re-derive community/role chrome the way
-// showRoleView does — it just swaps which section is visible and keeps the
+// showRoleView does - it just swaps which section is visible and keeps the
 // existing session bar.
 async function showSitesView(siteId = null) {
   showOnly(sitesView);
@@ -635,7 +609,7 @@ async function showSitesView(siteId = null) {
 
 // Set right before routing into a role-view from a notification click, so
 // that view can scroll to and briefly highlight the specific order the
-// notification was about — the three flat-list views (worker/owner/driver)
+// notification was about - the three flat-list views (worker/owner/driver)
 // don't have their own per-order navigation the way buyer.js's detail view
 // does, so this is the shared fallback for all three.
 let pendingNotifOrderId = null;
@@ -671,7 +645,7 @@ async function enterCommunityFlow() {
 
   // resolveEntryRole itself now handles a missing/non-matching preferred
   // role safely (returns null), so there's no separate "no defaultRole"
-  // branch needed here — every real account has one anyway (guest mode is
+  // branch needed here - every real account has one anyway (guest mode is
   // gone), and the defensive fallback for the rare account that somehow
   // doesn't is exactly the same "null -> show the picker" path.
   const account = getLoggedInAccount();
@@ -693,11 +667,11 @@ function enterCommunityApp() {
 }
 
 function routeFromTop() {
-  // Roadmap Step 5 — a password-recovery link establishes a real, usable
+  // Roadmap Step 5 - a password-recovery link establishes a real, usable
   // session (so isAuthenticated() below would already be true), but the
   // user must land on the set-new-password form, not the community picker,
   // until they've actually finished resetting it. This check runs before
-  // the authenticated check for exactly that reason — see auth.js's
+  // the authenticated check for exactly that reason - see auth.js's
   // inPasswordRecoveryContext header for the full race-condition rationale.
   if (inPasswordRecoveryContext()) {
     showAuth();
@@ -705,7 +679,7 @@ function routeFromTop() {
   }
   // Two-factor: password succeeded but the 6-digit code hasn't been entered
   // this login (session is aal1, a verified factor exists). Same gate shape
-  // as password recovery — the auth view shows the code form.
+  // as password recovery - the auth view shows the code form.
   if (isMfaChallengePending()) {
     showAuth();
     return;
@@ -714,10 +688,10 @@ function routeFromTop() {
     showAuth();
     return;
   }
-  // Roadmap Step 5 — a shareable invite link (`?join=CODE`) is consumed once
+  // Roadmap Step 5 - a shareable invite link (`?join=CODE`) is consumed once
   // at bootstrap (see below) and held in memory until it's actually used.
   // An authenticated user with a pending join code is routed straight to
-  // the Companies screen, whose join-code panel pre-fills from it — this is
+  // the Companies screen, whose join-code panel pre-fills from it - this is
   // navigation-only, never an implicit join: the existing "Request to join"
   // button still requires an explicit tap (see communityView.js).
   if (getPendingJoinCode()) {
@@ -776,7 +750,7 @@ sitesPillBtn.addEventListener('click', () => {
   showSitesView();
 });
 
-// Phase 8E — the owner dashboard's Sites summary card dispatches this
+// Phase 8E - the owner dashboard's Sites summary card dispatches this
 // (rather than importing showSitesView directly) to avoid owner.js needing
 // to import main.js, matching the existing cross-module navigation pattern
 // already used for sitestock:show-profile / sitestock:go-to-auth.
@@ -833,10 +807,10 @@ window.addEventListener('sitestock:enter-community', () => {
 
 window.addEventListener('sitestock:logged-in', () => {
   setActiveRole(null);
-  // Phase 8D.2 — starts (or restarts, idempotently) Realtime for whichever
+  // Phase 8D.2 - starts (or restarts, idempotently) Realtime for whichever
   // account just logged in. Safe even though community/order/notification
   // cache refreshes triggered by the auth transition may still be in
-  // flight — every refreshXCache() this could race is itself a full,
+  // flight - every refreshXCache() this could race is itself a full,
   // idempotent replace, so "channel opens slightly before/after the first
   // cache load resolves" has no bad outcome either way.
   startRealtimeForSession();
@@ -844,7 +818,7 @@ window.addEventListener('sitestock:logged-in', () => {
 });
 
 window.addEventListener('sitestock:logout', async () => {
-  // Phase 8D.2 — stop BEFORE clearing session state, not after: this is
+  // Phase 8D.2 - stop BEFORE clearing session state, not after: this is
   // what guarantees no in-flight event from the outgoing account's channels
   // can still be processed once the auth transition below starts clearing
   // caches out from under it.
@@ -853,7 +827,7 @@ window.addEventListener('sitestock:logout', async () => {
   notifPanel.hidden = true;
   notifPrefsModal.hidden = true;
   // Awaited so the Supabase session is actually cleared (and the reactive
-  // community/site cache refresh they trigger has fired) before routing —
+  // community/site cache refresh they trigger has fired) before routing - 
   // avoids a flash of the previous account's data on the auth screen.
   await authLogout();
   showAuth();
@@ -861,7 +835,7 @@ window.addEventListener('sitestock:logout', async () => {
 
 window.addEventListener('sitestock:go-to-auth', () => showAuth());
 window.addEventListener('sitestock:show-profile', () => showProfile());
-// The active company was deleted from under us — drop it and go to the picker.
+// The active company was deleted from under us - drop it and go to the picker.
 window.addEventListener('sitestock:active-community-gone', () => {
   setActiveCommunityId(null);
   setActiveRole(null);
@@ -887,14 +861,14 @@ subscribeCommunities(() => {
     showCommunityPicker();
     return;
   }
-  // Phase 8D.2 — live permission revalidation. This callback already fires
+  // Phase 8D.2 - live permission revalidation. This callback already fires
   // on every community-cache change regardless of cause (a same-tab write,
-  // window-focus refresh, or — new this phase — a Realtime-triggered
+  // window-focus refresh, or - new this phase - a Realtime-triggered
   // refreshCommunityCache()/refreshSitesCache()), so the only new thing
   // here is the check itself, not a new trigger. Never treat a Realtime
   // event as proof of anything: by the time this callback runs, the cache
   // has already been authoritatively refetched under RLS, so
-  // eligibleRoles() here reflects real, current, server-checked state —
+  // eligibleRoles() here reflects real, current, server-checked state - 
   // exactly what a fresh page load would compute, just running earlier
   // than the user's next navigation would have surfaced it. Mirrors
   // navigateToNotification's existing "a target is a wish, never an
@@ -908,12 +882,12 @@ subscribeCommunities(() => {
   }
 
   // Keep the topbar in sync with a live company-cache change that isn't a
-  // navigation — e.g. the owner renaming the company from Company settings,
+  // navigation - e.g. the owner renaming the company from Company settings,
   // or a rename arriving via Realtime. showRoleView/showRoleSelect set these
   // on view entry; this covers the "already on the page" case.
   if (!sessionBar.hidden) {
     const displayName = getCurrentDisplayName();
-    communityIndicator.textContent = `${community.name} — ${displayName}`;
+    communityIndicator.textContent = `${community.name} - ${displayName}`;
     communityCircleBtn.textContent = getInitials(community.name);
   }
 });
@@ -942,7 +916,6 @@ function renderNotifList() {
   const remaining = notifs.length - shown.length;
   notifList.innerHTML = shown.map(n => `
     <div class="notif-row${!n.read ? ' notif-row-unread' : ''}">
-      <span class="notif-row-icon" aria-hidden="true">${NOTIF_ICONS[n.type] || '🔔'}</span>
       <button type="button" class="notif-row-body" data-notif-open="${n.id}">
         <strong>${escapeHtml(n.title)}</strong>
         <span>${escapeHtml(n.message)}</span>
@@ -989,7 +962,7 @@ async function openNotification(id) {
   navigateToNotification(n);
 }
 
-// A notification's navigationTarget carries no authority of its own —
+// A notification's navigationTarget carries no authority of its own - 
 // permissions are always re-checked fresh here, exactly as they already are
 // on every other navigation in this app. A notification can point
 // somewhere; it can never grant access to get there.
@@ -1010,12 +983,12 @@ function navigateToNotification(n) {
     const communityId = target.communityId || getActiveCommunityId();
     const roles = communityId ? eligibleRoles(communityId, userId) : [];
     // Site-scoped notifications carry a siteId that must still resolve to
-    // real, current access — a stale notification can point somewhere, it
+    // real, current access - a stale notification can point somewhere, it
     // can never grant getting there. Drivers are the one deliberate
     // exception: Phase 4A never gave them a site permission function at
     // all (any approved member can claim any purchased order regardless of
     // site membership), so canAccessSite doesn't apply to driver-routed
-    // targets — applying it there would incorrectly deny access drivers
+    // targets - applying it there would incorrectly deny access drivers
     // were always meant to have.
     const siteOk = !target.siteId || target.role === 'driver'
       || canAccessSite(target.siteId, communityId, userId);
@@ -1028,7 +1001,7 @@ function navigateToNotification(n) {
   }
 
   // No longer eligible for whatever this pointed at (role/community
-  // membership, or site access, changed since it was created) — never open
+  // membership, or site access, changed since it was created) - never open
   // the protected content, just route them to wherever they legitimately
   // belong now.
   routeFromTop();
@@ -1095,7 +1068,7 @@ notifPrefsCancelBtn.addEventListener('click', () => {
 // Escape closes whatever transient surface is open (the two modal
 // dialogs, or the two topbar popups), a modal takes focus on open and
 // hands it back on close, and Tab is kept inside an open modal. The
-// toggle buttons report their state with aria-expanded. Additive — the
+// toggle buttons report their state with aria-expanded. Additive - the
 // existing click handlers still own opening/closing.
 const DIALOGS = [
   { el: ownerUpgradeModal, close: () => ownerUpgradeOkBtn.click() },
@@ -1147,27 +1120,27 @@ new MutationObserver(() => {
 
 // --- Phase 8B bootstrap ------------------------------------------------
 // Explicit async gate: nothing routes until the real Supabase session has
-// been restored AND the community/site caches have loaded at least once —
+// been restored AND the community/site caches have loaded at least once - 
 // see this file's refreshDataCaches() header and CLAUDE.md's Phase 8B
 // section. #bootstrap-loading (active by default in index.html) covers the
 // screen the whole time so nothing ever renders a role view off an empty
 // cache, and no stale pre-login screen flashes before the real route is
 // known.
 async function bootstrap() {
-  // Roadmap Step 5 — read the invite-link query param (if any) exactly
+  // Roadmap Step 5 - read the invite-link query param (if any) exactly
   // once, before the very first route, and strip it from the URL
   // immediately (history.replaceState, inside consumeJoinIntentFromUrl)
   // so refreshing or re-sharing the resulting tab doesn't repeat the
-  // prompt. Safe to call unconditionally, logged in or not — routeFromTop()
+  // prompt. Safe to call unconditionally, logged in or not - routeFromTop()
   // is what actually decides what to do with a held code once auth state is
   // known, including the logged-out case (showAuth() first, then this same
   // routeFromTop() logic re-runs after 'sitestock:logged-in').
   consumeJoinIntentFromUrl();
   await authReady;
   await Promise.all([loadAllProfiles(), refreshDataCaches()]);
-  // Phase 8D.2 — covers session restore (a page load with an existing
+  // Phase 8D.2 - covers session restore (a page load with an existing
   // Supabase session already in localStorage), which never fires
-  // 'sitestock:logged-in' — that event only exists for the login FORM's own
+  // 'sitestock:logged-in' - that event only exists for the login FORM's own
   // success path. startRealtimeForSession() itself no-ops if there's no
   // authenticated user, so this is safe to call unconditionally here too.
   startRealtimeForSession();
@@ -1176,7 +1149,7 @@ async function bootstrap() {
 }
 
 // Lightweight freshness mechanism, kept as a fallback even after Phase
-// 8D.2 added Realtime (see CLAUDE.md's Phase 8D.2 section) — Realtime
+// 8D.2 added Realtime (see CLAUDE.md's Phase 8D.2 section) - Realtime
 // itself reconnects and re-refreshes on its own after a dropped
 // connection, but a focus-triggered refresh is still the thing that
 // recovers correctness if the websocket never reconnects at all (a real
@@ -1184,7 +1157,7 @@ async function bootstrap() {
 // extensions). Re-pulls community/site/order/notification data whenever
 // the tab regains focus, so switching back after changes happened
 // elsewhere doesn't leave a badly stale cache sitting around indefinitely.
-// This does not itself force a re-render of every open view — see
+// This does not itself force a re-render of every open view - see
 // refreshDataCaches()'s header for why that's an accepted, documented
 // limitation for owner/buyer/driver/site.js specifically.
 window.addEventListener('focus', () => {

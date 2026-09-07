@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SiteStock &mdash; Orders &amp; Deliveries</title>
+<title>SiteStock - Orders &amp; Deliveries</title>
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -20,7 +20,7 @@
     <button type="button" class="pill-btn" id="sites-pill-btn" hidden>Sites</button>
     <div class="notif-wrap" id="notif-wrap" hidden>
       <button type="button" class="circle-btn circle-btn-notif" id="notif-bell-btn" aria-label="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notif-panel">
-        <span aria-hidden="true">🔔</span><span class="notif-badge" id="notif-badge" hidden>0</span>
+        Alerts<span class="notif-badge" id="notif-badge" hidden>0</span>
       </button>
       <div class="notif-panel" id="notif-panel" role="dialog" aria-label="Notifications" hidden>
         <div class="notif-panel-header">
@@ -54,7 +54,7 @@
 
   <!-- ============ AUTH VIEW ============ -->
   <!-- Shown only during the Phase 8B async bootstrap (session restore +
-       initial Supabase cache load) — never a role view, never stale data,
+       initial Supabase cache load) - never a role view, never stale data,
        just a neutral holding state until routing can happen safely. -->
   <section id="bootstrap-loading" class="view active">
     <div class="panel">
@@ -67,7 +67,7 @@
     <div class="panel">
       <div id="auth-intro">
         <h1>Log in to SiteStock</h1>
-        <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) &mdash; the same login works from any browser or device. An account is required to continue.</p>
+        <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) - the same login works from any browser or device. An account is required to continue.</p>
       </div>
 
       <div class="driver-tabs" id="auth-tabs">
@@ -99,7 +99,7 @@
 
       <form id="set-new-password-form" class="auth-form" hidden>
         <h2>Choose a new password</h2>
-        <p class="hint">You followed a password reset link — set a new password below to finish.</p>
+        <p class="hint">You followed a password reset link - set a new password below to finish.</p>
         <label class="field-label" for="new-password-input">New password</label>
         <input type="password" id="new-password-input" class="text-input" autocomplete="new-password" />
         <label class="field-label" for="new-password-confirm-input">Confirm new password</label>
@@ -130,16 +130,16 @@
 
         <label class="field-label" for="register-displayname-input">Display name</label>
         <input type="text" id="register-displayname-input" class="text-input" placeholder="e.g. Dave the Foreman" />
-        <p class="hint small-hint">This is the name others in your company will see &mdash; it can be different from your email.</p>
+        <p class="hint small-hint">This is the name others in your company will see - it can be different from your email.</p>
 
         <span class="field-label" id="register-role-label">What do you mainly do?</span>
         <div class="role-toggle-group" id="register-role-group" role="group" aria-labelledby="register-role-label">
-          <button type="button" class="role-toggle-btn" data-role="worker" aria-pressed="false"><span aria-hidden="true">🧑&zwj;🔧</span> Worker</button>
-          <button type="button" class="role-toggle-btn" data-role="driver" aria-pressed="false"><span aria-hidden="true">🚚</span> Driver</button>
-          <button type="button" class="role-toggle-btn" data-role="buyer" aria-pressed="false"><span aria-hidden="true">🛒</span> Buyer</button>
-          <button type="button" class="role-toggle-btn" data-role="owner" aria-pressed="false"><span aria-hidden="true">👑</span> Owner</button>
+          <button type="button" class="role-toggle-btn" data-role="worker" aria-pressed="false">Worker</button>
+          <button type="button" class="role-toggle-btn" data-role="driver" aria-pressed="false">Driver</button>
+          <button type="button" class="role-toggle-btn" data-role="buyer" aria-pressed="false">Buyer</button>
+          <button type="button" class="role-toggle-btn" data-role="owner" aria-pressed="false">Owner</button>
         </div>
-        <p class="hint small-hint">You can switch later — this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first — picking it here is just your preference for once you have it.</p>
+        <p class="hint small-hint">You can switch later - this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first - picking it here is just your preference for once you have it.</p>
 
         <p class="hint small-hint">We use your email to sign you in and to send account and order notifications, and your name so your team can see who placed an order. We don't use analytics or advertising. Full detail is in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
 
@@ -153,12 +153,11 @@
       </form>
 
       <div id="check-email-panel" class="auth-form" hidden>
-        <div class="check-email-icon" aria-hidden="true">&#9993;&#65039;</div>
         <h2>Confirm your email</h2>
         <p class="hint">We've sent a confirmation link to <strong id="check-email-address"></strong>. Your account isn't active until you open it.</p>
         <ol class="check-email-steps">
           <li>Open that email and click <strong>Confirm email address</strong>.</li>
-          <li>That activates your account &mdash; then log in below.</li>
+          <li>That activates your account. Then log in below.</li>
         </ol>
         <p class="hint small-hint">No email yet? It can take a minute, and it may be in your spam or promotions folder.</p>
         <button type="button" class="btn btn-primary btn-block" id="check-email-login-btn">Go to log in</button>
@@ -178,12 +177,12 @@
   <section id="community-view" class="view">
     <div class="panel">
       <h1>Welcome to SiteStock</h1>
-      <p class="hint">Set up your company, then invite your team to join it &mdash; head to Companies to create or join one.</p>
+      <p class="hint">Set up your company, then invite your team to join it - head to Companies to create or join one.</p>
       <button type="button" class="btn btn-secondary" id="account-status-btn">Show profile</button>
       <label class="field-label" for="identity-name-input">Your name</label>
       <input type="text" id="identity-name-input" class="text-input" readonly />
       <p class="hint small-hint" id="identity-name-hint">This is your account's display name and can't be edited here.</p>
-      <button type="button" class="btn btn-primary btn-block" id="go-to-communities-btn">Go to Companies &rarr;</button>
+      <button type="button" class="btn btn-primary btn-block" id="go-to-communities-btn">Go to Companies</button>
     </div>
   </section>
 
@@ -253,14 +252,14 @@
   <section id="worker-view" class="view">
     <div class="panel" id="site-select-panel">
       <h1>Which site is this for?</h1>
-      <p class="hint">These are the sites in this company you've been assigned to &mdash; your owner manages site assignments, so ask them to add you to another one if you don't see it here.</p>
+      <p class="hint">These are the sites in this company you've been assigned to - your owner manages site assignments, so ask them to add you to another one if you don't see it here.</p>
       <div id="worker-sites-list" class="community-list"></div>
     </div>
 
     <div class="panel search-panel" hidden>
       <p class="hint">Ordering for <strong id="worker-active-site-label"></strong> &middot; <button type="button" class="link-btn" id="worker-change-site-btn">Change site</button></p>
       <h1>What do you need on site?</h1>
-      <p class="hint">Start typing &mdash; e.g. &ldquo;cement&rdquo;, &ldquo;timber post&rdquo;, &ldquo;hi-vis&rdquo;, &ldquo;drill&rdquo;&hellip;</p>
+      <p class="hint">Start typing - e.g. &ldquo;cement&rdquo;, &ldquo;timber post&rdquo;, &ldquo;hi-vis&rdquo;, &ldquo;drill&rdquo;&hellip;</p>
       <input type="text" id="search-input" class="search-input" placeholder="Search for materials, tools, PPE&hellip;" autocomplete="off" aria-label="Search for materials, tools, or PPE" />
       <div id="search-results" class="results-list"></div>
     </div>
@@ -297,10 +296,10 @@
         <button type="button" class="btn btn-secondary" id="owner-rename-company-btn">Save name</button>
       </div>
       <p id="owner-rename-company-status" class="form-status" aria-live="polite"></p>
-      <p class="hint small-hint">Renaming only changes how the company shows now — it never rewrites the name on past orders or notifications.</p>
+      <p class="hint small-hint">Renaming only changes how the company shows now - it never rewrites the name on past orders or notifications.</p>
 
       <h3 class="settings-subhead">Invite people</h3>
-      <p class="hint">Share this link or code with your team — they'll still need your approval before they can see anything.</p>
+      <p class="hint">Share this link or code with your team - they'll still need your approval before they can see anything.</p>
       <div class="invite-link-row">
         <input type="text" id="owner-invite-link-input" class="text-input" readonly />
         <button type="button" class="btn btn-secondary" id="owner-copy-invite-link-btn">Copy link</button>
@@ -311,14 +310,14 @@
         <input type="checkbox" id="discoverable-toggle" />
         <span>Let people find this company by searching SiteStock</span>
       </label>
-      <p class="hint small-hint">Off by default — most companies only need the invite link/code above. Turn this on only if you want strangers to be able to find and request to join without one.</p>
+      <p class="hint small-hint">Off by default - most companies only need the invite link/code above. Turn this on only if you want strangers to be able to find and request to join without one.</p>
 
       <h3 class="settings-subhead">Order approval</h3>
       <label class="checkbox-field">
         <input type="checkbox" id="approval-required-toggle" checked />
         <span>Require owner approval before new orders go to a buyer</span>
       </label>
-      <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool — existing orders keep whatever setting applied when they were created.</p>
+      <p class="hint small-hint">When turned off, new orders skip straight to the buyer pool - existing orders keep whatever setting applied when they were created.</p>
       <label class="field-label" for="approval-threshold-input">Require a second approval for orders over &pound; (blank = never)</label>
       <div class="invite-link-row">
         <input type="number" id="approval-threshold-input" class="text-input" min="0" step="1" placeholder="e.g. 1000" />
@@ -329,7 +328,7 @@
 
       <div id="owner-delete-company-wrap" hidden>
         <h3 class="settings-subhead">Delete company</h3>
-        <p class="hint small-hint">Only possible while the company has no orders, no sites, and no other members. Type DELETE to confirm — this cannot be undone.</p>
+        <p class="hint small-hint">Only possible while the company has no orders, no sites, and no other members. Type DELETE to confirm - this cannot be undone.</p>
         <div class="invite-link-row">
           <input type="text" id="owner-delete-company-input" class="text-input" placeholder="DELETE" />
           <button type="button" class="btn btn-secondary link-btn-danger" id="owner-delete-company-btn">Delete company</button>
@@ -354,11 +353,11 @@
 
     <div class="panel" id="owner-sites-summary-panel">
       <h2>Sites</h2>
-      <p class="hint">The sites/projects in this company — create one, assign employees, and see each site's orders.</p>
+      <p class="hint">The sites/projects in this company - create one, assign employees, and see each site's orders.</p>
       <div id="owner-sites-summary-list" class="community-list"></div>
       <div class="owner-actions">
         <button type="button" class="btn btn-secondary" id="owner-new-site-btn">+ New site</button>
-        <button type="button" class="link-btn" id="owner-manage-sites-btn">Manage all Sites &rarr;</button>
+        <button type="button" class="link-btn" id="owner-manage-sites-btn">Manage all Sites</button>
       </div>
     </div>
 
@@ -379,7 +378,7 @@
 
     <div class="panel" id="owner-team-panel" hidden>
       <h2>Team</h2>
-      <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard. Buyer access is separate — grant it to whoever handles purchasing.</p>
+      <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard. Buyer access is separate - grant it to whoever handles purchasing.</p>
       <div id="owner-team-list" class="orders-list"></div>
       <details id="owner-team-activity">
         <summary><h3 class="settings-subhead" style="display:inline">Team activity</h3></summary>
@@ -430,14 +429,14 @@
         <label class="field-label" for="site-end-date-input">Project end date (optional)</label>
         <input type="date" id="site-end-date-input" class="text-input" />
         <label class="field-label" for="site-contact-name-input">Site contact (optional)</label>
-        <input type="text" id="site-contact-name-input" class="text-input" placeholder="e.g. Dave — site manager" />
+        <input type="text" id="site-contact-name-input" class="text-input" placeholder="e.g. Dave - site manager" />
         <label class="field-label" for="site-contact-phone-input">Contact phone (optional)</label>
         <input type="tel" id="site-contact-phone-input" class="text-input" placeholder="e.g. 07700 900123" />
         <p class="hint small-hint">Only add someone else's name and number if they're happy to be the delivery contact for this site. It's shared with buyers and drivers working on it.</p>
         <label class="field-label" for="site-access-notes-input">Access notes (optional)</label>
         <input type="text" id="site-access-notes-input" class="text-input" placeholder="e.g. Gate code 1234, deliveries before 3pm" />
         <label class="field-label" for="site-budget-input">Monthly budget &pound; (optional)</label>
-        <input type="number" id="site-budget-input" class="text-input" min="0" step="1" placeholder="e.g. 5000 — orders over this are blocked until you raise it" />
+        <input type="number" id="site-budget-input" class="text-input" min="0" step="1" placeholder="e.g. 5000 - orders over this are blocked until you raise it" />
         <button type="button" id="create-site-btn" class="btn btn-primary btn-block">Create site</button>
         <p id="create-site-status" class="form-status" role="status" aria-live="polite"></p>
       </div>
@@ -482,12 +481,12 @@
   <section id="buyer-view" class="view">
     <div class="panel" id="buyer-cancellation-requests-panel" hidden>
       <h2>Cancellation requests</h2>
-      <p class="hint">A worker wants to cancel one of these orders. Approving cancels it inside SiteStock only — it doesn't contact the supplier for you.</p>
+      <p class="hint">A worker wants to cancel one of these orders. Approving cancels it inside SiteStock only - it doesn't contact the supplier for you.</p>
       <div id="buyer-cancellation-requests-list" class="orders-list"></div>
     </div>
     <div class="panel" id="buyer-direct-deliveries-panel" hidden>
       <h2>Awaiting direct delivery</h2>
-      <p class="hint">These orders are set to be delivered straight by the supplier — no driver involved. Confirm here once the goods actually arrive on site.</p>
+      <p class="hint">These orders are set to be delivered straight by the supplier - no driver involved. Confirm here once the goods actually arrive on site.</p>
       <div id="buyer-direct-deliveries-list" class="orders-list"></div>
     </div>
 
@@ -500,7 +499,7 @@
     <div class="panel" id="buyer-my-purchases-panel" hidden>
       <details>
         <summary><h2>My recent purchases</h2></summary>
-        <p class="hint">Orders you've confirmed as purchased — read-only, for your own reference.</p>
+        <p class="hint">Orders you've confirmed as purchased - read-only, for your own reference.</p>
         <div id="buyer-my-purchases-list" class="orders-list"></div>
       </details>
     </div>
@@ -524,12 +523,11 @@
     <a href="refunds.html" target="_blank" rel="noopener">Refunds</a>
     <a href="accessibility.html" target="_blank" rel="noopener">Accessibility</a>
   </nav>
-  <p class="app-footer-note">Early-stage software, provided as is &mdash; see the Terms.</p>
+  <p class="app-footer-note">Early-stage software, provided as is - see the Terms.</p>
 </footer>
 
 <div class="modal-overlay" id="owner-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="owner-upgrade-title" hidden>
   <div class="modal-box">
-    <span class="modal-icon" aria-hidden="true">👑</span>
     <h2 id="owner-upgrade-title">You have been upgraded to owner level</h2>
     <p class="hint" id="owner-upgrade-message"></p>
     <button type="button" class="btn btn-primary btn-block" id="owner-upgrade-ok-btn">Got it</button>
@@ -570,7 +568,7 @@
         <input type="checkbox" id="pref-role-updates" />
         <span>Role updates</span>
       </label>
-      <p class="hint small-hint">Buyer access and site assignment/archive notifications always send, regardless of this setting — they directly affect your permissions.</p>
+      <p class="hint small-hint">Buyer access and site assignment/archive notifications always send, regardless of this setting - they directly affect your permissions.</p>
     </div>
     <div class="reject-form-actions">
       <button type="button" class="btn btn-secondary" id="notif-prefs-cancel-btn">Cancel</button>

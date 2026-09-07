@@ -14,7 +14,7 @@ import {
   subscribe, approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
   getPendingCancellationRequestForOrder, subscribeCancellationRequests,
 } from './orderLifecycle.js';
-// Phase 8E — read-only reuse of sites.js's existing data functions for the
+// Phase 8E - read-only reuse of sites.js's existing data functions for the
 // dashboard's Sites summary card. No site CRUD/permission logic lives here;
 // creating/editing/archiving/assigning all still happens exclusively in
 // sitesView.js, reached via the sitestock:show-sites event below.
@@ -73,7 +73,7 @@ const analyticsSitesEl = document.getElementById('owner-analytics-sites');
 const analyticsSuppliersEl = document.getElementById('owner-analytics-suppliers');
 
 // Groups the existing order.status values into the tabs an owner actually
-// needs to scan for "what needs attention" — no new statuses, this is a
+// needs to scan for "what needs attention" - no new statuses, this is a
 // pure UI regrouping of the same lifecycle already enforced by
 // orderLifecycle.js's TRANSITIONS table.
 const TAB_GROUPS = {
@@ -83,7 +83,7 @@ const TAB_GROUPS = {
   delivery: ['claimed', 'collected'],
   delivered: ['delivered'],
   rejected: ['rejected'],
-  // Kept separate from rejected on purpose (Phase 7C) — rejected means the
+  // Kept separate from rejected on purpose (Phase 7C) - rejected means the
   // Owner said no; cancelled means the Worker withdrew it, sometimes after
   // money was spent. Same accountability distinction the rest of Phase 7
   // preserves.
@@ -94,7 +94,7 @@ let activeTab = 'awaiting';
 let latestOrders = [];
 let rejectingId = null;
 let selectedOrderId = null;
-// Team panel — which member row (by membership id) is showing its inline
+// Team panel - which member row (by membership id) is showing its inline
 // suspend/remove confirm+reason sub-form, and which action. Same shape as
 // rejectingId above.
 let teamActionState = null; // { membershipId, action: 'suspend' | 'remove' }
@@ -163,7 +163,7 @@ function renderDashboard(inCommunity, communityId) {
   const outForDelivery = inCommunity.filter(o => o.status === 'claimed' || o.status === 'collected').length;
   const delivered = inCommunity.filter(o => o.status === 'delivered').length;
   // Open (not yet delivered/rejected/cancelled) orders whose deadline has
-  // already passed — computed fresh from the stored needed_by, never a
+  // already passed - computed fresh from the stored needed_by, never a
   // stored "overdue" flag (see deadline.js's neededByUrgency).
   const OPEN = o => !['delivered', 'rejected', 'cancelled'].includes(o.status);
   const overdue = inCommunity.filter(o => OPEN(o) && neededByUrgency(o.neededByType, o.neededBy, o.status) === 'overdue').length;
@@ -205,17 +205,17 @@ function renderDashboard(inCommunity, communityId) {
     }).join('');
 }
 
-// Phase 8E — "enter a Community, immediately see its Sites" (see
+// Phase 8E - "enter a Community, immediately see its Sites" (see
 // CLAUDE.md's Site model / PROGRESS.md Phase 8E entry): a compact,
 // read-only summary of the community's active sites, right on the
-// dashboard. All CRUD/detail/member-assignment stays in sitesView.js —
+// dashboard. All CRUD/detail/member-assignment stays in sitesView.js - 
 // clicking a row or "+ New site"/"Manage all Sites" just navigates there
 // (optionally deep-linked to one site), it never duplicates that logic here.
 function renderSitesSummary(communityId, inCommunity) {
   const sites = getActiveSites(communityId).sort((a, b) => a.name.localeCompare(b.name));
 
   if (sites.length === 0) {
-    sitesSummaryListEl.innerHTML = '<p class="empty-hint">No sites yet — create the first one below.</p>';
+    sitesSummaryListEl.innerHTML = '<p class="empty-hint">No sites yet - create the first one below.</p>';
     return;
   }
 
@@ -268,7 +268,7 @@ approvalThresholdSaveBtn.addEventListener('click', async () => {
 
 // --- Roadmap Step 5: Owner setup checklist -----------------------------
 // Every item is a live boolean derived from data this file (and sites.js)
-// already reads elsewhere on this same render pass — never a stored "done"
+// already reads elsewhere on this same render pass - never a stored "done"
 // flag, so there's no second, parallel completion state to keep in sync or
 // let go stale. See CLAUDE.md's Roadmap Step 5 entry for the full rationale
 // behind each condition, including why "invite your team"/"approve people"
@@ -308,19 +308,19 @@ function renderSetupChecklist(communityId) {
   const allDone = items.every(i => i.done);
 
   // Collapses to one compact line once everything's done, rather than
-  // disappearing outright — an Owner who later adds a 4th site or a 7th
+  // disappearing outright - an Owner who later adds a 4th site or a 7th
   // employee shouldn't see a checklist silently reappear as if something
   // regressed (see the design report's "checklist becoming stale" risk).
   if (allDone) {
     setupChecklistPanel.hidden = false;
-    setupChecklistList.innerHTML = `<div class="activity-item"><span class="activity-icon" aria-hidden="true">✅</span><span class="activity-text">Company set up — you're ready to place orders.</span></div>`;
+    setupChecklistList.innerHTML = `<div class="activity-item"><span class="activity-text">Company set up. You're ready to place orders.</span></div>`;
     return;
   }
 
   setupChecklistPanel.hidden = false;
   setupChecklistList.innerHTML = items.map(item => `
     <div class="activity-item checklist-item${item.done ? ' checklist-item-done' : ''}">
-      <span class="activity-icon" aria-hidden="true">${item.done ? '✅' : '○'}</span>
+      <span class="checklist-state" aria-hidden="true">${item.done ? 'Done' : 'To do'}</span>
       <span class="activity-text">${item.label}</span>
       ${!item.done && item.cta ? `<button type="button" class="link-btn" data-checklist-cta="${item.key}">${item.cta}</button>` : ''}
     </div>
@@ -349,7 +349,7 @@ function renderInvitePanel(communityId) {
   const community = getActiveCommunity();
   if (!community) return;
   // Don't stomp on the field while the owner is mid-edit (a background
-  // re-render — realtime, tab switch — must not wipe what they're typing).
+  // re-render - realtime, tab switch - must not wipe what they're typing).
   if (document.activeElement !== companyNameInput) companyNameInput.value = community.name;
   inviteLinkInput.value = buildInviteLink(community.code);
   inviteCodeText.textContent = community.code;
@@ -381,7 +381,7 @@ deleteCompanyBtn.addEventListener('click', async () => {
     deleteCompanyStatus.className = 'form-status error';
     return;
   }
-  // Gone — route out of it.
+  // Gone - route out of it.
   window.dispatchEvent(new CustomEvent('sitestock:active-community-gone'));
 });
 
@@ -409,7 +409,7 @@ copyInviteLinkBtn.addEventListener('click', async () => {
     await navigator.clipboard.writeText(inviteLinkInput.value);
     copyInviteStatus.textContent = 'Link copied.';
   } catch {
-    // Clipboard API can be unavailable (older browsers, insecure context) —
+    // Clipboard API can be unavailable (older browsers, insecure context) - 
     // the input is already selected above as a manual-copy fallback.
     copyInviteStatus.textContent = 'Select the link above and copy it manually.';
   }
@@ -425,12 +425,12 @@ discoverableToggle.addEventListener('change', async () => {
 });
 
 // --- Roadmap Step 5: consolidated "people needing attention" panel ------
-// Summarizes three already-existing data sources into one glance — never a
+// Summarizes three already-existing data sources into one glance - never a
 // second management surface. Each row navigates to (or reuses) the exact
 // existing panel/action; nothing here approves/assigns anything itself.
 
 // This-month committed spend, grouped by site and by supplier. Pure UI over
-// latestOrders — same "committed = not rejected/cancelled, created this
+// latestOrders - same "committed = not rejected/cancelled, created this
 // calendar month" rule the site-budget trigger uses server-side.
 function renderAnalytics(communityId, inCommunity) {
   const now = new Date();
@@ -469,7 +469,7 @@ function renderPeoplePanel(communityId) {
   ].filter(Boolean);
 
   // Nothing needing attention is a genuinely good state, not an empty
-  // management card begging to be filled — hide the panel entirely rather
+  // management card begging to be filled - hide the panel entirely rather
   // than showing a useless "no pending items" row (see the design report's
   // empty-states table).
   if (rows.length === 0) {
@@ -480,9 +480,8 @@ function renderPeoplePanel(communityId) {
   peoplePanel.hidden = false;
   peopleList.innerHTML = rows.map(r => `
     <div class="activity-item">
-      <span class="activity-icon" aria-hidden="true">🔔</span>
       <span class="activity-text">${r.text}</span>
-      <button type="button" class="link-btn" data-people-cta="${r.key}">Review &rarr;</button>
+      <button type="button" class="link-btn" data-people-cta="${r.key}">Review</button>
     </div>
   `).join('');
 
@@ -504,13 +503,13 @@ function renderTeam(communityId) {
   }
   const viewerIsCreator = isCreator(communityId, userId);
 
-  // Migration 0023 — the Team panel now lists suspended members too (so the
+  // Migration 0023 - the Team panel now lists suspended members too (so the
   // owner can Restore them), not just approved ones.
   const members = teamMemberships(communityId, userId);
   teamPanel.hidden = false;
 
   if (members.length === 0) {
-    teamList.innerHTML = '<p class="empty-hint">No other members yet — approve some join requests first.</p>';
+    teamList.innerHTML = '<p class="empty-hint">No other members yet - approve some join requests first.</p>';
     return;
   }
 
@@ -520,7 +519,7 @@ function renderTeam(communityId) {
     const ownerGranted = hasOwnerGrant(communityId, memberId);
     const buyerGranted = hasBuyerGrant(communityId, memberId);
     const suspended = m.status === 'suspended';
-    // "Creator-only for owner targets" gate — mirrors suspend_member /
+    // "Creator-only for owner targets" gate - mirrors suspend_member /
     // remove_member server-side (which use a direct owner_grants existence
     // check, covering a dormant grant on an already-suspended owner too).
     const canLifecycle = viewerIsCreator || !ownerGranted;
@@ -554,7 +553,7 @@ function renderTeam(communityId) {
           <p class="field-hint">${isRemove
             ? `Remove <strong>${escapeHtml(displayName)}</strong> from this company? This also removes their owner and buyer access and every site assignment. They can ask to rejoin later.`
             : `Suspend <strong>${escapeHtml(displayName)}</strong>? They lose all access until you restore them. Their owner/buyer access and site assignments are kept.`}</p>
-          <label class="field-label" for="team-reason-input">Reason (optional — the member can see this)</label>
+          <label class="field-label" for="team-reason-input">Reason (optional - the member can see this)</label>
           <input type="text" id="team-reason-input" class="text-input" maxlength="300" placeholder="e.g. left the company, on leave, performance review" />
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-team-action="cancel" data-team-mid="${m.id}">Cancel</button>
@@ -624,7 +623,7 @@ function renderTeam(communityId) {
       if (action === 'grant-buyer') { grantBuyerAccess(communityId, memberId, userId); return; }
       if (action === 'revoke-buyer') { revokeBuyerAccess(communityId, memberId, userId); return; }
 
-      // Lifecycle actions — disable every team button while the RPC is in
+      // Lifecycle actions - disable every team button while the RPC is in
       // flight (double-click guard, same as the join Approve/Decline fix).
       const reasonInput = teamList.querySelector('#team-reason-input');
       const reason = reasonInput ? reasonInput.value : '';
@@ -654,16 +653,16 @@ function renderTeam(communityId) {
 }
 
 const TEAM_EVENT_TEXT = {
-  member_suspended: (who, by, reason) => `${by} suspended ${who}${reason ? ` — ${reason}` : ''}`,
+  member_suspended: (who, by, reason) => `${by} suspended ${who}${reason ? ` - ${reason}` : ''}`,
   member_restored: (who, by) => `${by} restored ${who}`,
-  member_removed: (who, by, reason) => `${by} removed ${who} from the company${reason ? ` — ${reason}` : ''}`,
+  member_removed: (who, by, reason) => `${by} removed ${who} from the company${reason ? ` - ${reason}` : ''}`,
   member_left: who => `${who} left the company`,
   member_rerequested: who => `${who} asked to rejoin`,
 };
 
 // One-shot async render of the workforce-lifecycle audit trail. Runs
 // alongside renderTeam (owner-only, already gated). A fetch failure just
-// leaves the section empty — it's a read-only history, never load-bearing.
+// leaves the section empty - it's a read-only history, never load-bearing.
 async function renderTeamActivity(communityId) {
   if (!teamActivityDetails) return;
   const events = await fetchMembershipEvents(communityId);
@@ -679,10 +678,9 @@ async function renderTeamActivity(communityId) {
     const who = membership ? resolveDisplayName(membership.userId) : 'a member';
     const by = e.actorName || 'An owner';
     const fn = TEAM_EVENT_TEXT[e.type];
-    const text = fn ? fn(who, by, e.reason) : `${e.type.replace(/_/g, ' ')} — ${who}`;
+    const text = fn ? fn(who, by, e.reason) : `${e.type.replace(/_/g, ' ')} - ${who}`;
     return `
       <div class="activity-item">
-        <span class="activity-icon" aria-hidden="true">👥</span>
         <span class="activity-text">${text}</span>
         <span class="activity-time">${timeAgo(e.createdAt)}</span>
       </div>`;
@@ -720,7 +718,7 @@ function render() {
   const statuses = TAB_GROUPS[activeTab] || [];
   let filtered = inCommunity.filter(o => statuses.includes(o.status));
 
-  // Roadmap Step 4 — only the two tabs something is genuinely waiting on
+  // Roadmap Step 4 - only the two tabs something is genuinely waiting on
   // (awaiting Owner approval, waiting for a buyer to purchase) get
   // urgency-first ordering; every other tab is tracking/history, where
   // newest-first is still the more useful read (unchanged from before).
@@ -767,7 +765,7 @@ orderDetailBackBtn.addEventListener('click', showOrdersList);
 
 // Read-only accountability view: everything shown here is either a field
 // already sitting on the order or an event already sitting in the
-// append-only log from orderLifecycle.js — no new history system, no
+// append-only log from orderLifecycle.js - no new history system, no
 // editing, no lifecycle actions.
 function renderOrderDetail(order) {
   const product = getProduct(order.items[0] ? order.items[0].productId : null);
@@ -778,11 +776,11 @@ function renderOrderDetail(order) {
     order.requestedBy ? `<p class="hint"><strong>Requested by</strong> ${escapeHtml(order.requestedBy)}</p>` : '',
     order.approvedBy ? `<p class="hint"><strong>${order.secondApprovedBy ? 'First approval' : 'Approved by'}</strong> ${escapeHtml(order.approvedBy)}</p>` : '',
     order.secondApprovedBy ? `<p class="hint"><strong>Second approval</strong> ${escapeHtml(order.secondApprovedBy)}</p>` : '',
-    order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${escapeHtml(order.rejectedBy)}${order.rejectionReason ? ` — ${escapeHtml(order.rejectionReason)}` : ''}</p>` : '',
+    order.rejectedBy ? `<p class="hint"><strong>Rejected by</strong> ${escapeHtml(order.rejectedBy)}${order.rejectionReason ? ` - ${escapeHtml(order.rejectionReason)}` : ''}</p>` : '',
     order.purchasedBy ? `<p class="hint"><strong>Purchased by</strong> ${escapeHtml(order.purchasedBy)}</p>` : '',
     order.driver ? `<p class="hint"><strong>Driver</strong> ${escapeHtml(order.driver)}</p>` : '',
-    order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${escapeHtml(order.cancelledBy)}${order.cancellationReason ? ` — ${escapeHtml(order.cancellationReason)}` : ''}</p>` : '',
-    order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${escapeHtml(order.orderCancelledBy)}${order.orderCancellationReason ? ` — ${escapeHtml(order.orderCancellationReason)}` : ''}</p>` : '',
+    order.cancelledBy ? `<p class="hint"><strong>Delivery cancelled by</strong> ${escapeHtml(order.cancelledBy)}${order.cancellationReason ? ` - ${escapeHtml(order.cancellationReason)}` : ''}</p>` : '',
+    order.orderCancelledBy ? `<p class="hint"><strong>Cancelled by</strong> ${escapeHtml(order.orderCancelledBy)}${order.orderCancellationReason ? ` - ${escapeHtml(order.orderCancellationReason)}` : ''}</p>` : '',
   ].filter(Boolean).join('');
 
   const pendingCancellation = !!getPendingCancellationRequestForOrder(order.id);
@@ -796,7 +794,7 @@ function renderOrderDetail(order) {
     ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
 
     <div class="product-preview">
-      <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
+      <div class="product-preview-icon" aria-hidden="true"></div>
       <div class="product-preview-info">
         <strong>${label}</strong>
         <ul class="order-items-list">
@@ -846,12 +844,12 @@ function renderOrderDetail(order) {
   if (photosEl) renderDeliveryPhotos(photosEl, order.id, { canUpload: false });
 }
 
-// Roadmap Step 5 — an Owner can optionally assign a new Worker to one or
+// Roadmap Step 5 - an Owner can optionally assign a new Worker to one or
 // more sites in the SAME interaction as approving them, removing an
 // otherwise-unnecessary second trip to Sites management. Purely additive:
 // assignment is always optional (approving with nothing checked behaves
 // exactly as before), zero-site membership and multi-site membership both
-// remain fully legal, and this reuses sites.js's existing addSiteMember —
+// remain fully legal, and this reuses sites.js's existing addSiteMember - 
 // no new permission path, no change to what decideJoinRequest itself
 // authorizes. Assignment is attempted only AFTER the approval itself
 // succeeds, and any assignment failure is reported on its own rather than
@@ -911,7 +909,7 @@ function renderJoinRequests(communityId) {
       // In-flight guard: a rapid second click would otherwise fire a second
       // decide_join_request on an already-decided row and surface its raw
       // 40001 error in an alert. Disable both actions on this card for the
-      // duration — a successful decision re-renders the panel (buttons gone),
+      // duration - a successful decision re-renders the panel (buttons gone),
       // a failure re-enables them. Same pattern as site.js's confirmBtn.
       const cardBtns = joinRequestsList.querySelectorAll(`[data-join-id="${requestId}"]`);
       cardBtns.forEach(b => { b.disabled = true; });
@@ -1000,14 +998,14 @@ function renderOrderCard(order) {
       let approveDisabled = '';
       let note = '';
       if (order.needsSecondApproval && !order.approvedById) {
-        note = '<p class="hint small-hint">This order is over the approval threshold — it needs two different owners to approve.</p>';
+        note = '<p class="hint small-hint">This order is over the approval threshold - it needs two different owners to approve.</p>';
         approveLabel = 'Approve (1 of 2)';
       } else if (iGaveFirst) {
-        note = '<p class="hint small-hint">You gave the first approval — a second owner must give the other.</p>';
+        note = '<p class="hint small-hint">You gave the first approval - a second owner must give the other.</p>';
         approveLabel = 'Approve';
         approveDisabled = 'disabled';
       } else if (firstDone) {
-        note = `<p class="hint small-hint">${order.approvedBy || 'Another owner'} approved this — it needs your approval too.</p>`;
+        note = `<p class="hint small-hint">${order.approvedBy || 'Another owner'} approved this - it needs your approval too.</p>`;
         approveLabel = 'Approve (2 of 2)';
       }
       actionHtml = `
@@ -1019,7 +1017,7 @@ function renderOrderCard(order) {
       `;
     }
   } else if (order.status === 'cancelled') {
-    // No revert path for a cancelled order this phase — renderRevertSection
+    // No revert path for a cancelled order this phase - renderRevertSection
     // would otherwise show its generic "once purchased, orders can't be
     // reverted" message here, which reads as if a purchase happened even
     // when it didn't (e.g. cancelled while still pending_approval).
@@ -1036,12 +1034,12 @@ function renderOrderCard(order) {
           <span class="requester-name">${requesterName}</span>
         </div>
         <div class="order-card-main">
-          <span class="owner-product-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</span>
+          <span class="owner-product-icon" aria-hidden="true"></span>
           <strong>${itemsShortSummary(order)}</strong>
           <span>${itemsSummary(order)}${order.totalPrice != null ? ` &middot; <span class="order-price">${formatPrice(order.totalPrice)}</span>` : ''}</span>
           <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
         </div>
-        <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details &rarr;</button>
+        <button type="button" class="link-btn order-detail-link" data-detail-id="${order.id}">View details</button>
       </div>
       <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner', order.deliveryMethod)}</span>
       ${order.fulfilmentStatus === 'partial' ? '<span class="status-badge status-rejected">Partial</span>' : ''}
@@ -1054,7 +1052,7 @@ function renderOrderCard(order) {
           ${order.stockistName ? `<span class="route-sub">${escapeHtml(order.stockistWebsite)} &middot; ${escapeHtml(order.stockistPostcode)}</span>` : ''}
           ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
         </div>
-        <div class="route-arrow">&rarr;</div>
+        <div class="route-arrow">to</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
           <span class="route-value">${escapeHtml(order.siteName || order.deliveryPostcode)}</span>
@@ -1113,7 +1111,7 @@ async function handleAction(action, orderId) {
 // Mirrors buyer.js's refreshBuyerView(orderId): an optional order id from a
 // notification click opens straight into that order's existing read-only
 // detail view (showOrderDetail below) instead of the default tab list. The
-// order must be found in latestOrders AND belong to the *active* community —
+// order must be found in latestOrders AND belong to the *active* community - 
 // this is what keeps a stale or cross-community id from ever opening a
 // detail view main.js's navigateToNotification hasn't already re-authorized
 // (it already re-checks role/community/site access before ever setting
@@ -1142,7 +1140,7 @@ subscribe(orders => {
 subscribeCommunities(render);
 subscribeOrderEvents(render);
 subscribeSites(render);
-// A new message on the currently-open order detail — re-render just the
+// A new message on the currently-open order detail - re-render just the
 // thread (a full render() would collapse any in-progress compose).
 subscribeOrderMessages(() => {
   if (selectedOrderId && !orderDetailPanel.hidden) {
@@ -1156,12 +1154,12 @@ subscribeDeliveryPhotos(() => {
     if (el) renderDeliveryPhotos(el, selectedOrderId, { canUpload: false });
   }
 });
-// Roadmap Step 4 — a pending cancellation request now feeds the card's
+// Roadmap Step 4 - a pending cancellation request now feeds the card's
 // next-action line (getPendingCancellationRequestForOrder), so a live
 // approve/reject/new-request change needs to re-render this view too.
 subscribeCancellationRequests(render);
 
-// Keep the revert countdowns ticking even when nothing else changes — only
+// Keep the revert countdowns ticking even when nothing else changes - only
 // the tabs whose orders can actually show a live countdown (pending_purchase
 // and rejected are the only statuses orderLifecycle.js's revert transition
 // applies to).

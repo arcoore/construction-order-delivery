@@ -1,10 +1,10 @@
-// Real Supabase Auth accounts (Phase 8B) — replaces the old plaintext
+// Real Supabase Auth accounts (Phase 8B) - replaces the old plaintext
 // localStorage account system entirely. "Skip for now" / guest mode has
 // been removed: an account is now required to use SiteStock at all (see
-// PROGRESS.md's Phase 8B section for why — anonymous Supabase auth is a
+// PROGRESS.md's Phase 8B section for why - anonymous Supabase auth is a
 // deliberately separate, not-yet-taken step).
 //
-// This module owns Supabase session state ONLY — no profile data lives
+// This module owns Supabase session state ONLY - no profile data lives
 // here. display_name/default_role are read straight off the session's own
 // user_metadata (set once at signUp, never queried from another table),
 // since they're the current user's own account facts, never looked up for
@@ -25,11 +25,11 @@ export function subscribeAuth(fn) {
   return () => listeners.delete(fn);
 }
 
-// Roadmap Step 5 — password recovery. Supabase-js fires a real
+// Roadmap Step 5 - password recovery. Supabase-js fires a real
 // PASSWORD_RECOVERY auth event (distinct from SIGNED_IN) when it detects a
 // recovery link's URL fragment on load (detectSessionInUrl: true, set in
 // supabaseClient.js). A recovery link DOES establish a real, usable session
-// — so isAuthenticated() would already be true the moment that happens,
+// - so isAuthenticated() would already be true the moment that happens,
 // which would otherwise make main.js's ordinary bootstrap route straight
 // into the community picker before the user ever gets to set a new
 // password. inPasswordRecoveryContext() is the explicit gate main.js's
@@ -37,13 +37,13 @@ export function subscribeAuth(fn) {
 // that (see main.js).
 //
 // The initial value below is a synchronous, best-effort check of the URL
-// hash itself (the same `type=recovery` marker Supabase's own link uses) —
+// hash itself (the same `type=recovery` marker Supabase's own link uses) - 
 // needed because there's no strict ordering guarantee between authReady's
 // getSession() resolving and onAuthStateChange's first PASSWORD_RECOVERY
 // event actually firing; both are driven by the same underlying
 // detectSessionInUrl processing, but relying on event-firing order alone
 // would be a real, if narrow, race. This never parses or extracts the
-// token itself — that's entirely supabase-js's job — it only reads a
+// token itself - that's entirely supabase-js's job - it only reads a
 // public, non-secret marker to decide whether to gate routing, and the
 // authoritative PASSWORD_RECOVERY event (below) confirms/extends it.
 let inPasswordRecovery = /type=recovery/.test(window.location.hash);
@@ -51,18 +51,18 @@ export function inPasswordRecoveryContext() {
   return inPasswordRecovery;
 }
 
-// main.js's bootstrap awaits this before the first route happens — nothing
+// main.js's bootstrap awaits this before the first route happens - nothing
 // ever renders a role view off an unknown/uninitialized auth state.
 export const authReady = supabase.auth.getSession().then(async ({ data }) => {
   currentSession = data.session;
   // A refresh mid-2FA-challenge (session is aal1, a verified factor exists)
-  // must re-gate — the JS flag doesn't survive a reload, the AAL does.
+  // must re-gate - the JS flag doesn't survive a reload, the AAL does.
   if (currentSession && await mfaLoginRequired()) mfaChallengePending = true;
   notify();
 });
 
 // Fires on every sign-in/sign-out/token-refresh/password-recovery,
-// including the initial resolution above and a cross-tab session change —
+// including the initial resolution above and a cross-tab session change - 
 // this is the one place currentSession is ever written after bootstrap.
 supabase.auth.onAuthStateChange((event, session) => {
   currentSession = session;
@@ -100,7 +100,7 @@ function friendlyAuthError(error) {
   }
   if (/already registered|already exists/i.test(msg)) return 'That email is already registered.';
   if (/invalid login credentials/i.test(msg)) return 'Incorrect email or password.';
-  if (/invalid.*(totp|code)|mfa/i.test(msg)) return 'That code isn\'t right — check your authenticator app and try again.';
+  if (/invalid.*(totp|code)|mfa/i.test(msg)) return 'That code isn\'t right - check your authenticator app and try again.';
   if (/password.*(least|short)/i.test(msg)) return msg;
   return msg;
 }
@@ -121,7 +121,7 @@ export async function createAccount(email, password, displayName, defaultRole) {
       data: { display_name: displayName, default_role: defaultRole },
       // Where the confirmation link lands after Supabase verifies the token.
       // Computed from window.location (never hardcoded) so the same build
-      // works on localhost and on the deployed site — matches how
+      // works on localhost and on the deployed site - matches how
       // requestPasswordReset / requestEmailChange already do it. Every origin
       // this can produce is in config.toml's additional_redirect_urls.
       emailRedirectTo: window.location.origin + window.location.pathname,
@@ -130,7 +130,7 @@ export async function createAccount(email, password, displayName, defaultRole) {
   if (error) return { error: friendlyAuthError(error) };
   // Email confirmation is required (config.toml enable_confirmations = true):
   // signUp returns no session, and the user must click the link in their
-  // inbox before they can log in — a normal, non-error outcome the caller
+  // inbox before they can log in - a normal, non-error outcome the caller
   // shows as an info state, not a red error (see authView.js). Locally the
   // link's email is captured in Mailpit (http://127.0.0.1:54324) unless a
   // real SMTP provider is set in supabase/.env.
@@ -142,7 +142,7 @@ export async function createAccount(email, password, displayName, defaultRole) {
   return { account: accountFromSession(data.session) };
 }
 
-// Re-send the signup confirmation email — the "Resend" button on the
+// Re-send the signup confirmation email - the "Resend" button on the
 // check-your-email screen. Supabase rate-limits this; a 429 becomes a
 // friendly "wait a moment" rather than a raw error.
 export async function resendConfirmation(email) {
@@ -170,7 +170,7 @@ export async function login(email, password) {
   currentSession = data.session;
 
   // Two-factor: if this account has a verified TOTP factor, the password
-  // only got us to aal1 — the app stays gated (mfaChallengePending) until
+  // only got us to aal1 - the app stays gated (mfaChallengePending) until
   // verifyMfaLogin() steps the session up to aal2. main.js's routeFromTop()
   // checks mfaChallengePending() before the authenticated check, exactly
   // like the password-recovery gate.
@@ -187,7 +187,7 @@ export async function login(email, password) {
 // Supabase-native MFA (supabase.auth.mfa.*). Opt-in per account from the
 // Profile screen. Once a factor is verified, login requires the 6-digit
 // code (the client gate here + an aal2 re-check on the sensitive write
-// RPCs — migration 0040 — so a stolen password + a raw aal1 token still
+// RPCs - migration 0040 - so a stolen password + a raw aal1 token still
 // can't place/approve orders or touch the company).
 let mfaChallengePending = false; // set true by login() when a 2nd factor is owed
 export function isMfaChallengePending() { return mfaChallengePending; }
@@ -221,7 +221,7 @@ async function verifiedTotpFactorId() {
   }
 }
 
-// Whether the CURRENT user has 2FA switched on — for the Profile toggle.
+// Whether the CURRENT user has 2FA switched on - for the Profile toggle.
 export async function getMfaEnabled() {
   return !!(await verifiedTotpFactorId());
 }
@@ -271,7 +271,7 @@ export async function verifyMfaLogin(code) {
 }
 
 // Turn 2FA off (unenroll every TOTP factor). Requires the current session
-// to already be aal2 — Supabase refuses unenroll otherwise, which is the
+// to already be aal2 - Supabase refuses unenroll otherwise, which is the
 // desired behaviour (you can't drop 2FA without passing it).
 export async function disableMfa() {
   try {
@@ -281,7 +281,7 @@ export async function disableMfa() {
       if (error) return { error: friendlyAuthError(error) };
     }
   } catch (e) {
-    return { error: 'Could not turn 2FA off — try again.' };
+    return { error: 'Could not turn 2FA off - try again.' };
   }
   notify();
   return { ok: true };
@@ -296,7 +296,7 @@ export async function logout() {
 
 // Product-audit gap fix: self-service account deletion. Deleting an Auth
 // user requires the service_role key, which must never reach the browser
-// (see CLAUDE.md's guardrails) — so this calls a server-side Edge Function
+// (see CLAUDE.md's guardrails) - so this calls a server-side Edge Function
 // (supabase/functions/delete-account) instead of touching auth.admin
 // directly. That function forwards this call's own session as the
 // Authorization header automatically (supabase-js's functions.invoke
@@ -304,20 +304,20 @@ export async function logout() {
 // with its own admin client.
 //
 // profiles.id has no ON DELETE CASCADE from orders/sites/communities.owner_id
-// on purpose — deleting an account must never silently delete a company's
+// on purpose - deleting an account must never silently delete a company's
 // real business records. That means the deletion genuinely only succeeds
 // for an account with no owned history at all (a fresh signup, essentially);
 // any real account still creating/purchasing/driving/owning something is
 // refused with a clear, honest error rather than partially succeeding or
 // silently corrupting historical records. There is deliberately no
-// automatic anonymization path — that needs a real policy decision, not a
+// automatic anonymization path - that needs a real policy decision, not a
 // default baked in here.
 export async function deleteAccount() {
   const { data, error } = await supabase.functions.invoke('delete-account');
   if (error) {
     // supabase-js surfaces a non-2xx function response as `error`, with the
     // function's own JSON body (containing our friendly `error` message)
-    // available on error.context — fall back to a generic message if that
+    // available on error.context - fall back to a generic message if that
     // shape isn't present (e.g. a genuine network failure reaching the
     // function at all).
     const body = await error.context?.json?.().catch(() => null);
@@ -328,14 +328,14 @@ export async function deleteAccount() {
   return { ok: true };
 }
 
-// Roadmap Step 5 — password reset. Always returns the same generic success
-// shape regardless of whether the email is actually registered — this is
+// Roadmap Step 5 - password reset. Always returns the same generic success
+// shape regardless of whether the email is actually registered - this is
 // Supabase's own resetPasswordForEmail behavior already (it never reveals
 // account existence), and the caller (authView.js) must not undermine that
 // by branching UI copy on anything this returns beyond a real network
 // failure. redirectTo is computed from window.location at call time (never
 // hardcoded) so the same code works unmodified on localhost, GitHub Pages,
-// or any future host — matching env.js's existing "no build-time env
+// or any future host - matching env.js's existing "no build-time env
 // injection, read the actual runtime location" approach.
 export async function requestPasswordReset(email) {
   email = (email || '').trim();
@@ -343,7 +343,7 @@ export async function requestPasswordReset(email) {
   const redirectTo = window.location.origin + window.location.pathname;
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   // A real send failure (bad request, rate limit, network) is shown as an
-  // error; anything else — including "no such account" — must never be
+  // error; anything else - including "no such account" - must never be
   // distinguishable from success, so only a genuine `error` from the call
   // itself is ever surfaced here.
   if (error) return { error: friendlyAuthError(error) };
@@ -351,7 +351,7 @@ export async function requestPasswordReset(email) {
 }
 
 // Only callable meaningfully while inPasswordRecoveryContext() is true (a
-// real recovery session is active) — updateUser on that session both
+// real recovery session is active) - updateUser on that session both
 // changes the password and leaves the user authenticated, no separate
 // re-login step needed. Clears the recovery gate on success so main.js's
 // routeFromTop() resumes normal routing immediately afterward.
@@ -371,8 +371,8 @@ export async function completePasswordReset(newPassword) {
 // reads). updateUser writes the first (and returns the updated user, set on
 // currentSession directly here the same way login()/createAccount() do, so
 // the change is visible on the very next render without waiting for the
-// USER_UPDATED event); the profiles UPDATE — allowed by the
-// profiles_update_own RLS policy (0009) — writes the second. auth.uid(),
+// USER_UPDATED event); the profiles UPDATE - allowed by the
+// profiles_update_own RLS policy (0009) - writes the second. auth.uid(),
 // the only thing any permission check depends on, never changes.
 export async function updateDisplayName(newName) {
   newName = (newName || '').trim();
@@ -393,12 +393,12 @@ export async function updateDisplayName(newName) {
 // Self-service email change (product-audit gap fix). Supabase Auth's own
 // secure-email-change flow: updateUser({ email }) sends a confirmation link
 // to the NEW address (and, depending on the project's Auth settings, also
-// to the old one) — the change only takes effect once that link is
+// to the old one) - the change only takes effect once that link is
 // followed. detectSessionInUrl is already true (set for password recovery),
 // so the confirmation link is picked up automatically when the user returns.
 // This function just kicks it off; it never changes the email directly.
-// display_name / user_metadata are untouched, and auth.uid() — the only
-// identity anything actually depends on — never changes.
+// display_name / user_metadata are untouched, and auth.uid() - the only
+// identity anything actually depends on - never changes.
 export async function requestEmailChange(newEmail) {
   newEmail = (newEmail || '').trim();
   if (!newEmail) return { error: 'Please enter your new email address.' };

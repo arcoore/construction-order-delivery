@@ -1,4 +1,4 @@
-// Roadmap Step 3 — the product catalogue (PRODUCTS, searchProducts,
+// Roadmap Step 3 - the product catalogue (PRODUCTS, searchProducts,
 // getProduct, and the ALL_BRANCH_IDS seed-authoring shorthand) moved to
 // Supabase-backed `products.js` (real `products`/`product_variants` tables,
 // see supabase/migrations/0020_product_catalogue.sql), following the exact
@@ -23,9 +23,9 @@ export function escapeHtml(s) {
 export function formatPrice(amount) {
   // Null-safe on purpose: a few call sites render a price that can legitimately
   // be absent (an order or line item whose unit price never got set), and a
-  // hard `null.toFixed()` crash there would take down the whole card. "—" is
+  // hard `null.toFixed()` crash there would take down the whole card. " - " is
   // the same "no value" placeholder the rest of the UI uses.
-  if (amount == null || Number.isNaN(Number(amount))) return '—';
+  if (amount == null || Number.isNaN(Number(amount))) return ' - ';
   return `£${Number(amount).toFixed(2)}`;
 }
 
@@ -35,7 +35,7 @@ const AVAILABILITY_OPTIONS = [
   { key: 'tomorrow', label: 'Ready for pickup tomorrow morning' },
 ];
 
-// Deterministic mock stock estimate — stable per branch+product so it doesn't
+// Deterministic mock stock estimate - stable per branch+product so it doesn't
 // flicker between renders, standing in for a real stock/ETA feed.
 export function getAvailability(branchId, productId) {
   const seed = `${branchId}:${productId}`;
@@ -46,20 +46,10 @@ export function getAvailability(branchId, productId) {
   return AVAILABILITY_OPTIONS[hash % AVAILABILITY_OPTIONS.length];
 }
 
-const CATEGORY_ICONS = {
-  'Timber': '🪵',
-  'Building Materials': '🧱',
-  'Aggregates': '⛰️',
-  'Insulation': '🧊',
-  'Fixings & Fasteners': '🔩',
-  'Roofing': '🏠',
-  'PPE': '🦺',
-  'Plumbing': '🚿',
-  'Tools': '🛠️',
-};
-
-export function getCategoryIcon(category) {
-  return CATEGORY_ICONS[category] || '📦';
+// Kept as a no-op so existing call sites don't need touching - the UI is
+// text-only now, no category icons.
+export function getCategoryIcon() {
+  return '';
 }
 
 export function getInitials(name) {

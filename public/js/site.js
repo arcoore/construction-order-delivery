@@ -38,21 +38,21 @@ let latestOrders = [];
 // Multi-item (migration 0030). The Worker builds up an order by adding
 // materials one at a time; each entry is { productId, productName, variant,
 // unit, unitPrice, quantity }. Cleared only on a successful submit or an
-// explicit "Clear order" — closing the add-material form keeps it, so you
+// explicit "Clear order" - closing the add-material form keeps it, so you
 // can add several. Order-level fields (site, postcode, needed-by, delivery
 // method, supplier) are chosen once, after the cart is built.
 let cart = [];
 
-// Phase 7C — Worker corrections & cancellation UI. All of these are purely
+// Phase 7C - Worker corrections & cancellation UI. All of these are purely
 // display-state; every action they lead to still calls the guarded Phase 7B
 // functions (editOrder/cancelOrderDirect/requestCancellation), which
 // independently re-check requestedById/membership/status themselves. Nothing
-// here is itself a permission — it only decides what to *show*.
+// here is itself a permission - it only decides what to *show*.
 let editState = null; // { order, product, variant, quantity, deliveryPostcode, site, stockistId, stockistName, stockistWebsite, stockistPostcode, pickupEstimate, unitPrice, mode }
 let cancellingOrderId = null;
 let requestingCancelOrderId = null;
 
-// A site must be chosen before the search panel is even reachable — this is
+// A site must be chosen before the search panel is even reachable - this is
 // what makes it impossible for a worker to submit an order without a real
 // siteId, on top of the authorization check orderLifecycle.js's createOrder
 // performs independently (see its header comment: a reference is never
@@ -73,7 +73,7 @@ function renderSiteSelectList() {
   const sites = getActiveSitesForUser(communityId, userId);
 
   if (sites.length === 0) {
-    workerSitesList.innerHTML = '<p class="empty-hint">You haven\'t been assigned to a site yet — ask your owner to add you to one.</p>';
+    workerSitesList.innerHTML = '<p class="empty-hint">You haven\'t been assigned to a site yet - ask your owner to add you to one.</p>';
     return;
   }
 
@@ -117,7 +117,7 @@ function cartBarHtml() {
       <span>${count} ${count === 1 ? 'material' : 'materials'} in this order</span>
       <div class="cart-bar-actions">
         <button type="button" class="link-btn" id="cart-clear-btn">Clear</button>
-        <button type="button" class="btn btn-primary btn-small" id="cart-review-btn">Review order &rarr;</button>
+        <button type="button" class="btn btn-primary btn-small" id="cart-review-btn">Review order</button>
       </div>
     </div>`;
 }
@@ -193,7 +193,7 @@ function renderQuantityStep(product, variant) {
     product.variants ? () => renderVariantStep(product) : backToSearchKeepingCart
   );
   orderFormEl.innerHTML = `
-    <h2>${product.name}${variant ? ` &mdash; ${variant}` : ''}</h2>
+    <h2>${product.name}${variant ? ` - ${variant}` : ''}</h2>
     <p class="hint">${product.category} &middot; ${formatPrice(product.unitPrice)} per ${product.unit}</p>
     <label class="field-label" for="qty-input">How many (${product.unit})?</label>
     <input type="number" id="qty-input" class="text-input" min="1" value="1" />
@@ -234,14 +234,14 @@ function renderVariantStep(product) {
         <button type="button" class="variant-option" data-variant="${v}">
           <span class="variant-option-radio" aria-hidden="true"></span>
           <span class="variant-option-label">${v}</span>
-          <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+          <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `).join('')}
 
       <button type="button" class="variant-option variant-option-custom" id="custom-size-toggle">
         <span class="variant-option-radio" aria-hidden="true">+</span>
-        <span class="variant-option-label">None of these — enter a custom size</span>
-        <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+        <span class="variant-option-label">None of these - enter a custom size</span>
+        <span class="variant-option-arrow" aria-hidden="true"></span>
       </button>
     </div>
 
@@ -287,10 +287,10 @@ function renderVariantStep(product) {
 
 // --- Needed-by control (Roadmap Step 2) --------------------------------
 // One control, one set of rules, shared between the create flow's details
-// step and the edit flow's summary panel — never a second, different
+// step and the edit flow's summary panel - never a second, different
 // deadline UX for editing. onChange always receives the real stored shape
 // ({ type: 'asap'|'deadline'|null, date: Date|null }) that
-// orderLifecycle.js's createOrder/editOrder actually expect — 'today'/
+// orderLifecycle.js's createOrder/editOrder actually expect - 'today'/
 // 'tomorrow' are UI-only button keys, resolved here into a real Date via
 // deadline.js, and never themselves stored (see that module's header for
 // why: a stored 'tomorrow' would go stale once real time moves past it).
@@ -311,10 +311,10 @@ function renderNeededByControl(current) {
   `;
 }
 
-// initialUiKey pre-highlights a button on first render only — 'asap' for an
+// initialUiKey pre-highlights a button on first render only - 'asap' for an
 // existing ASAP choice, 'custom' for any existing concrete deadline (we
 // can't and don't need to know whether it originally came from Today/
-// Tomorrow/a manual pick — the timestamp is all that's real; see above).
+// Tomorrow/a manual pick - the timestamp is all that's real; see above).
 function wireNeededByControl(root, initialUiKey, onChange) {
   const group = root.querySelector('#needed-by-group');
   const customForm = root.querySelector('#needed-by-custom-form');
@@ -372,7 +372,7 @@ function renderDetailsStep(prefill = null) {
     : { type: null, date: null };
 
   orderFormEl.innerHTML = `
-    <h2>Your order &mdash; ${cart.length} ${cart.length === 1 ? 'material' : 'materials'}</h2>
+    <h2>Your order - ${cart.length} ${cart.length === 1 ? 'material' : 'materials'}</h2>
     <p class="hint">Requesting as <strong>${getCurrentDisplayName() || 'Unknown'}</strong></p>
 
     <ul class="order-items-list" id="cart-items">
@@ -439,7 +439,7 @@ async function goToSourceStep(neededByChoice, deliveryMethod) {
 
   const location = await geocodePostcode(postcode);
   if (!location) {
-    statusEl.textContent = `Couldn't verify "${postcode}" — check it and try again.`;
+    statusEl.textContent = `Couldn't verify "${postcode}" - check it and try again.`;
     statusEl.className = 'form-status error';
     return;
   }
@@ -458,18 +458,18 @@ async function goToSourceStep(neededByChoice, deliveryMethod) {
   renderSourceStep(details);
 }
 
-// Phase A — honest, distance-only supplier ranking. Real straight-line
+// Phase A - honest, distance-only supplier ranking. Real straight-line
 // (haversine) distance from the Site's already-geocoded delivery coordinate
-// to each candidate branch, nearest first — the only ranking factor here,
+// to each candidate branch, nearest first - the only ranking factor here,
 // since price/availability are still demo/static data (see data.js) and
 // would be dishonest to rank on. Never mutates the shared BRANCHES fixture
-// or product.branchIds — always maps to new objects. A branch (or,
-// defensively, a missing delivery coordinate — shouldn't happen given
+// or product.branchIds - always maps to new objects. A branch (or,
+// defensively, a missing delivery coordinate - shouldn't happen given
 // goToSourceStep already blocks on a failed geocode, but checked anyway)
 // without a usable coordinate sorts last, labeled "Distance unavailable"
 // rather than showing NaN or silently pretending a distance was computed.
 // Array.prototype.sort is stable (ES2019+), so equal/unavailable distances
-// naturally fall back to the existing catalog order — no secondary sort key
+// naturally fall back to the existing catalog order - no secondary sort key
 // needed.
 function rankBranchesByDistance(branches, details) {
   const origin = (details.deliveryLat != null && details.deliveryLon != null)
@@ -491,7 +491,7 @@ function rankBranchesByDistance(branches, details) {
 }
 
 // One supplier for the whole order. Branch ranking uses the first cart
-// item's product as the representative — multi-supplier-per-order is
+// item's product as the representative - multi-supplier-per-order is
 // deliberately out of scope (see migration 0030's header).
 function renderSourceStep(details) {
   setBackAction('Back to order details', () => renderDetailsStep(details));
@@ -503,7 +503,7 @@ function renderSourceStep(details) {
   orderFormEl.innerHTML = `
     <h2>Where should this be ordered from?</h2>
     <p class="hint">${cart.length} ${cart.length === 1 ? 'material' : 'materials'} &middot; deliver to ${escapeHtml(details.deliveryPostcode)}</p>
-    <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock — pick one to tell the driver where to buy it.</p>
+    <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock - pick one to tell the driver where to buy it.</p>
     <div class="variant-list">
       ${sources.map(s => {
         const avail = getAvailability(s.id, repProduct.id);
@@ -516,7 +516,7 @@ function renderSourceStep(details) {
             <span class="source-distance">${s.distanceKm != null ? `~${s.distanceKm.toFixed(1)} km from site` : 'Distance unavailable'}</span>
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
-          <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+          <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `;
       }).join('')}
@@ -552,7 +552,7 @@ function renderConfirmStep(details, branch, avail) {
       </div>
       <span class="source-meta">${escapeHtml(branch.website)} &middot; ${escapeHtml(branch.postcode)}</span>
       <a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml(branch.name.split(' - ')[0])}'s website &nearr;</a>
-      <p class="hint small-hint">Opens their homepage in a new tab — this is a demo catalog, so it isn't linked to the exact product listing.</p>
+      <p class="hint small-hint">Opens their homepage in a new tab - this is a demo catalog, so it isn't linked to the exact product listing.</p>
     </div>
 
     <p class="hint">Delivering to <strong>${escapeHtml(details.deliveryPostcode)}</strong>.</p>
@@ -599,7 +599,7 @@ async function submitOrder(details, branch, avail, confirmBtn) {
     <h2>Request sent</h2>
     <p class="hint">${itemsShortSummary(result.order)} from ${escapeHtml(branch.name)}, delivering to ${escapeHtml(details.deliveryPostcode)}. ${stillApprovalRequired
       ? 'Waiting for the owner to approve it before a buyer can purchase it.'
-      : 'It\'s gone straight to a buyer to purchase — this company doesn\'t require owner approval.'}</p>
+      : 'It\'s gone straight to a buyer to purchase - this company doesn\'t require owner approval.'}</p>
   `;
   backBtn.hidden = true;
 
@@ -617,16 +617,16 @@ function closeOrderForm() {
   resultsEl.innerHTML = '';
 }
 
-// Roadmap Step 4 — which of the Worker's own order cards currently has its
+// Roadmap Step 4 - which of the Worker's own order cards currently has its
 // inline history/timeline expanded. Purely UI state, like editState/
-// cancellingOrderId above — never touches the guarded lifecycle functions,
+// cancellingOrderId above - never touches the guarded lifecycle functions,
 // and is reset (along with them) whenever the Worker view is refreshed.
 let expandedHistoryIds = new Set();
 
 // --- Phase 7C: Worker corrections & cancellation UI -------------------
 
 // A pure UI mirror of the zones editOrder()/cancelOrderDirect() already
-// enforce — used only to decide what buttons to show. The real gate is
+// enforce - used only to decide what buttons to show. The real gate is
 // always the guarded function itself, called fresh when a button is
 // actually pressed, never this predicate.
 function canEditOrCancelDirectly(order) {
@@ -634,7 +634,7 @@ function canEditOrCancelDirectly(order) {
 }
 
 function canRequestCancellation(order) {
-  // Migration 0035 — 'collected' is now allowed too; the Buyer's approval
+  // Migration 0035 - 'collected' is now allowed too; the Buyer's approval
   // then asks the driver to arrange the return. 'delivered' stays out.
   return order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected';
 }
@@ -643,7 +643,7 @@ function cancellationStateHint(order) {
   if (order.status === 'cancelled') return '';
   const pending = getPendingCancellationRequestForOrder(order.id);
   if (pending) {
-    return `<p class="hint small-hint">Cancellation requested — awaiting Buyer decision.</p>`;
+    return `<p class="hint small-hint">Cancellation requested - awaiting Buyer decision.</p>`;
   }
   const history = getCancellationRequestsForOrder(order.id);
   const latest = history.length ? history.reduce((a, b) => (a.createdAt > b.createdAt ? a : b)) : null;
@@ -682,7 +682,7 @@ function renderWorkerActions(order) {
 function renderCancelHoldForm() {
   return `
     <div class="reject-form">
-      <p class="hint small-hint">This stops the order inside SiteStock — it won't be approved, purchased, or delivered.</p>
+      <p class="hint small-hint">This stops the order inside SiteStock - it won't be approved, purchased, or delivered.</p>
       <button type="button" class="btn btn-primary btn-block hold-confirm-btn" id="hold-cancel-btn">
         <span class="hold-confirm-fill" id="hold-cancel-fill"></span>
         <span class="hold-confirm-label" id="hold-cancel-label">Press and hold to cancel</span>
@@ -698,7 +698,7 @@ function renderRequestCancelForm(order) {
     <div class="reject-form">
       <label class="field-label" for="request-cancel-reason-input">Why do you want to cancel? (required)</label>
       <input type="text" id="request-cancel-reason-input" class="text-input" placeholder="e.g. Site plan changed, no longer needed" />
-      <p class="hint small-hint">This has already been purchased, so it sends a request to the Buyer to decide — it doesn't automatically refund or cancel anything with the supplier.${order.status === 'collected' ? ' The driver has already collected it, so if approved they\'ll be asked to arrange the return.' : ''}</p>
+      <p class="hint small-hint">This has already been purchased, so it sends a request to the Buyer to decide - it doesn't automatically refund or cancel anything with the supplier.${order.status === 'collected' ? ' The driver has already collected it, so if approved they\'ll be asked to arrange the return.' : ''}</p>
       <div class="reject-form-actions">
         <button class="btn btn-secondary" data-worker-action="request-cancel-never-mind" data-id="${order.id}">Never mind</button>
         <button class="btn btn-primary" data-worker-action="request-cancel-submit" data-id="${order.id}">Send request</button>
@@ -736,7 +736,7 @@ function wireCancelHoldButton(orderId) {
     tick();
   }
 
-  // Unlike the Buyer's purchase hold, nothing is called at pointerdown —
+  // Unlike the Buyer's purchase hold, nothing is called at pointerdown - 
   // cancelOrderDirect is a single atomic action with no "in progress" state
   // in the data layer (there's no data-layer lock to abandon on release),
   // so it's only ever called once, right at the moment the hold completes.
@@ -827,16 +827,16 @@ async function handleWorkerAction(action, orderId) {
 
 // --- Edit flow ----------------------------------------------------------
 // A compact, single-panel edit form rather than re-running the full
-// creation wizard as separate screens — reuses the exact same underlying
+// creation wizard as separate screens - reuses the exact same underlying
 // data (searchProducts/getBranchesForProduct/getAvailability) and the same
 // picker markup patterns (.result-card/.variant-list/.variant-option/
 // .source-option), just laid out as progressive reveal within one panel.
 // Every value collected here only ever reaches the order via editOrder()'s
-// own field whitelist and re-authorization — this form cannot bypass that.
+// own field whitelist and re-authorization - this form cannot bypass that.
 
 function openEditForm(order) {
   // Multi-item (migration 0030): editState.items is the working copy of the
-  // order's line items — { productId, productName, variant, unit, unitPrice,
+  // order's line items - { productId, productName, variant, unit, unitPrice,
   // quantity }. editIndex is which item the material/variant picker is
   // currently targeting ('new' appends).
   editState = {
@@ -917,7 +917,7 @@ function renderEditPickItemQty() {
   const existing = editState.editIndex !== 'new' ? editState.items[editState.editIndex] : null;
   const startQty = existing && existing.productId === p.id ? existing.quantity : 1;
   orderFormEl.innerHTML = `
-    <h2>${p.name}${v ? ` &mdash; ${v}` : ''}</h2>
+    <h2>${p.name}${v ? ` - ${v}` : ''}</h2>
     <label class="field-label" for="edit-item-qty-input">How many (${p.unit})?</label>
     <input type="number" id="edit-item-qty-input" class="text-input" min="1" value="${startQty}" />
     <button type="button" id="edit-item-qty-continue" class="btn btn-primary btn-block">${editState.editIndex === 'new' ? 'Add to order' : 'Update material'}</button>
@@ -1034,7 +1034,7 @@ function renderEditSummary() {
 function renderEditPickMaterial() {
   orderFormEl.innerHTML = `
     <h2>Change material</h2>
-    <p class="hint">Start typing to find a different material — you'll also need to pick a size and stockist for it.</p>
+    <p class="hint">Start typing to find a different material - you'll also need to pick a size and stockist for it.</p>
     <input type="text" id="edit-material-search-input" class="search-input" placeholder="Search for materials, tools, PPE…" autocomplete="off" />
     <div id="edit-material-results" class="results-list"></div>
     <button type="button" class="link-btn" id="edit-material-cancel-btn">Cancel</button>
@@ -1080,13 +1080,13 @@ function renderEditPickVariant() {
         <button type="button" class="variant-option" data-variant="${v}">
           <span class="variant-option-radio" aria-hidden="true"></span>
           <span class="variant-option-label">${v}</span>
-          <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+          <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `).join('')}
       <button type="button" class="variant-option variant-option-custom" id="edit-custom-size-toggle">
         <span class="variant-option-radio" aria-hidden="true">+</span>
-        <span class="variant-option-label">None of these — enter a custom size</span>
-        <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+        <span class="variant-option-label">None of these - enter a custom size</span>
+        <span class="variant-option-arrow" aria-hidden="true"></span>
       </button>
     </div>
     <div class="custom-size-form" id="edit-custom-size-form" hidden>
@@ -1138,7 +1138,7 @@ function renderEditPickSource() {
             <span class="source-meta">${s.website} &middot; ${s.postcode}</span>
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
-          <span class="variant-option-arrow" aria-hidden="true">&rarr;</span>
+          <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `;
       }).join('')}
@@ -1166,7 +1166,7 @@ function renderEditPickSource() {
 }
 
 // The exact same authorized-sites source the initial site picker uses
-// (getActiveSitesForUser) — never a free-text field, so a target site the
+// (getActiveSitesForUser) - never a free-text field, so a target site the
 // Worker isn't assigned to can't even be offered here, on top of
 // editOrder()'s own independent canCreateOrderForSite re-check.
 function renderEditPickSite() {
@@ -1220,12 +1220,12 @@ async function submitEdit() {
   const deliveryPostcode = postcodeRaw.toUpperCase();
 
   // Unlike creation, an edit must NOT force a fresh Needed-by choice on
-  // every save — a historical order's untouched null/null (or an
+  // every save - a historical order's untouched null/null (or an
   // unmodified ASAP/existing deadline) is completely legal to save
   // straight through, since edit_order's own "only re-validate what's
   // actually changing" rule already handles that correctly server-side.
   // The only client-side guard needed here is against a genuinely
-  // inconsistent state (a 'deadline' selection with no timestamp) — which
+  // inconsistent state (a 'deadline' selection with no timestamp) - which
   // wireNeededByControl's own custom-input handling already prevents in
   // practice, but this stays as defense-in-depth against the CHECK
   // constraint's 23514 rather than a friendly message.
@@ -1253,7 +1253,7 @@ async function submitEdit() {
     statusEl.className = 'form-status';
     const location = await geocodePostcode(deliveryPostcode);
     if (!location) {
-      statusEl.textContent = `Couldn't verify "${deliveryPostcode}" — check it and try again.`;
+      statusEl.textContent = `Couldn't verify "${deliveryPostcode}" - check it and try again.`;
       statusEl.className = 'form-status error';
       return;
     }
@@ -1343,7 +1343,7 @@ function renderSiteOrders() {
 // --- Roadmap Step 4: Worker's own-order inline history ------------------
 // Reuses orderStatus.js's describeEvent (the exact same icon/text map
 // owner.js's dashboard activity feed and order-detail timeline already use)
-// and the existing .activity-list/.activity-item CSS — no new timeline
+// and the existing .activity-list/.activity-item CSS - no new timeline
 // rendering system, no new event data, no new panel/route.
 
 function renderHistoryToggle(order) {
@@ -1403,33 +1403,33 @@ subscribeOrderMessages(() => {
   }
 });
 
-// Roadmap Step 4 — keeps an expanded history panel live: order_events isn't
+// Roadmap Step 4 - keeps an expanded history panel live: order_events isn't
 // itself in the Realtime publication, but refreshOrderCache() always
 // refetches orders/order_events/cancellation_requests together (see
 // orderLifecycle.js), so any orders-table change (which every event-producing
 // RPC also makes, in the same transaction) already re-populates the event
-// cache too — this just re-renders off it, no new subscription needed.
+// cache too - this just re-renders off it, no new subscription needed.
 subscribeOrderEvents(renderSiteOrders);
 
-// Phase 8D.2 — live site-picker freshness, PLUS (Test 4 fix) live
+// Phase 8D.2 - live site-picker freshness, PLUS (Test 4 fix) live
 // active-site invalidation. The original version of this handler only
 // re-rendered the picker's own LIST, and only while the Worker was actually
-// sitting on the picker screen (siteSelectPanel visible) — that's the case
+// sitting on the picker screen (siteSelectPanel visible) - that's the case
 // the local multi-tab verification covered, and it worked. A real
 // second-physical-device test found the actual gap: a Worker who had
 // already CHOSEN a site (`selectedSite` set, now on the search/order-form
 // screens with the picker hidden) kept using that site with no visible
-// change after their membership was removed mid-session — nothing here was
+// change after their membership was removed mid-session - nothing here was
 // even looking at `selectedSite` at all, so a Realtime-triggered cache
 // refresh had nothing to react to for that case. Fixed by additionally
 // checking, on every refreshed (authoritative, never the raw Realtime
 // payload) sites cache, whether the Worker's current `selectedSite` is
-// still in their real authorized list — if not, `refreshWorkerView()` (the
+// still in their real authorized list - if not, `refreshWorkerView()` (the
 // same full reset `main.js` already uses on ordinary view-entry) closes
 // whatever order/edit context was open and returns them to a freshly
 // re-derived site-selection screen, which itself shows the existing
 // "you haven't been assigned to a site yet" message if none remain. This
-// was always a UI-freshness gap, never a security one — createOrder's/
+// was always a UI-freshness gap, never a security one - createOrder's/
 // editOrder's own canCreateOrderForSite re-check already refuses
 // server-side regardless of what this UI happens to be showing.
 subscribeSites(() => {

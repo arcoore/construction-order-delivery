@@ -43,7 +43,7 @@
   --text-muted: #735f53;
   --green: #2e7d46;
   --red: #b23524;
-  --radius: 3px;
+  --radius: 0;
 
   --blue: #12344a;
   --brown: #65412e;
@@ -94,10 +94,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-.brand-mark::before {
-  content: '🚚 ';
-}
-
 .brand-sub {
   font-size: 0.85rem;
   color: #d8c2ae;
@@ -108,7 +104,7 @@ body {
   border: 1px solid rgba(255,255,255,0.3);
   color: white;
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 0.9rem;
   cursor: pointer;
 }
@@ -126,16 +122,14 @@ body {
   color: white;
   height: 40px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.12s ease;
 }
 
 .pill-btn:hover {
   border-color: rgba(255,255,255,0.7);
-  transform: translateY(-1px);
 }
 
 .pill-btn[hidden] {
@@ -167,7 +161,7 @@ body {
 .circle-btn {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   border: 2px solid rgba(255,255,255,0.25);
   display: flex;
   align-items: center;
@@ -176,12 +170,10 @@ body {
   font-weight: 700;
   color: white;
   cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.12s ease;
 }
 
 .circle-btn:hover {
   border-color: rgba(255,255,255,0.7);
-  transform: translateY(-1px);
 }
 
 .circle-btn-community {
@@ -192,7 +184,7 @@ body {
   width: auto;
   min-width: 76px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0 18px;
   font-size: 0.82rem;
   letter-spacing: 0.02em;
@@ -208,10 +200,9 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 3px;
-  box-shadow: 0 14px 34px rgba(63, 41, 31, 0.22);
+  border-radius: 0;
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -229,7 +220,7 @@ body {
   border: none;
   text-align: left;
   padding: 9px 10px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text);
@@ -251,11 +242,27 @@ body {
 
 .circle-btn-notif {
   background: var(--navy-light);
-  font-size: 1.1rem;
-  /* Anchor .notif-badge (a child of this button) to the bell itself, now that
-     .notif-wrap is no longer a positioning context. */
+  width: auto;
+  padding: 0 16px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  /* Anchor .notif-badge (a child of this button) to the button itself, now
+     that .notif-wrap is no longer a positioning context. */
   position: relative;
 }
+
+/* Icon slots are text-only now — any that render empty collapse so they
+   don't leave a phantom gap in their flex row. */
+.activity-icon:empty,
+.notif-row-icon:empty,
+.role-select-icon:empty,
+.product-preview-icon:empty,
+.owner-product-icon:empty,
+.variant-option-arrow:empty,
+.route-arrow:empty,
+.modal-icon:empty { display: none; }
 
 .notif-badge {
   position: absolute;
@@ -264,7 +271,7 @@ body {
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--red);
   color: white;
   font-size: 0.68rem;
@@ -294,10 +301,9 @@ body {
   width: auto;
   max-width: 340px;
   margin-left: auto;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 3px;
-  box-shadow: 0 14px 34px rgba(63, 41, 31, 0.22);
+  border-radius: 0;
   z-index: 10;
   overflow: hidden;
 }
@@ -377,13 +383,13 @@ body {
   flex-direction: column;
   gap: 2px;
   padding: 8px 10px;
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--sink);
   font-size: 0.9rem;
 }
 
 .msg-row-mine {
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .msg-meta {
@@ -423,7 +429,7 @@ body {
   display: block;
   width: 84px;
   height: 84px;
-  border-radius: 3px;
+  border-radius: 0;
   overflow: hidden;
   background: var(--sink);
 }
@@ -446,7 +452,7 @@ body {
   margin: 8px 0;
   background: #fff;
   padding: 8px;
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .mfa-qr svg {
@@ -456,7 +462,7 @@ body {
 }
 
 .notif-row-unread {
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .notif-row-icon {
@@ -606,7 +612,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   padding: 12px 14px;
   font-size: 1rem;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--sink);
   margin-bottom: 12px;
 }
@@ -649,7 +655,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   text-align: left;
   background: var(--sink);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 12px 14px;
   cursor: pointer;
   font-size: 0.95rem;
@@ -657,7 +663,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .result-card:hover {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .result-name { font-weight: 600; }
@@ -688,21 +694,20 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   width: 100%;
   background: var(--sink);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 13px 16px;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .variant-option-radio {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: 0;
   border: 2px solid var(--border);
-  background: white;
+  background: var(--card);
 }
 
 .variant-option-label {
@@ -722,7 +727,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .variant-option:hover {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .variant-option:hover .variant-option-radio {
@@ -781,27 +786,19 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin-top: 2px;
 }
 
-.availability-today { color: var(--green); }
-.availability-hours { color: var(--green); }
-.availability-tomorrow { color: #8a6000; }
+.availability-today { color: var(--text); }
+.availability-hours { color: var(--text); }
+.availability-tomorrow { color: var(--text-muted); }
 
 .availability-badge {
   font-size: 0.72rem;
   font-weight: 700;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 0;
   white-space: nowrap;
-}
-
-.availability-badge.availability-today,
-.availability-badge.availability-hours {
-  background: #e2f4e6;
-  color: #1e6b34;
-}
-
-.availability-badge.availability-tomorrow {
-  background: #fdf1dd;
-  color: #8a5b00;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .product-preview {
@@ -823,9 +820,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   align-items: center;
   justify-content: center;
   font-size: 1.8rem;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .product-preview-info {
@@ -883,7 +880,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .btn {
   border: none;
-  border-radius: 3px;
+  border-radius: 0;
   padding: 12px 16px;
   font-size: 0.95rem;
   font-weight: 600;
@@ -949,8 +946,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   justify-content: space-between;
   gap: 10px;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 12px 14px;
   background: var(--sink);
   flex-wrap: wrap;
@@ -994,7 +990,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 .requester-avatar {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--navy);
   color: white;
   display: flex;
@@ -1023,40 +1019,33 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   color: var(--orange-dark) !important;
 }
 
+/* Status badges: one austere outline treatment for every state, no fills
+   or per-state colours. Only two exceptions carry meaning — a solid ink
+   badge marks a finished order, a red outline marks a problem state. */
 .status-badge {
   font-size: 0.75rem;
   font-weight: 700;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   white-space: nowrap;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
-.status-pending { border-left-color: #d9a441; }
-.status-pending.status-badge { background: #fdf1dd; color: #8a5b00; }
+.status-delivered.status-badge,
+.status-granted.status-badge {
+  background: var(--navy);
+  color: var(--paper);
+  border-color: var(--navy);
+}
 
-/* Workforce lifecycle (migration 0023) — suspended member state */
-.status-suspended.status-badge { background: #fbe4e4; color: #8a2c2c; }
-
-.status-pending_purchase { border-left-color: #d9a441; }
-.status-pending_purchase.status-badge { background: #fdf1dd; color: #8a5b00; }
-
-.status-purchase_in_progress { border-left-color: #0e8a8a; }
-.status-purchase_in_progress.status-badge { background: #e0f5f5; color: #0e6b6b; }
-
-.status-purchased { border-left-color: #3a7bd5; }
-.status-purchased.status-badge { background: #e4edfc; color: #1a4fa0; }
-
-.status-claimed { border-left-color: var(--navy-light); }
-.status-claimed.status-badge { background: #e8edf3; color: var(--navy); }
-
-.status-collected { border-left-color: var(--orange); }
-.status-collected.status-badge { background: #fde9d8; color: #9c4e0e; }
-
-.status-delivered { border-left-color: var(--green); }
-.status-delivered.status-badge { background: #e2f4e6; color: #1e6b34; }
-
-.status-granted { border-left-color: var(--green); }
-.status-granted.status-badge { background: #e2f4e6; color: #1e6b34; }
+.status-rejected.status-badge,
+.status-suspended.status-badge,
+.status-cancelled.status-badge {
+  color: var(--red);
+  border-color: var(--red);
+}
 
 .driver-header-panel {
   display: flex;
@@ -1068,7 +1057,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .driver-id { display: flex; flex-direction: column; gap: 6px; }
 .driver-id label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-.driver-id input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; }
+.driver-id input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 0; }
 
 .driver-location { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 
@@ -1092,7 +1081,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   max-width: 320px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   font: inherit;
 }
 
@@ -1128,9 +1117,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   line-height: 1.35;
 }
 
-.btn-danger { background: #a32828; color: white; }
+.btn-danger { background: var(--red); color: white; }
 
-.link-btn-danger { color: #a32828; }
+.link-btn-danger { color: var(--red); }
 
 .reject-form-actions {
   display: flex;
@@ -1147,9 +1136,6 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   color: var(--red);
   margin: 8px 0 0;
 }
-
-.status-pending_approval { border-left-color: #9c6ade; }
-.status-pending_approval.status-badge { background: #f1e7fb; color: #6b3fa0; }
 
 .btn-small {
   padding: 8px 12px;
@@ -1188,15 +1174,6 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   color: var(--text-muted);
 }
 
-.status-rejected { border-left-color: var(--red); }
-.status-rejected.status-badge { background: #fbe3e3; color: #a32828; }
-
-/* Distinct from rejected on purpose — Worker withdrew it (possibly after
-   money was spent), the Owner didn't say no. Same accountability distinction
-   the rest of Phase 7 preserves. */
-.status-cancelled { border-left-color: var(--text-muted); }
-.status-cancelled.status-badge { background: #e9ebee; color: #4a5568; }
-
 .community-list {
   display: flex;
   flex-direction: column;
@@ -1209,7 +1186,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   justify-content: space-between;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 12px 14px;
   background: var(--sink);
   flex-wrap: wrap;
@@ -1245,12 +1222,11 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .role-select-card:hover {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .role-select-icon {
@@ -1261,9 +1237,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   align-items: center;
   justify-content: center;
   font-size: 1.4rem;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .role-toggle-group {
@@ -1278,24 +1254,23 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   min-width: 100px;
   background: var(--sink);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 12px 10px;
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .role-toggle-btn:hover {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .role-toggle-btn.active {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
   box-shadow: inset 0 0 0 1px var(--orange);
 }
 
@@ -1322,22 +1297,21 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   gap: 2px;
   background: var(--sink);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 10px 8px;
   font: inherit;
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .needed-by-btn:hover {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
 }
 
 .needed-by-btn.active {
   border-color: var(--orange);
-  background: #fbe8dc;
+  background: var(--sink);
   box-shadow: inset 0 0 0 1px var(--orange);
 }
 
@@ -1414,57 +1388,51 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   color: var(--text-muted);
 }
 
-.community-status-pending {
+.community-status-pending,
+.community-status-declined,
+.community-status-suspended {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #8a5b00;
-  background: #fdf1dd;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   white-space: nowrap;
 }
 
 .community-status-declined {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #8a2c2c;
-  background: #fbe4e4;
-  padding: 4px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
+  color: var(--red);
+  border-color: var(--red);
 }
 
-.community-status-suspended {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #8a5b00;
-  background: #fdf1dd;
-  padding: 4px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
+/* One bordered block split by hairlines - not gapped cards. Collapsed
+   borders (negative margin) so there's no leftover cell after the last
+   tile. */
 .dashboard-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
+  gap: 0;
   margin-top: 12px;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 
 .stat-tile {
-  background: var(--sink);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-top: none;
+  border-left: none;
+  border-radius: 0;
   padding: 14px 12px;
-  text-align: center;
+  text-align: left;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .stat-tile-highlight {
-  background: #fbe8dc;
-  border-color: var(--orange);
+  background: var(--sink);
 }
 
 .stat-value {
@@ -1561,7 +1529,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   justify-content: space-between;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 10px 12px;
   background: var(--sink);
 }
@@ -1588,7 +1556,6 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   max-width: 380px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 22px 50px rgba(31, 20, 15, 0.35);
 }
 
 .modal-icon {
@@ -1671,9 +1638,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 8px 12px;
   flex: 1;
   min-width: 160px;
@@ -1693,7 +1660,20 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 .route-dist { font-size: 0.78rem; color: var(--orange-dark); font-weight: 600; }
 .route-maps-link { display: inline-block; margin-top: 4px; font-size: 0.8rem; color: var(--navy-light); text-decoration: none; min-height: 44px; line-height: 44px; }
 
-.route-arrow { color: var(--text-muted); font-size: 1.2rem; }
+.route-arrow {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.route-sub b {
+  font-family: var(--mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
 
 @media (max-width: 480px) {
   .driver-route { flex-direction: column; align-items: stretch; }
@@ -1730,7 +1710,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin: 8px 0;
   padding: 8px;
   background: var(--bg);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 .site-assign-group .field-label {
@@ -1828,9 +1808,9 @@ h3 { font-size: 1rem; font-weight: 700; }
 .route-dist,
 .source-distance { font-family: var(--mono); letter-spacing: 0.01em; }
 
-/* --- Topbar: dark blue field with a warm underline --- */
+/* --- Topbar: flat dark blue field --- */
 .topbar {
-  background: linear-gradient(96deg, var(--blue) 0%, #17384a 60%, var(--brown-dark) 100%);
+  background: var(--blue);
   border-bottom: 1px solid rgba(216, 194, 174, 0.28);
 }
 .brand-mark {
@@ -1838,17 +1818,8 @@ h3 { font-size: 1rem; font-weight: 700; }
   font-weight: 800;
   letter-spacing: -0.03em;
 }
-.brand-mark::before {
-  content: "";
-  display: inline-block;
-  width: 0.62em;
-  height: 0.62em;
-  margin-right: 0.5em;
-  background: var(--orange);
-  clip-path: polygon(0 0, 100% 0, 100% 38%, 38% 38%, 38% 100%, 0 100%);
-}
 
-/* --- Buttons: mono caps, near-square, deliberate lift on hover --- */
+/* --- Buttons: mono caps, square, instant hover --- */
 .btn,
 .pill-btn,
 .role-btn,
@@ -1860,13 +1831,12 @@ h3 { font-size: 1rem; font-weight: 700; }
   font-weight: 500;
 }
 .btn {
-  border-radius: 2px;
+  border-radius: 0;
   font-size: 0.82rem;
   padding: 13px 18px;
-  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
 }
 .btn-primary { box-shadow: none; }
-.btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); }
+.btn-primary:hover { background: var(--orange-dark); }
 /* Disabled (e.g. "Create account" before the Terms box is ticked, or any
    button mid-request): clearly not pressable, and no hover lift. */
 .btn:disabled,
@@ -1882,22 +1852,22 @@ h3 { font-size: 1rem; font-weight: 700; }
   color: var(--navy);
   box-shadow: inset 0 0 0 1px var(--navy);
 }
-.btn-secondary:hover { background: var(--navy); color: var(--paper); transform: translateY(-2px); }
-.btn-danger:hover { background: #8f2b1d; transform: translateY(-2px); }
+.btn-secondary:hover { background: var(--navy); color: var(--paper); }
+.btn-danger:hover { background: #8f2b1d; }
 .btn-small, .btn-block { font-size: 0.78rem; }
 /* Mono caps + tracking widen labels — keep row-buttons from wrapping mid-word
    next to their input (the .invite-link-row pattern stacks on mobile anyway). */
 .invite-link-row .btn { white-space: nowrap; flex: 0 0 auto; }
 
 .pill-btn {
-  border-radius: 2px;
+  border-radius: 0;
   font-size: 0.72rem;
   background: rgba(255, 255, 255, 0.06);
   border-width: 1px;
 }
 .pill-btn:hover { background: rgba(255, 255, 255, 0.16); }
 .circle-btn-account {
-  border-radius: 2px;
+  border-radius: 0;
   font-size: 0.7rem;
   letter-spacing: 0.1em;
 }
@@ -1933,22 +1903,20 @@ h3 { font-size: 1rem; font-weight: 700; }
 .stat-tile,
 .product-preview,
 .confirm-source-card {
-  border-radius: 2px;
+  border-radius: 0;
 }
-.order-card { border-left-width: 3px; }
 .stat-value { font-weight: 800; letter-spacing: -0.02em; color: var(--navy); }
-.stat-tile-highlight { background: #fbe8dc; border-color: var(--orange); }
+.stat-tile-highlight { border-color: var(--navy); }
 
 /* Inputs: warm fill, square, orange focus ring */
 .search-input, .text-input,
 .driver-id input,
 .worker-header-panel input {
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--sink);
 }
 .search-input:focus, .text-input:focus {
   border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgba(242, 106, 46, 0.16);
 }
 
 /* Cart bar (had a now-dark var fallback) — warm tint, not solid blue */
@@ -1970,7 +1938,7 @@ h3 { font-size: 1rem; font-weight: 700; }
   letter-spacing: 0.07em;
   font-weight: 500;
   font-size: 0.64rem;
-  border-radius: 2px;
+  border-radius: 0;
   padding: 4px 8px;
 }
 
@@ -2006,7 +1974,6 @@ summary:focus-visible,
 .worker-header-panel input:focus { border-color: var(--orange-dark); }
 .notif-row-toggle { color: var(--orange-dark); }
 .order-card-highlight { outline-color: var(--orange-dark); }
-.status-collected { border-left-color: var(--orange-dark); }
 .role-toggle-btn.active,
 .needed-by-btn.active {
   border-color: var(--orange-dark);
@@ -2025,7 +1992,7 @@ summary:focus-visible,
   background: var(--navy);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 2px;
+  border-radius: 0;
   font: 500 0.85rem var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2096,10 +2063,9 @@ summary:focus-visible,
 }
 
 .legal-note {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--orange);
-  background: #fbe8dc;
-  border-radius: 2px;
+  border: 1px solid var(--navy);
+  background: transparent;
+  border-radius: 0;
   padding: 12px 14px;
   font-size: 0.9rem;
   margin: 0 0 26px;
@@ -2164,27 +2130,40 @@ summary:focus-visible,
 /* --- Password show/hide toggle (authView.js decorates every password
    field in #auth-view with one of these) --- */
 .pw-field { position: relative; margin-bottom: 12px; }
-.pw-field > .text-input { margin-bottom: 0; padding-right: 46px; }
+.pw-field > .text-input { margin-bottom: 0; padding-right: 62px; }
 .pw-toggle {
   position: absolute;
   top: 1px;
   right: 1px;
   bottom: 1px;
-  width: 44px;
+  width: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: none;
   border: none;
-  border-radius: 0 2px 2px 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
   color: var(--text-muted);
   cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .pw-toggle:hover { color: var(--navy); }
-.pw-toggle svg { display: block; }
 
 /* --- "Confirm your email" screen shown after signup (#check-email-panel) --- */
-.check-email-icon { font-size: 2.6rem; line-height: 1; margin: 4px 0 10px; }
+.checklist-state {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.checklist-item-done .checklist-state { color: var(--navy); }
+
 .check-email-steps {
   margin: 0 0 14px;
   padding-left: 20px;

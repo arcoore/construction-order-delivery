@@ -1,10 +1,10 @@
-// Phase 8D.1 — notifications and notification preferences are now real
+// Phase 8D.1 - notifications and notification preferences are now real
 // Supabase tables (`notifications`, `notification_preferences`; RLS-enforced
-// — see supabase/migrations/0007_notifications.sql / 0009_rls_policies.sql /
+// - see supabase/migrations/0007_notifications.sql / 0009_rls_policies.sql /
 // 0014_notifications_backend.sql), following the exact synchronous-facade-
 // over-async-cache pattern community.js/sites.js/orderLifecycle.js already
 // established: reads (getNotificationsFor, getUnreadCount, getPreferences)
-// stay SYNCHRONOUS over an in-memory cache — main.js's notification bell/
+// stay SYNCHRONOUS over an in-memory cache - main.js's notification bell/
 // panel/prefs-modal render code calls these inline, unconverted; every
 // write (markRead, markUnread, markAllRead, savePreferences) is genuinely
 // `async`.
@@ -12,22 +12,22 @@
 // CREATION IS NO LONGER A CLIENT-SIDE OPERATION. There is no `notifyUsers`
 // export anymore, and no INSERT grant on `notifications` for `authenticated`
 // at all (see 0007's original comment: "notifications are always a system-
-// generated side effect" — 0014 is the writer that comment always intended).
+// generated side effect" - 0014 is the writer that comment always intended).
 // Every notification is created server-side: order-lifecycle notifications
 // are appended inside the existing order-lifecycle RPCs in the same
 // transaction as their order_events insert (orderLifecycle.js calls those
-// RPCs already, for the state change itself — it does not additionally call
+// RPCs already, for the state change itself - it does not additionally call
 // anything here to also get a notification, the RPC already did it); the
 // seven non-order types (buyer access, site membership/archive) are created
 // by seven narrow `notify_*` RPCs that community.js/sites.js call directly
 // via `supabase.rpc(...)` immediately after their own already-authorized
-// direct table write succeeds — see this module's header history (this
+// direct table write succeeds - see this module's header history (this
 // comment block) if a future phase considers adding a client notification
 // path again: don't reintroduce a generic client-side notification writer,
 // the whole point of 0014 was closing that exact gap.
 //
 // recipientUserId is still the only field ever used to decide "is this
-// mine" — never a display name (see identity.js) — RLS now enforces this as
+// mine" - never a display name (see identity.js) - RLS now enforces this as
 // a real security boundary too, not just an app-level convention.
 import { getCurrentUserId } from './identity.js';
 import { subscribeAuth } from './auth.js';
@@ -92,7 +92,7 @@ function prefsPatchToRow(patch) {
 // --- Pub-sub -------------------------------------------------------------
 // Declared before refreshNotificationCache/the subscribeAuth wiring below,
 // since subscribeAuth calls its callback synchronously and immediately on
-// subscribe — refreshNotificationCache's early-return branch calls notify()/
+// subscribe - refreshNotificationCache's early-return branch calls notify()/
 // notifyPrefs() right away, which would be a temporal-dead-zone error if
 // these were declared any later (same ordering rule orderLifecycle.js's own
 // header comment documents for its identical pattern).
@@ -118,7 +118,7 @@ export function subscribeNotificationPreferences(fn) {
 
 // --- Cache -------------------------------------------------------------
 // RLS already scopes both tables to auth.uid() (see 0009/0007), so this
-// cache only ever holds the CURRENT user's own notifications/prefs row —
+// cache only ever holds the CURRENT user's own notifications/prefs row - 
 // there is no cross-user data sitting in memory to accidentally leak
 // between accounts on a shared device.
 let cache = { notifications: [], prefs: null };
@@ -146,7 +146,7 @@ export async function refreshNotificationCache() {
   notifyPrefs();
 }
 
-// Refetches on every auth transition (login, logout, account switch) —
+// Refetches on every auth transition (login, logout, account switch) - 
 // clears to empty immediately on logout, loads fresh on login, exactly like
 // community.js/sites.js/orderLifecycle.js's identical subscriptions. This is
 // in addition to main.js's explicit refreshDataCaches() on view entry/focus.
@@ -163,7 +163,7 @@ export function getUnreadCount(userId) {
 }
 
 // userId is accepted for interface parity with the pre-8D.1 signature (every
-// call site already passes getCurrentUserId()) — RLS means the cache can
+// call site already passes getCurrentUserId()) - RLS means the cache can
 // only ever contain the current user's own preferences row regardless, so a
 // mismatched userId would just fall through to defaults, never someone
 // else's real preferences.
@@ -202,7 +202,7 @@ export async function markUnread(id) {
   return { ok: true };
 }
 
-// Delete one notification (migration 0032 — notifications_delete_own,
+// Delete one notification (migration 0032 - notifications_delete_own,
 // scoped to recipient_user_id = auth.uid(), same boundary as select/update).
 // Each row is the recipient's private copy of a system signal, never shared
 // state, so a self-delete affects no one else.
@@ -215,7 +215,7 @@ export async function deleteNotification(id) {
 }
 
 // RLS's own using-clause (recipient_user_id = auth.uid()) is the real
-// boundary here — this UPDATE's WHERE clause is a query-shaping convenience
+// boundary here - this UPDATE's WHERE clause is a query-shaping convenience
 // on top of that, not the security check itself.
 export async function markAllRead(userId) {
   const { data, error } = await supabase.from('notifications')

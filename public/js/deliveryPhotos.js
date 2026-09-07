@@ -48,7 +48,7 @@ export async function uploadDeliveryPhoto(orderId, file) {
     return { ok: false, error: 'Only image files can be attached.' };
   }
   if (file.size > 10 * 1024 * 1024) {
-    return { ok: false, error: 'That image is over 10 MB — please use a smaller one.' };
+    return { ok: false, error: 'That image is over 10 MB - please use a smaller one.' };
   }
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${orderId}/${crypto.randomUUID()}.${ext}`;

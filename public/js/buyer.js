@@ -27,12 +27,12 @@ const myPurchasesList = document.getElementById('buyer-my-purchases-list');
 const HOLD_MS = 3000;
 
 // Only the statuses a pending cancellation request can actually be shown
-// against — purchased/claimed are the normal cases, collected covers the
+// against - purchased/claimed are the normal cases, collected covers the
 // window between a driver collecting and the request auto-closing.
 const CANCEL_REQUEST_STATUS_LABELS = {
-  purchased: 'Purchased — awaiting driver',
+  purchased: 'Purchased - awaiting driver',
   claimed: 'Driver assigned',
-  collected: 'Collected — in transit',
+  collected: 'Collected - in transit',
 };
 
 let latestOrders = [];
@@ -43,7 +43,7 @@ let decidingAction = null; // 'approved' | 'rejected'
 // --- Hold-to-confirm state machine ---------------------------------------
 // idle -> starting -> holding -> completing -> done, with 'abandoning'
 // reachable from 'holding' (a normal early release) or from 'starting' (a
-// release that happened while startPurchase's RPC was still in flight —
+// release that happened while startPurchase's RPC was still in flight - 
 // resolved once that RPC settles, see begin() below). Server state is
 // authoritative throughout: the countdown never starts until startPurchase
 // has actually succeeded server-side, and completePurchase/abandonPurchase
@@ -59,7 +59,7 @@ let releaseRequestedDuringStart = false;
 // for the same order revisited or a different one) and every time the
 // Buyer leaves the detail view entirely (showList()). A begin()/complete()
 // continuation captures the value current at wire time and compares against
-// this later — if they no longer match, its own button/fill/label/statusEl
+// this later - if they no longer match, its own button/fill/label/statusEl
 // references point at DOM the Buyer has since left, and any UI mutation is
 // skipped (server-state handling still runs regardless; only DOM writes are
 // guarded).
@@ -69,17 +69,17 @@ function holdInProgress() {
   return holdPhase !== 'idle';
 }
 
-// 'done' is the one terminal hold phase nothing else ever resets — unlike
+// 'done' is the one terminal hold phase nothing else ever resets - unlike
 // 'idle' (the resting state) or 'abandoning'/error paths (which always
 // resolve back to 'idle' themselves), a successfully completed hold has no
 // pending timer or RPC left to wait on, but was never being cleared either.
 // Left alone, begin()'s own `if (holdPhase !== 'idle') return;` guard then
 // permanently blocks every future hold for the rest of the page session,
-// on any order — a real bug found via live QA, confirmed by a controlled
+// on any order - a real bug found via live QA, confirmed by a controlled
 // reproduction (a second, fresh order's genuine >=3s hold produced zero
 // RPC calls after an earlier purchase had completed). Safe to clear here
 // specifically because 'done' has already fully settled server-side by the
-// time it's reached — there's nothing in flight this could race with.
+// time it's reached - there's nothing in flight this could race with.
 function clearCompletedHold() {
   if (holdPhase === 'done') {
     holdPhase = 'idle';
@@ -117,7 +117,7 @@ function showDetail(orderId) {
   renderDetail();
 }
 
-// Buyer role alone is never enough — an order only belongs in this queue if
+// Buyer role alone is never enough - an order only belongs in this queue if
 // the buyer is also a member of its site (or is the owner). This is checked
 // fresh on every render, not just once when the list is built, so losing
 // site access makes an order disappear from here immediately, the same way
@@ -128,7 +128,7 @@ function visibleToCurrentBuyer(order) {
 
 // --- Phase 7C: cancellation-request decisions ---------------------------
 // Visibility here mirrors the exact authorization decideCancellationRequest
-// itself re-checks when a decision is actually made (canPurchaseForSite) —
+// itself re-checks when a decision is actually made (canPurchaseForSite) - 
 // this list is a display convenience only; losing site/buyer access makes a
 // request disappear from here immediately, and even if one were somehow
 // still shown, the guarded function underneath would refuse it regardless.
@@ -159,7 +159,7 @@ function renderCancellationRequests() {
           ${decidingAction === 'rejected'
             ? `<label class="field-label" for="cancel-decision-reason-input">Reason (optional)</label>
                <input type="text" id="cancel-decision-reason-input" class="text-input" placeholder="e.g. Already collecting this afternoon" />`
-            : `<p class="hint small-hint">This cancels the order inside SiteStock — it doesn't process a refund or contact the supplier for you.${order.status === 'collected' ? ' The driver has already collected it and will be asked to arrange the return.' : ''}</p>`}
+            : `<p class="hint small-hint">This cancels the order inside SiteStock - it doesn't process a refund or contact the supplier for you.${order.status === 'collected' ? ' The driver has already collected it and will be asked to arrange the return.' : ''}</p>`}
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-cancel-action="never-mind" data-req-id="${r.id}">Never mind</button>
             <button class="btn btn-primary" data-cancel-action="confirm" data-req-id="${r.id}">${decidingAction === 'rejected' ? 'Confirm rejection' : 'Confirm cancellation'}</button>
@@ -198,7 +198,7 @@ function renderCancellationRequests() {
 }
 
 // YYYY-MM-DDTHH:mm in local time, for a datetime-local input's default
-// value — identical helper to driver.js's own (deliberately not shared,
+// value - identical helper to driver.js's own (deliberately not shared,
 // same as this file's other small presentational helpers already aren't).
 function nowForDateTimeInput() {
   const d = new Date();
@@ -209,7 +209,7 @@ function nowForDateTimeInput() {
 let confirmingDirectDeliveryId = null;
 
 // direct_supplier orders this Buyer personally purchased, still sitting at
-// 'purchased' — there is no driver leg for these at all (see
+// 'purchased' - there is no driver leg for these at all (see
 // confirm_direct_delivery in orderLifecycle.js), so they'd otherwise never
 // resolve to 'delivered' without this panel.
 function renderDirectDeliveries() {
@@ -255,7 +255,7 @@ function renderDirectDeliveries() {
   if (locationInput) locationInput.focus();
 }
 
-// Read-only "what have I purchased" list — the Buyer's own purchase history,
+// Read-only "what have I purchased" list - the Buyer's own purchase history,
 // which otherwise vanishes from their view the moment an order leaves
 // pending_purchase. No new data: every order where purchasedById is the
 // current Buyer, newest-purchase first, capped so it stays a glance not a
@@ -357,7 +357,7 @@ async function handleCancelRequestAction(action, requestId) {
     const result = await decideCancellationRequest(requestId, decidingAction, reason || null);
     decisionInFlight = false;
     if (!result.ok) {
-      // Do not fake success — e.g. a Driver may have collected the order
+      // Do not fake success - e.g. a Driver may have collected the order
       // between the request and this decision, which the data layer refuses
       // deterministically (reconstructed from a fresh Supabase refetch, not
       // trusted from any stale local state). Show exactly what it returned.
@@ -374,7 +374,7 @@ async function handleCancelRequestAction(action, requestId) {
   }
 }
 
-// Mirrors main.js's highlightOrderIfPending, applied to this panel instead —
+// Mirrors main.js's highlightOrderIfPending, applied to this panel instead - 
 // a notification pointing at a cancellation request lands on an order that
 // isn't in the main purchase queue, so refreshBuyerView's own detail-opening
 // path doesn't apply here; this is the equivalent for this panel.
@@ -390,9 +390,9 @@ function highlightCancellationRequestForOrder(orderId) {
 
 function render() {
   const communityId = getActiveCommunityId();
-  // Roadmap Step 4 — urgency-first (overdue/ASAP/today/tomorrow/future,
+  // Roadmap Step 4 - urgency-first (overdue/ASAP/today/tomorrow/future,
   // oldest-request tie-break within a tier), replacing the old plain
-  // "oldest request first" order — see orderStatus.js's urgencyComparator
+  // "oldest request first" order - see orderStatus.js's urgencyComparator
   // for the exact deterministic tier rule.
   const pending = latestOrders
     .filter(o => o.communityId === communityId && o.status === 'pending_purchase' && visibleToCurrentBuyer(o))
@@ -404,7 +404,7 @@ function render() {
     );
     if (!stillPending && !holdInProgress()) {
       // Someone else purchased or claimed it, or we lost access to its site,
-      // while we were looking — bounce back.
+      // while we were looking - bounce back.
       showList();
       return;
     }
@@ -449,7 +449,7 @@ function renderDetail() {
   detailEl.innerHTML = `
     <h1>Review this order</h1>
     <div class="product-preview">
-      <div class="product-preview-icon" aria-hidden="true">${product ? getCategoryIcon(product.category) : '📦'}</div>
+      <div class="product-preview-icon" aria-hidden="true"></div>
       <div class="product-preview-info">
         <strong>${itemsShortSummary(order)}</strong>
         <ul class="order-items-list">
@@ -466,8 +466,8 @@ function renderDetail() {
       <span class="source-meta">${escapeHtml(order.stockistWebsite || '')} &middot; ${escapeHtml(order.stockistPostcode || '')}</span>
       ${websiteUrl ? `<a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml((order.stockistName || '').split(' - ')[0])}'s website &nearr;</a>` : ''}
     </div>
-    <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> — d` : 'D'}eliver to <strong>${order.deliveryPostcode}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
-    <p class="hint small-hint">Buy this from the stockist above yourself, outside SiteStock — this app doesn't process the purchase. Once you've actually paid, come back here and press and hold the button below for 3 seconds to confirm.</p>
+    <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> - d` : 'D'}eliver to <strong>${order.deliveryPostcode}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
+    <p class="hint small-hint">Buy this from the stockist above yourself, outside SiteStock - this app doesn't process the purchase. Once you've actually paid, come back here and press and hold the button below for 3 seconds to confirm.</p>
 
     <button type="button" class="btn btn-primary btn-block hold-confirm-btn" id="hold-purchase-btn">
       <span class="hold-confirm-fill" id="hold-purchase-fill"></span>
@@ -491,7 +491,7 @@ function wireHoldButton(orderId) {
   const statusEl = document.getElementById('buyer-purchase-status');
 
   // False once the Buyer has left this exact render (list, a different
-  // order, or this order re-rendered) — see holdGeneration's own comment.
+  // order, or this order re-rendered) - see holdGeneration's own comment.
   function isLive() {
     return myGeneration === holdGeneration;
   }
@@ -508,7 +508,7 @@ function wireHoldButton(orderId) {
     statusEl.className = cls;
   }
 
-  // Surfaces a failure regardless of whether this view is still live —
+  // Surfaces a failure regardless of whether this view is still live - 
   // inline in the status line when it is; via alert() (the same pattern
   // owner.js/driver.js already use for a background action's failure) when
   // the Buyer has since navigated away and there's no live element to write
@@ -522,7 +522,7 @@ function wireHoldButton(orderId) {
   }
 
   // Only after the server has actually confirmed purchase_in_progress does
-  // the deliberate 3-second hold begin — this is the requirement that
+  // the deliberate 3-second hold begin - this is the requirement that
   // matters most here: no amount of holding the button counts for anything
   // until startPurchase has genuinely succeeded server-side.
   async function begin() {
@@ -544,8 +544,8 @@ function wireHoldButton(orderId) {
     }
 
     if (releaseRequestedDuringStart) {
-      // The Buyer let go — or navigated away entirely, which also sets
-      // this flag via releaseHoldIfAny() below — before the server
+      // The Buyer let go - or navigated away entirely, which also sets
+      // this flag via releaseHoldIfAny() below - before the server
       // confirmed. Either way there is now a genuine purchase_in_progress
       // lock server-side that nothing else will release; abandon it
       // exactly once. No DOM is touched if the view has since gone stale.
@@ -556,7 +556,7 @@ function wireHoldButton(orderId) {
       holdPhase = 'idle';
       holdOrderId = null;
       if (!abandonResult.ok) {
-        // Do not pretend this succeeded — the order may still be
+        // Do not pretend this succeeded - the order may still be
         // purchase_in_progress server-side. handleRpcFailure inside
         // abandonPurchase already refreshed the cache for the error codes
         // that matter; re-render so a still-live view reflects it.
@@ -580,7 +580,7 @@ function wireHoldButton(orderId) {
       fill.style.width = `${pct}%`;
     }
     if (elapsed >= HOLD_MS) {
-      // Set before calling complete() — this is what stops a second rAF
+      // Set before calling complete() - this is what stops a second rAF
       // frame (or a pointerup arriving in the same tick) from ever
       // triggering a second completePurchase call for this hold.
       holdPhase = 'completing';
@@ -603,8 +603,8 @@ function wireHoldButton(orderId) {
     }
     holdPhase = 'done';
     if (isLive()) {
-      label.textContent = 'Purchased ✓';
-      statusEl.textContent = 'Confirmed — this order is now available to drivers.';
+      label.textContent = 'Purchased';
+      statusEl.textContent = 'Confirmed. This order is now available to drivers.';
       statusEl.className = 'form-status success';
       setTimeout(showList, 1200);
     }
@@ -612,10 +612,10 @@ function wireHoldButton(orderId) {
 
   async function release() {
     if (holdPhase === 'starting') {
-      // Can't abandon yet — no purchase_in_progress lock exists server-side
+      // Can't abandon yet - no purchase_in_progress lock exists server-side
       // until startPurchase resolves. begin()'s own continuation (above)
       // checks this flag the moment it does, and is the only code path that
-      // ever acts on it — avoids two independent completions racing to call
+      // ever acts on it - avoids two independent completions racing to call
       // abandonPurchase for the same hold.
       releaseRequestedDuringStart = true;
       return;
@@ -655,7 +655,7 @@ async function releaseHoldIfAny() {
   holdPhase = 'idle';
   holdOrderId = null;
   if (!result.ok) {
-    // No live hold-button DOM here — this runs from navigation (backBtn /
+    // No live hold-button DOM here - this runs from navigation (backBtn /
     // refreshBuyerView), not from the button itself. The order cache is
     // already refreshed for the error codes that matter (handleRpcFailure,
     // orderLifecycle.js); the caller's own next render picks up the truth.

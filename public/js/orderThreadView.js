@@ -7,7 +7,7 @@ import { timeAgo } from './data.js';
 import { getCurrentUserId } from './identity.js';
 import { getMessagesForOrder, sendMessage } from './orderMessages.js';
 
-// Message bodies are free-form user text — unlike most of this codebase's
+// Message bodies are free-form user text - unlike most of this codebase's
 // template-literal HTML, this one MUST escape before interpolating.
 function esc(s) {
   return String(s == null ? '' : s)
@@ -29,7 +29,7 @@ export function renderOrderThread(container, orderId, initialDraft) {
   container.innerHTML = `
     <div class="msg-list">
       ${msgs.length === 0
-        ? '<p class="empty-hint">No messages yet — ask a question or leave a note about this order.</p>'
+        ? '<p class="empty-hint">No messages yet - ask a question or leave a note about this order.</p>'
         : msgs.map(m => `
           <div class="msg-row${m.authorId === me ? ' msg-row-mine' : ''}">
             <span class="msg-meta">${esc(m.authorName)} &middot; ${timeAgo(m.createdAt)}</span>

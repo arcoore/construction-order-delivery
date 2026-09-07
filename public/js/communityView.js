@@ -34,7 +34,7 @@ browseSearchInput.addEventListener('input', render);
 // Tracks which community joinCodeStatus's current message is actually
 // about, whenever that message asserts a 'pending' state ("Request sent…"/
 // "Already requested…"). render() re-validates this against the live
-// membership status on every reactive call (Realtime, focus, view-entry —
+// membership status on every reactive call (Realtime, focus, view-entry - 
 // whatever triggered it) and clears the message the moment that community
 // is no longer pending, instead of leaving a one-time action message frozen
 // in the DOM after the real state has since moved on. null whenever
@@ -43,7 +43,7 @@ browseSearchInput.addEventListener('input', render);
 // stale id against an unrelated message.
 let joinCodePendingCommunityId = null;
 
-// The identity field is always read-only now — Phase 8B removed guest mode,
+// The identity field is always read-only now - Phase 8B removed guest mode,
 // so display name always comes from the real Supabase account and can only
 // be set at signup (no editing UI exists for it yet).
 function syncIdentityField() {
@@ -103,12 +103,12 @@ joinCodeBtn.addEventListener('click', async () => {
     }
     if (result.alreadyPending) {
       joinCodePendingCommunityId = result.community.id;
-      setStatus(joinCodeStatus, `Already requested to join "${result.community.name}" — waiting for approval.`, '');
+      setStatus(joinCodeStatus, `Already requested to join "${result.community.name}" - waiting for approval.`, '');
       return;
     }
     joinCodeInput.value = '';
     joinCodePendingCommunityId = result.community.id;
-    setStatus(joinCodeStatus, `Request sent to "${result.community.name}" — waiting for the owner to approve it.`, 'success');
+    setStatus(joinCodeStatus, `Request sent to "${result.community.name}" - waiting for the owner to approve it.`, 'success');
   } finally {
     joinCodeBtn.disabled = false;
   }
@@ -131,29 +131,29 @@ accountStatusBtn.addEventListener('click', () => {
   }
 });
 
-// Roadmap Step 5 — consumes a held invite-link code, if any, and pre-fills
+// Roadmap Step 5 - consumes a held invite-link code, if any, and pre-fills
 // the existing manual-entry field with it. Exported and called explicitly
 // by main.js's showCommunitiesView(), NOT wired into this view's own
-// reactive render() — two real, sequential bugs were found wiring it that
+// reactive render() - two real, sequential bugs were found wiring it that
 // way during local verification:
 //   1) this view's own subscribeCommunities(render) fires an immediate
 //      render() the moment this module is first imported (see
 //      subscribeCommunities's own "calls fn() immediately on subscribe"
 //      contract), which happens BEFORE main.js's bootstrap() has even
-//      called consumeJoinIntentFromUrl() yet — a one-time "already tried"
+//      called consumeJoinIntentFromUrl() yet - a one-time "already tried"
 //      guard flag was being set permanently on that premature no-code call.
 //   2) removing the guard flag fixed the pre-fill itself, but then
-//      main.js's routeFromTop() — which decides whether to route to the
+//      main.js's routeFromTop() - which decides whether to route to the
 //      Companies screen at all based on getPendingJoinCode() being
-//      truthy — lost the race against this same reactive render(), which
+//      truthy - lost the race against this same reactive render(), which
 //      fires (and clears the code) during bootstrap's own cache-refresh
 //      BEFORE routeFromTop() ever got to check it, so routing silently fell
 //      through to the ordinary community picker instead.
 // The fix for both: exactly one deliberate call site consumes (reads AND
-// clears) the pending code — main.js's showCommunitiesView(), immediately
-// before it calls refreshCommunitiesView() — never an incidental reactive
+// clears) the pending code - main.js's showCommunitiesView(), immediately
+// before it calls refreshCommunitiesView() - never an incidental reactive
 // render triggered by an unrelated cache refresh. This only ever pre-fills
-// the field — the user still has to press the existing "Request to join"
+// the field - the user still has to press the existing "Request to join"
 // button themselves; see main.js/community.js for how the code got here.
 export function applyPendingJoinIntent() {
   const code = getPendingJoinCode();
@@ -170,10 +170,10 @@ function render() {
 
   // Re-validate any "waiting for approval" message still on screen against
   // the actual current membership status, every time this reactive render
-  // runs (Realtime, window focus, or view-entry — whichever triggered it).
+  // runs (Realtime, window focus, or view-entry - whichever triggered it).
   // A one-time action message is otherwise never revisited once written, so
   // it can end up frozen on screen long after the real status has already
-  // moved to approved/declined elsewhere — exactly the contradiction found
+  // moved to approved/declined elsewhere - exactly the contradiction found
   // live (the community correctly appeared under "Your communities" while
   // this message still said "waiting for the owner to approve it").
   if (joinCodePendingCommunityId && membershipStatus(joinCodePendingCommunityId, userId) !== 'pending') {
@@ -220,7 +220,7 @@ function render() {
 
   let emptyMessage = null;
   if (all.length === 0) {
-    emptyMessage = 'No companies exist yet — create the first one above.';
+    emptyMessage = 'No companies exist yet - create the first one above.';
   } else if (visible.length === 0) {
     emptyMessage = `No companies match "${browseSearchInput.value.trim()}".`;
   }
@@ -235,7 +235,7 @@ function render() {
       } else if (status === 'pending') {
         actionHtml = `<span class="community-status-pending">Requested</span>`;
       } else if (status === 'suspended') {
-        // Migration 0023 — a suspended member is still a member; they can't
+        // Migration 0023 - a suspended member is still a member; they can't
         // re-request, only wait for an owner to restore them.
         actionHtml = `<span class="community-status-suspended">Suspended</span>`;
       } else if (status === 'declined' || status === 'removed' || status === 'left') {
@@ -270,7 +270,7 @@ function render() {
       }
       // On success the community.js write already fired notify(), which
       // re-runs render() and replaces this button with the "Requested"
-      // pending state — no manual re-enable needed on the happy path.
+      // pending state - no manual re-enable needed on the happy path.
     });
   });
   browseList.querySelectorAll('[data-rerequest]').forEach(btn => {
@@ -294,7 +294,7 @@ subscribeAuth(render);
 subscribeIdentity(render);
 
 // Clears leftover status text (e.g. "Request sent…") left behind by a
-// previous visit/account before this screen is shown again — those
+// previous visit/account before this screen is shown again - those
 // messages are meant as one-time feedback for the action that produced
 // them, not a persistent label.
 export function refreshCommunitiesView() {

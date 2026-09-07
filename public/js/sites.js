@@ -1,11 +1,11 @@
-// Sites (job locations) are now Supabase-backed (Phase 8B) — shared across
+// Sites (job locations) are now Supabase-backed (Phase 8B) - shared across
 // devices, enforced server-side by RLS (see
 // supabase/migrations/0009_rls_policies.sql / 0004_sites.sql). Same
 // "reference is not permission" discipline as before: every permission
 // composite re-derives access from live community/site-membership state,
 // never trusts a siteId alone.
 //
-// CACHE LIFECYCLE — same contract as community.js (read that file's header
+// CACHE LIFECYCLE - same contract as community.js (read that file's header
 // first if you haven't). Every read function here (getSites, getSite,
 // canAccessSite, canCreateOrderForSite, canPurchaseForSite,
 // getActiveSitesForUser, isSiteMember, getSiteMembers, etc.) stays
@@ -13,7 +13,7 @@
 // modules call them inline inside synchronous render/write code that isn't
 // being converted to async this phase. They read an in-memory cache
 // (sites/site_memberships) kept fresh by real Supabase traffic. The cache
-// is never the authorization boundary — RLS is; a stale cache can at worst
+// is never the authorization boundary - RLS is; a stale cache can at worst
 // show a UI affordance a user can no longer use, and the real write is
 // independently re-checked server-side regardless.
 import { isOwner, isApprovedMember, isBuyer } from './community.js';
@@ -50,17 +50,17 @@ function mapSite(r) {
     updatedAt: new Date(r.updated_at).getTime(),
     archivedAt: r.archived_at ? new Date(r.archived_at).getTime() : null,
     archivedById: r.archived_by_id,
-    // Product-audit gap fix (migration 0025) — plain nullable date strings
+    // Product-audit gap fix (migration 0025) - plain nullable date strings
     // ('YYYY-MM-DD'), display-only, never used in any permission/lifecycle
     // decision. Both null means "no project dates set", the pre-existing
     // default behavior for every site created before this existed.
     projectStartDate: r.project_start_date,
     projectEndDate: r.project_end_date,
-    // Migration 0027 — site contact + access info, display-only.
+    // Migration 0027 - site contact + access info, display-only.
     siteContactName: r.site_contact_name || '',
     siteContactPhone: r.site_contact_phone || '',
     accessNotes: r.access_notes || '',
-    // Migration 0033 — optional monthly spend cap, hard-enforced server-side
+    // Migration 0033 - optional monthly spend cap, hard-enforced server-side
     // by the orders_enforce_site_budget trigger. null = no budget.
     monthlyBudget: r.monthly_budget,
   };
@@ -77,11 +77,11 @@ function mapMembership(r) {
   };
 }
 
-// Full refetch of both tables this module owns — see community.js's
+// Full refetch of both tables this module owns - see community.js's
 // refreshCommunityCache for the full lifecycle explanation (same pattern).
 // RLS scopes what actually comes back: an owner sees every site/membership
 // in their community; a non-owner only ever sees sites they're personally a
-// member of (sites_select's is_site_member branch) — so a worker's cache
+// member of (sites_select's is_site_member branch) - so a worker's cache
 // never even contains a site they shouldn't see in the first place. The
 // explicit membership filtering below is kept anyway (not relied-on-RLS-
 // alone) so this file's own logic stays identical to the pre-Phase-8B
@@ -121,7 +121,7 @@ export async function refreshSitesCache() {
   notify();
 }
 
-// Refetches on every auth transition — see community.js's identical
+// Refetches on every auth transition - see community.js's identical
 // subscription for why this is in addition to, not instead of, main.js's
 // explicit bootstrap await.
 subscribeAuth(() => { refreshSitesCache(); });
@@ -136,7 +136,7 @@ export function getActiveSites(communityId) {
   return getSites(communityId).filter(s => s.status === 'active');
 }
 
-// Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
+// Called synchronously from orderLifecycle.js - must stay sync, cache-backed.
 export function getSite(siteId) {
   return cache.sites.find(s => s.id === siteId) || null;
 }
@@ -233,7 +233,7 @@ async function setSiteStatus(siteId, status, actorId) {
   return { ok: true, site: mapped };
 }
 
-// Archiving never touches, cancels, or blocks any existing order — see
+// Archiving never touches, cancels, or blocks any existing order - see
 // CLAUDE.md's Site model section. Only current members lose anything by an
 // archive, so only they get notified.
 export async function archiveSite(siteId, actorId) {
@@ -249,7 +249,7 @@ export async function restoreSite(siteId, actorId) {
   return setSiteStatus(siteId, 'active', actorId);
 }
 
-// Permanent site deletion (migration 0038) — only for a site that no order
+// Permanent site deletion (migration 0038) - only for a site that no order
 // has ever referenced (the server enforces this; orders.site_id's FK would
 // block it anyway). For anything with history, archive is the model.
 export async function deleteSite(siteId, actorId) {
@@ -265,9 +265,9 @@ export async function deleteSite(siteId, actorId) {
   return { ok: true };
 }
 
-// Migration 0027 — 'paused' (temporarily on hold) and 'completed' (project
+// Migration 0027 - 'paused' (temporarily on hold) and 'completed' (project
 // finished) both behave exactly like 'archived' for ordering: getActiveSites
-// (and everything that builds on it — the worker site picker, order
+// (and everything that builds on it - the worker site picker, order
 // creation) only ever returns status === 'active'. These just give an owner
 // a truthful label instead of forcing every non-active site to read as
 // "archived". No order lifecycle is affected, same as archive/restore.
@@ -296,11 +296,11 @@ export function getSitesForMember(userId) {
   return cache.sites.filter(s => memberSiteIds.has(s.id));
 }
 
-// Active sites within one community a user is a member of — the exact list
+// Active sites within one community a user is a member of - the exact list
 // a worker/buyer picks from. Owner bypass mirrors canAccessSite/
 // canCreateOrderForSite/canPurchaseForSite exactly (see CLAUDE.md's Site
 // model section for why this bypass exists). Called synchronously from
-// site.js's worker order-creation flow — must stay sync, cache-backed.
+// site.js's worker order-creation flow - must stay sync, cache-backed.
 export function getActiveSitesForUser(communityId, userId) {
   if (!userId) return [];
   if (isOwner(communityId, userId)) return getActiveSites(communityId);
@@ -335,14 +335,14 @@ export async function addSiteMember(siteId, userId, actorId) {
   return { ok: true };
 }
 
-// Bulk employee assignment (product-audit gap fix) — assigns several
+// Bulk employee assignment (product-audit gap fix) - assigns several
 // approved members to a site in one round trip instead of one addSiteMember
 // call per person. Genuinely bulk (a single insert, not a client-side loop
 // over addSiteMember): a loop would mean a partial failure silently leaves
 // some members assigned and others not with no way to tell the caller which
 // succeeded, whereas one insert either adds everyone requested or reports
 // one clear error. Members already assigned or not eligible are simply
-// skipped rather than failing the whole batch — same "already a member is a
+// skipped rather than failing the whole batch - same "already a member is a
 // no-op, not an error" rule addSiteMember already applies, just batched.
 export async function addSiteMembers(siteId, userIds, actorId) {
   const site = getSite(siteId);
@@ -376,7 +376,7 @@ export async function addSiteMembers(siteId, userIds, actorId) {
 }
 
 // Phase 8D.1 hardening (0015): the removal and its notification are now one
-// atomic server-side operation (remove_site_member RPC) — the database
+// atomic server-side operation (remove_site_member RPC) - the database
 // itself proves a real membership existed before any notification is
 // created, rather than a client delete followed by a separately-trusted
 // notify call. The isOwner check below stays as a client-side fast-fail for
@@ -398,7 +398,7 @@ export async function removeSiteMember(siteId, userId, actorId) {
 
 // --- Permission composites -----------------------------------------------
 // Every check below verifies the site actually exists and belongs to the
-// given communityId FIRST — see CLAUDE.md's Site model section. The
+// given communityId FIRST - see CLAUDE.md's Site model section. The
 // (site_id, community_id) composite foreign key in migrations/0004_sites.sql
 // makes the underlying data invariant impossible to violate server-side;
 // this is the second, independent client-side layer on top of that, kept
@@ -412,21 +412,21 @@ export function canManageSite(communityId, userId) {
   return isOwner(communityId, userId);
 }
 
-// Called synchronously from buyer.js/site.js/main.js — must stay sync.
+// Called synchronously from buyer.js/site.js/main.js - must stay sync.
 export function canAccessSite(siteId, communityId, userId) {
   if (!siteBelongsToCommunity(siteId, communityId)) return false;
   if (isOwner(communityId, userId)) return true;
   return isSiteMember(siteId, userId);
 }
 
-// Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
+// Called synchronously from orderLifecycle.js - must stay sync, cache-backed.
 export function canCreateOrderForSite(siteId, communityId, userId) {
   if (!siteBelongsToCommunity(siteId, communityId)) return false;
   if (isOwner(communityId, userId)) return true;
   return isApprovedMember(communityId, userId) && isSiteMember(siteId, userId);
 }
 
-// Called synchronously from orderLifecycle.js — must stay sync, cache-backed.
+// Called synchronously from orderLifecycle.js - must stay sync, cache-backed.
 // Mirrors migration 0023's can_purchase_for_site: the non-owner branch also
 // requires an approved membership, so a suspended member's dormant buyer
 // grant can't purchase. (isBuyer already folds in isApprovedMember since
