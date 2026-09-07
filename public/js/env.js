@@ -7,33 +7,28 @@
 (function () {
   var host = window.location.hostname;
 
-  // Cloudflare Turnstile SITE key (not a secret - it's meant to ship in the
-  // page). authView.js renders the widget on the login / register / reset
-  // forms only when this is non-empty, and GoTrue only enforces the token
-  // when [auth.captcha] enabled = true for that same backend. The two must
-  // move together per environment: an enabled client gate against a backend
-  // that ISN'T enforcing just adds a lockout risk (a visitor whose browser
-  // blocks the Turnstile script can't get a token, so the client gate never
-  // clears) for zero security gain.
+  // Cloudflare Turnstile SITE key (not a secret - it's designed to ship in the
+  // page). authView.js renders the CAPTCHA widget on the login / register /
+  // reset forms only when this is non-empty, and GoTrue only enforces the
+  // token when [auth.captcha] enabled = true for that same backend. The two
+  // MUST move together per environment: an enabled client gate against a
+  // backend that isn't enforcing (or vice versa) just breaks login for anyone
+  // whose browser blocks the Turnstile script, for zero security gain.
   //
-  //   local  - captcha is ON (config.toml [auth.captcha] enabled = true +
-  //            TURNSTILE_SECRET in supabase/.env), so the key is set below.
-  //   hosted - captcha is OFF until `supabase config push` carries the
-  //            [auth.captcha] block to sitestock-dev. To turn it on there:
-  //            run that push, THEN set the hosted branch's key to
-  //            '0x4AAAAAAErzTvwChrSXq43-' (same widget, its hostnames already
-  //            include arcoore.github.io).
+  // The widget exists ("SiteStock" in Cloudflare; hostnames arcoore.github.io
+  // + localhost + 127.0.0.1) and its secret is in supabase/.env, but it's
+  // OFF everywhere for now - see supabase/config.toml's [auth.captcha] note
+  // for the turn-it-on steps. When ready, set the key on the matching branch:
+  //   window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
   window.SITESTOCK_TURNSTILE_KEY = '';
 
   if (host === 'localhost' || host === '127.0.0.1') {
-    window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply
   }
 
   if (host === 'arcoore.github.io') {
     window.SITESTOCK_SUPABASE_URL = 'https://jntbbrkiygbobknzivpe.supabase.co';
     window.SITESTOCK_SUPABASE_ANON_KEY = 'sb_publishable_aol6yne0oTut4gXGba9EAA_-07pkZhQ';
-    // window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-'; // enable after `config push`
     return;
   }
 
