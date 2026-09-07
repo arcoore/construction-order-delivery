@@ -65,6 +65,22 @@ const sessionTokenStorage = {
   removeItem(key) { try { sessionStorage.removeItem(key); } catch { /* storage blocked */ } },
 };
 
+// One-time sweep: any browser that logged in before the switch above still
+// has a supabase-js auth token sitting in localStorage (key shaped
+// `sb-<ref>-auth-token`, plus older `supabase.auth.token` / PKCE
+// `...-code-verifier` entries). supabase-js with a custom `storage` never
+// reads or writes those again, so they're inert - but they're still auth
+// material on disk, so clear them. This app's own localStorage keys are all
+// `sitestock_*`, so an `sb-`/`supabase.auth` prefix match can't hit them.
+try {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && (/^sb-.*-auth-token/.test(k) || k === 'supabase.auth.token')) {
+      localStorage.removeItem(k);
+    }
+  }
+} catch { /* storage blocked - nothing to clean */ }
+
 // detectSessionInUrl is true (Roadmap Step 5) so a Supabase password-recovery
 // link's URL fragment is picked up automatically and fires a real
 // PASSWORD_RECOVERY auth event (see auth.js) - this app has no other

@@ -12,7 +12,7 @@
   // Leave '' to keep the CAPTCHA off; set it AND flip [auth.captcha] enabled
   // = true in supabase/config.toml to turn it on. authView.js renders the
   // widget on the login + signup forms only when this is non-empty.
-  window.SITESTOCK_TURNSTILE_KEY = '';
+  window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
 
   if (host === 'localhost' || host === '127.0.0.1') {
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply

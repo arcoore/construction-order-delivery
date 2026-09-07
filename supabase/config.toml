@@ -41,7 +41,7 @@ additional_redirect_urls = [
 #   3. Put the Secret Key in supabase/.env as TURNSTILE_SECRET.
 #   4. Flip `enabled` to true below, then restart / `supabase config push`.
 [auth.captcha]
-enabled = false
+enabled = true
 provider = "turnstile"
 secret = "env(TURNSTILE_SECRET)"
 
