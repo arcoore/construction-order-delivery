@@ -318,10 +318,23 @@ async function showProfile() {
         </div>
       </div>
     ` : ''}
+    <div class="profile-field">
+      <span class="profile-label">Your data</span>
+      <span class="profile-value">SiteStock records, against your account:</span>
+      <ul class="profile-data-list">
+        <li>your email address and display name${mfaOn ? ', and the secret behind your two-factor codes' : ''} (your password is only ever stored as a one-way hash, by our login provider)</li>
+        <li>every company, site, order, approval, cancellation, delivery and in-app message you create or act on - with your name and the time against each one</li>
+        <li>any delivery photos you upload</li>
+        <li>your notifications and notification settings</li>
+        <li>if you're a driver and choose to share it, an approximate location from your device - used only to sort nearby pickups, not stored long-term</li>
+        <li>standard security logs (your IP address, request times) and, if the app hits an error, a diagnostic report your browser sends us</li>
+      </ul>
+      <span class="profile-value">We never sell it, and we don't use advertising or cross-site tracking. Who can see what, how long it's kept, and your rights are in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+    </div>
     <button type="button" class="btn btn-secondary btn-block" id="profile-logout-btn">Log out</button>
     ${confirmingDeleteAccount ? `
       <div class="reject-form">
-        <p class="hint small-hint">This can't be undone. It only works if your account has no activity on file yet (no orders placed, no sites created, and no company you own) - otherwise you'll be asked to contact support instead. Type DELETE to confirm.</p>
+        <p class="hint small-hint">This permanently deletes your login and personal details - your email, password, sign-in sessions, two-factor setup, notifications and settings. Your <strong>name stays</strong> on your companies' past orders, messages and history so their records aren't broken, and you're removed from every team. You can't do this while you still own a company - transfer it or delete it first. Type DELETE to confirm.</p>
         <input type="text" id="delete-account-confirm-input" class="text-input" placeholder="DELETE" />
         <div class="reject-form-actions">
           <button class="btn btn-secondary" id="delete-account-cancel-btn">Never mind</button>

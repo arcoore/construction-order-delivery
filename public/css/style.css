@@ -1527,6 +1527,18 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin-top: 4px;
 }
 
+.profile-data-list {
+  margin: 4px 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.profile-data-list li { line-height: 1.45; }
+
 .profile-community-row {
   display: flex;
   align-items: center;

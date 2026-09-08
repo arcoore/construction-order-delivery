@@ -16,20 +16,23 @@
 // their own account, never an id they pass in (there is no id parameter
 // accepted at all).
 //
-// Deliberately NOT built here: any data anonymization/reassignment before
-// deletion. profiles.id has no ON DELETE CASCADE from orders.requested_by_id,
-// sites.created_by_id, or communities.owner_id (see supabase/migrations/
-// 0002_profiles.sql, 0003_communities_and_membership.sql, 0004_sites.sql,
-// 0005_orders_and_events.sql) — that's a deliberate database-level
-// invariant protecting a company's real business records from silently
-// disappearing because one person's account was deleted. The practical
-// consequence: this function only succeeds for an account with genuinely no
-// owned history (a fresh signup, essentially). Any account that has ever
-// created a site, requested an order, or still owns a company gets a clear,
-// honest refusal instead of a partial deletion or a corrupted record —
-// resolving that case (transfer ownership? anonymize? both?) is a real
-// product/legal decision that hasn't been made, not something to default
-// silently in this function.
+// Two steps, in order:
+//   1. anonymize_own_account() — a SECURITY DEFINER RPC (migration 0045),
+//      called with the caller's own JWT so auth.uid() is them. It scrubs
+//      everything personal-only (notifications, preferences, pending
+//      requests, browser error reports, live grants/site memberships),
+//      ends their active company memberships ('left'), and marks
+//      profiles.deleted_at — while KEEPING the profiles row and its
+//      display_name so the person's name still reads correctly on their
+//      company's historical orders/messages/events (founder decision,
+//      2026-09-08). It refuses (SQLSTATE 42501) if the caller still owns a
+//      company they created — they must transfer or delete it first.
+//   2. the Admin API deletes the auth.users row itself (email, password
+//      hash, sessions, MFA factors). 0045 dropped profiles' ON DELETE
+//      CASCADE from auth.users, so this no longer takes the profile — and
+//      client_errors.user_id (ON DELETE SET NULL) is the only remaining
+//      reference, so it succeeds cleanly instead of hitting a foreign-key
+//      violation the way the old delete-everything-or-nothing approach did.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -72,15 +75,30 @@ Deno.serve(async req => {
     return json({ error: 'Authentication required.' }, 401);
   }
 
-  // Deleting via a raw fetch to GoTrue's own admin REST endpoint rather than
-  // supabase-js's admin.deleteUser() helper — verified live that the SDK
-  // wraps a genuine Postgres foreign-key-violation response into a generic
+  // Step 1: scrub the personal-only data and end memberships, as the caller.
+  // A 42501 here is our deliberate "you still own a company" refusal (or an
+  // auth failure, already ruled out above) — surface its message as a 409.
+  const { error: scrubError } = await callerClient.rpc('anonymize_own_account');
+  if (scrubError) {
+    const status = scrubError.code === '42501' ? 409 : 500;
+    return json({
+      error: scrubError.message || 'Could not prepare your account for deletion.',
+    }, status);
+  }
+
+  // Step 2: delete the auth.users row. Raw fetch to GoTrue's own admin REST
+  // endpoint rather than supabase-js's admin.deleteUser() helper — verified
+  // live that the SDK wraps a Postgres error into a generic
   // {name: "AuthRetryableFetchError", message: "Database error deleting
-  // user"}, discarding the real reason entirely. The raw endpoint's own JSON
-  // body preserves the actual { code: "23503", message, detail } from
-  // Postgres, which is what lets this function tell "you still own a
-  // company" apart from "something genuinely went wrong" instead of
-  // guessing.
+  // user"}, discarding the real reason; the raw endpoint's JSON body keeps
+  // the actual { code, message, detail }.
+  //
+  // After step 1 and migration 0045 this should always succeed: the only
+  // remaining reference to auth.users is client_errors.user_id (ON DELETE
+  // SET NULL). A foreign-key failure here now means something is genuinely
+  // wrong (a new un-cascaded reference was added without updating step 1) —
+  // profiles.deleted_at is already set, so the personal data is scrubbed;
+  // report it and let support finish the auth-row removal.
   const deleteResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userData.user.id}`, {
     method: 'DELETE',
     headers: {
@@ -96,7 +114,7 @@ Deno.serve(async req => {
       || String(body.message || '').toLowerCase().includes('foreign key');
     if (isForeignKeyViolation) {
       return json({
-        error: "Your account can't be deleted automatically because it still has activity on file — an order, a site, or a company you own. Contact support to arrange this manually.",
+        error: "Your personal data has been removed, but the final step needs support to finish. Email us and we'll complete it.",
       }, 409);
     }
     return json({ error: 'Could not delete your account. Please try again or contact support.' }, 500);
