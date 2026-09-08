@@ -1,6 +1,7 @@
 // Shared renderer for an order's delivery photos (migration 0039): a strip
 // of signed-URL thumbnails, plus an "Add photo" file input when canUpload.
 import { getPhotosForOrder, uploadDeliveryPhoto, signedUrlFor } from './deliveryPhotos.js';
+import { escapeHtml } from './data.js';
 
 export async function renderDeliveryPhotos(container, orderId, { canUpload = false } = {}) {
   if (!container) return;
@@ -9,7 +10,7 @@ export async function renderDeliveryPhotos(container, orderId, { canUpload = fal
     <div class="photo-strip">
       ${photos.length === 0
         ? '<p class="empty-hint">No delivery photos.</p>'
-        : photos.map(p => `<a class="photo-thumb" data-path="${p.storagePath}" target="_blank" rel="noopener noreferrer"><img alt="Delivery photo" loading="lazy" /></a>`).join('')}
+        : photos.map(p => `<a class="photo-thumb" data-path="${escapeHtml(p.storagePath)}" target="_blank" rel="noopener noreferrer"><img alt="Delivery photo" loading="lazy" /></a>`).join('')}
     </div>
     ${canUpload ? `
       <label class="btn btn-secondary photo-upload-btn">

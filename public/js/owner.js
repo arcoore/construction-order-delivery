@@ -773,7 +773,11 @@ orderDetailBackBtn.addEventListener('click', showOrdersList);
 // editing, no lifecycle actions.
 function renderOrderDetail(order) {
   const product = getProduct(order.items[0] ? order.items[0].productId : null);
+  // `label` carries productName + variant, and variant can be worker-entered
+  // free text. It's used raw only where describeEvent() re-escapes it; every
+  // other interpolation below uses safeLabel.
   const label = `${order.productName}${order.variant ? ` (${order.variant})` : ''}`;
+  const safeLabel = escapeHtml(label);
   const events = getOrderEvents(order.id);
 
   const peopleRows = [
@@ -793,14 +797,14 @@ function renderOrderDetail(order) {
   const urgencyWord = urgencyLabel(urgency);
 
   orderDetailEl.innerHTML = `
-    <h1>${label}</h1>
+    <h1>${safeLabel}</h1>
     <span class="status-badge status-${order.status}">${statusLabel(order.status, 'owner', order.deliveryMethod)}</span>
     ${nextAction ? `<span class="order-next-action">${nextAction}</span>` : ''}
 
     <div class="product-preview">
       <div class="product-preview-icon" aria-hidden="true"></div>
       <div class="product-preview-info">
-        <strong>${label}</strong>
+        <strong>${safeLabel}</strong>
         <ul class="order-items-list">
           ${order.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.lineTotal != null ? ` &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
         </ul>
@@ -820,7 +824,7 @@ function renderOrderDetail(order) {
 
     ${order.status === 'delivered' ? `
       <h2>Delivery</h2>
-      <p class="hint">Delivered to ${order.deliveryLocation || 'an unrecorded location'} at ${order.deliveryTime ? new Date(order.deliveryTime).toLocaleString() : 'an unrecorded time'}${order.deliveredAt ? ` &middot; confirmed ${new Date(order.deliveredAt).toLocaleString()}` : ''}.</p>
+      <p class="hint">Delivered to ${escapeHtml(order.deliveryLocation || 'an unrecorded location')} at ${order.deliveryTime ? new Date(order.deliveryTime).toLocaleString() : 'an unrecorded time'}${order.deliveredAt ? ` &middot; confirmed ${new Date(order.deliveredAt).toLocaleString()}` : ''}.</p>
       ${order.fulfilmentStatus === 'partial' ? `<p class="hint"><strong>${fulfilmentSummary(order)}</strong></p>` : order.fulfilmentStatus === 'full' ? '<p class="hint">Delivered in full.</p>' : ''}
       <div id="owner-order-photos"></div>
     ` : ''}

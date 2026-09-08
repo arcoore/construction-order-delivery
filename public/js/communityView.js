@@ -222,7 +222,7 @@ function render() {
   if (all.length === 0) {
     emptyMessage = 'No companies exist yet - create the first one above.';
   } else if (visible.length === 0) {
-    emptyMessage = `No companies match "${browseSearchInput.value.trim()}".`;
+    emptyMessage = `No companies match "${escapeHtml(browseSearchInput.value.trim())}".`;
   }
 
   browseList.innerHTML = emptyMessage
