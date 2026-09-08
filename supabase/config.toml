@@ -105,6 +105,13 @@ enable_signup = true
 # Account security (2026-09): a new account can't be used until the user
 # clicks the confirmation link emailed to them.
 enable_confirmations = true
+# Minimum gap between two auth emails (confirmation / reset / resend) to the
+# SAME address, enforced by GoTrue. The Supabase CLI default is 1s, i.e. no
+# real limit - "Resend the email" could be spammed. 60s is the real
+# server-side rate limit on resend; authView.js also shows a matching
+# countdown on the button. This is per-address; [auth.rate_limit] email_sent
+# below is the separate per-IP hourly cap.
+max_frequency = "60s"
 
 # Real outbound email for auth (confirmation + password-reset links).
 # Without this: the LOCAL stack captures every message in Mailpit

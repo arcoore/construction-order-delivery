@@ -170,6 +170,11 @@ export async function resendConfirmation(email, captchaToken) {
     },
   });
   if (error) {
+    // A genuine can't-reach-the-server failure - the caller should NOT start
+    // its cooldown timer, so the button stays usable for an immediate retry.
+    if (error.name === 'AuthRetryableFetchError' || error.status === 0) {
+      return { error: 'Could not reach the server. Check your connection and try again.', networkError: true };
+    }
     if (error.code === 'over_email_send_rate_limit' || /rate limit|too many/i.test(error.message || '')) {
       return { error: 'Please wait a minute before asking for another email.' };
     }

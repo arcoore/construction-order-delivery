@@ -43,6 +43,44 @@ const checkEmailStatus = document.getElementById('check-email-status');
 const oauthBlock = document.getElementById('oauth-block');
 const oauthStatus = document.getElementById('oauth-status');
 
+// --- Resend-email cooldown ---------------------------------------------
+// A visible 60s countdown on the "Resend the email" button. This is the
+// UX layer over GoTrue's own server-side per-address limit (config.toml
+// [auth.email] max_frequency = "60s", GOTRUE_SMTP_MAX_FREQUENCY) - it stops
+// the button being mashed and gives a clear "wait Ns" instead of a silent
+// failure. One global "until" timestamp in localStorage (not per-address) so
+// a page refresh mid-cooldown doesn't reset it. Also started right after
+// sign-up, since the confirmation email just went out.
+const RESEND_COOLDOWN_MS = 60_000;
+const RESEND_UNTIL_KEY = 'sitestock_resend_until';
+const checkEmailResendLabel = checkEmailResendBtn ? checkEmailResendBtn.textContent : 'Resend the email';
+let resendTimer = null;
+
+function resendCooldownRemaining() {
+  try {
+    return Math.max(0, Number(localStorage.getItem(RESEND_UNTIL_KEY) || 0) - Date.now());
+  } catch {
+    return 0;
+  }
+}
+function startResendCooldown() {
+  try { localStorage.setItem(RESEND_UNTIL_KEY, String(Date.now() + RESEND_COOLDOWN_MS)); } catch { /* storage blocked */ }
+  tickResendCooldown();
+}
+function tickResendCooldown() {
+  if (!checkEmailResendBtn) return;
+  clearTimeout(resendTimer);
+  const remaining = resendCooldownRemaining();
+  if (remaining <= 0) {
+    checkEmailResendBtn.disabled = false;
+    checkEmailResendBtn.textContent = checkEmailResendLabel;
+    return;
+  }
+  checkEmailResendBtn.disabled = true;
+  checkEmailResendBtn.textContent = `Resend available in ${Math.ceil(remaining / 1000)}s`;
+  resendTimer = setTimeout(tickResendCooldown, 1000);
+}
+
 // --- Social sign-in (Google / Microsoft / Apple) ------------------------
 // A button shows only when the provider is BOTH listed in
 // window.SITESTOCK_OAUTH_PROVIDERS (env.js) AND reported enabled by GoTrue's
@@ -206,6 +244,9 @@ function showAuthForm(which) {
   setNewPasswordForm.hidden = which !== 'set-new-password';
   mfaChallengeForm.hidden = which !== 'mfa-challenge';
   checkEmailPanel.hidden = which !== 'check-email';
+  // Restore the resend countdown when this screen comes into view (e.g. a
+  // page refresh mid-cooldown).
+  if (which === 'check-email') tickResendCooldown();
   // The login/register tabs and the "Log in to SiteStock" intro only make
   // sense on those two forms - the rest are one-shot flows with their own
   // heading (password recovery, 2FA, confirm-your-email). The social sign-in
@@ -273,24 +314,35 @@ checkEmailLoginBtn.addEventListener('click', () => {
 
 checkEmailResendBtn.addEventListener('click', async () => {
   if (!pendingConfirmEmail) return;
+  if (resendCooldownRemaining() > 0) {
+    // Shouldn't be reachable (button is disabled) - belt and braces.
+    tickResendCooldown();
+    return;
+  }
   if (captchaMissing('resend')) {
     setStatus(checkEmailStatus, 'Please complete the "I\'m not a robot" check first.', 'error');
     return;
   }
   checkEmailResendBtn.disabled = true;
   setStatus(checkEmailStatus, 'Sending…', '');
+  let startCooldown = false;
   try {
     const result = await resendConfirmation(pendingConfirmEmail, captchaToken('resend'));
     if (result.error) {
       setStatus(checkEmailStatus, result.error, 'error');
+      // Anything except a can't-reach-the-server failure means the request
+      // landed (sent, or refused as too-soon) - hold the button for 60s.
+      startCooldown = !result.networkError;
       return;
     }
     setStatus(checkEmailStatus, `Sent again to ${pendingConfirmEmail}. Check your inbox, and your spam folder.`, 'success');
+    startCooldown = true;
   } catch (err) {
     setStatus(checkEmailStatus, 'Could not reach the server. Check your connection and try again.', 'error');
   } finally {
-    checkEmailResendBtn.disabled = false;
     resetCaptcha('resend');
+    if (startCooldown) startResendCooldown();
+    else checkEmailResendBtn.disabled = false;
   }
 });
 
@@ -454,6 +506,9 @@ registerForm.addEventListener('submit', async e => {
       checkEmailAddress.textContent = result.email;
       checkEmailStatus.textContent = '';
       authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
+      // Sign-up just sent the confirmation email - start the resend cooldown
+      // so the button isn't immediately mashable.
+      startResendCooldown();
       showAuthForm('check-email');
       registerStatus.textContent = '';
       return;
