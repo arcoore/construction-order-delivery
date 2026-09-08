@@ -2042,7 +2042,17 @@ summary:focus-visible,
   letter-spacing: 0.06em;
   font-size: 0.72rem;
 }
-.app-footer-note { font-size: 0.75rem; }
+.app-footer-a11y { margin-top: 12px; max-width: 62ch; }
+.app-footer-a11y-label {
+  display: block;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.app-footer-note { font-size: 0.75rem; margin-top: 10px; }
 
 @media (max-width: 480px) {
   .tab-btn { font-size: 0.68rem; padding: 10px 9px; letter-spacing: 0.05em; }
