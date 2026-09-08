@@ -22,6 +22,17 @@
   //   window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
   window.SITESTOCK_TURNSTILE_KEY = '';
 
+  // Social sign-in providers to show on the auth screen. Empty = none (the
+  // buttons stay hidden, no change for anyone). A provider only actually
+  // works if it is ALSO enabled + configured in supabase/config.toml's
+  // [auth.external.<provider>] with a real client id + secret - the two
+  // gates must move together, same as SITESTOCK_TURNSTILE_KEY. Accepted
+  // values: 'google', 'azure' (shown as "Microsoft"), 'apple'. See
+  // supabase/.env.example and the launch checklist for the per-provider
+  // setup, which needs an adult (and, for Apple, the paid Developer
+  // Program).
+  window.SITESTOCK_OAUTH_PROVIDERS = [];
+
   if (host === 'localhost' || host === '127.0.0.1') {
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply
   }

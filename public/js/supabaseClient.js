@@ -34,8 +34,11 @@ if (window.SITESTOCK_SUPABASE_CONFIG_ERROR) {
   throw new Error('SiteStock: ' + window.SITESTOCK_SUPABASE_CONFIG_ERROR);
 }
 
-const SUPABASE_URL = window.SITESTOCK_SUPABASE_URL || 'http://127.0.0.1:54321';
-const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
+// Exported so auth.js can hit GoTrue's public /settings endpoint directly
+// (to ask which social providers are actually enabled) without re-deriving
+// the URL/key. The anon key is safe to expose - it already ships in the page.
+export const SUPABASE_URL = window.SITESTOCK_SUPABASE_URL || 'http://127.0.0.1:54321';
+export const SUPABASE_ANON_KEY = window.SITESTOCK_SUPABASE_ANON_KEY
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 // --- Session token storage ---------------------------------------------

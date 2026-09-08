@@ -2203,6 +2203,39 @@ summary:focus-visible,
 .captcha-slot { margin: 12px 0 4px; min-height: 0; }
 .captcha-slot:empty { display: none; }
 
+/* Social sign-in block (#oauth-block). Hidden entirely unless a provider is
+   enabled - see authView.js / env.js. */
+#oauth-block { margin: 4px 0 18px; }
+#oauth-block[hidden] { display: none; }
+.oauth-buttons { display: flex; flex-direction: column; gap: 8px; }
+.btn-oauth {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--text-muted);
+  font-weight: 600;
+}
+.btn-oauth[hidden] { display: none; }
+.btn-oauth:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
+.btn-oauth:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 2px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 /* --- "Confirm your email" screen shown after signup (#check-email-panel) --- */
 .checklist-state {
   flex: 0 0 auto;

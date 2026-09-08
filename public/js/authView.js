@@ -8,6 +8,7 @@ import {
   createAccount, login, requestPasswordReset, completePasswordReset,
   inPasswordRecoveryContext, subscribeAuth, resendConfirmation,
   isMfaChallengePending, verifyMfaLogin, logout,
+  signInWithProvider, getEnabledOAuthProviders,
 } from './auth.js';
 
 const authView = document.getElementById('auth-view');
@@ -39,6 +40,56 @@ const checkEmailAddress = document.getElementById('check-email-address');
 const checkEmailResendBtn = document.getElementById('check-email-resend-btn');
 const checkEmailLoginBtn = document.getElementById('check-email-login-btn');
 const checkEmailStatus = document.getElementById('check-email-status');
+const oauthBlock = document.getElementById('oauth-block');
+const oauthStatus = document.getElementById('oauth-status');
+
+// --- Social sign-in (Google / Microsoft / Apple) ------------------------
+// A button shows only when the provider is BOTH listed in
+// window.SITESTOCK_OAUTH_PROVIDERS (env.js) AND reported enabled by GoTrue's
+// /settings endpoint (getEnabledOAuthProviders). Both are [] / all-false by
+// default, so nothing shows and nothing changes for anyone. The double gate
+// means a button can never appear for a provider that would just error.
+// oauthProvidersShown tracks whether any button is live, so showAuthForm
+// knows whether to reveal the block on the login/register forms.
+const OAUTH_WANTED = Array.isArray(window.SITESTOCK_OAUTH_PROVIDERS)
+  ? window.SITESTOCK_OAUTH_PROVIDERS
+  : [];
+let oauthProvidersShown = false;
+
+async function wireSocialSignIn() {
+  if (!OAUTH_WANTED.length) return;
+  const enabled = await getEnabledOAuthProviders();
+  const live = OAUTH_WANTED.filter(p => enabled.includes(p));
+  if (!live.length) return;
+
+  oauthBlock.querySelectorAll('.btn-oauth').forEach(btn => {
+    if (!live.includes(btn.dataset.oauth)) return;
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      oauthBlock.querySelectorAll('.btn-oauth').forEach(b => { b.disabled = true; });
+      setStatus(oauthStatus, 'Taking you to your provider…', '');
+      try {
+        const result = await signInWithProvider(btn.dataset.oauth);
+        // On success the browser is already navigating away; only an error
+        // that happened before the redirect ever lands back here.
+        if (result && result.error) {
+          setStatus(oauthStatus, result.error, 'error');
+          oauthBlock.querySelectorAll('.btn-oauth').forEach(b => { b.disabled = false; });
+        }
+      } catch (err) {
+        setStatus(oauthStatus, 'Could not start sign-in. Check your connection and try again.', 'error');
+        oauthBlock.querySelectorAll('.btn-oauth').forEach(b => { b.disabled = false; });
+      }
+    });
+  });
+
+  oauthProvidersShown = true;
+  // The initial auth view is login/register (one-shot flows are reached only
+  // by a click or a recovery link, where showAuthForm hides this again).
+  // Nothing calls showAuthForm on a plain load, so reveal it here.
+  if (!loginForm.hidden || !registerForm.hidden) oauthBlock.hidden = false;
+}
+wireSocialSignIn();
 
 let selectedRegisterRole = null;
 let pendingConfirmEmail = null;
@@ -157,9 +208,12 @@ function showAuthForm(which) {
   checkEmailPanel.hidden = which !== 'check-email';
   // The login/register tabs and the "Log in to SiteStock" intro only make
   // sense on those two forms - the rest are one-shot flows with their own
-  // heading (password recovery, 2FA, confirm-your-email).
+  // heading (password recovery, 2FA, confirm-your-email). The social sign-in
+  // block follows the tabs, and is only ever shown when a provider is
+  // actually enabled.
   authTabs.hidden = which !== 'login' && which !== 'register';
   authIntro.hidden = authTabs.hidden;
+  oauthBlock.hidden = authTabs.hidden || !oauthProvidersShown;
 }
 
 // A pending 2FA challenge (from login() or a mid-challenge page refresh)

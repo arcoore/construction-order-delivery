@@ -10,7 +10,7 @@
 // since they're the current user's own account facts, never looked up for
 // anyone else. Looking up *other* users' display names is identity.js's
 // job (profiles table), not this module's.
-import { supabase } from './supabaseClient.js';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabaseClient.js';
 import { isPasswordPwned } from './pwnedPassword.js';
 
 let currentSession = null;
@@ -104,6 +104,9 @@ function friendlyAuthError(error) {
   if (/invalid.*(totp|code)|mfa/i.test(msg)) return 'That code isn\'t right - check your authenticator app and try again.';
   if (/password.*(least|short)/i.test(msg)) return msg;
   if (/captcha/i.test(msg)) return 'Please complete the "I\'m not a robot" check and try again.';
+  if (/provider.*(not enabled|disabled)|unsupported provider/i.test(msg)) {
+    return 'That sign-in option is not available yet.';
+  }
   return msg;
 }
 
@@ -172,6 +175,48 @@ export async function resendConfirmation(email, captchaToken) {
     }
     return { error: friendlyAuthError(error) };
   }
+  return { ok: true };
+}
+
+// Social sign-in (Google / Microsoft-'azure' / Apple). Kicks off Supabase's
+// OAuth flow, which is a full-page redirect to the provider and back - on
+// success the browser is already navigating away by the time this resolves,
+// so there is nothing to return but an error. detectSessionInUrl (true, in
+// supabaseClient.js) picks up the session on the way back and the normal
+// onAuthStateChange -> routing path takes over, same as any other sign-in.
+// The account's profile row + display name are handled server-side by the
+// handle_new_user trigger (migration 0043 widened it for provider name
+// fields); an OAuth account has no default_role, which resolveEntryRole
+// already tolerates (worker+driver falls through to worker; anything
+// genuinely ambiguous shows role-select-view, a real screen since 8E).
+// Which social providers GoTrue actually has configured + enabled, from its
+// public /settings endpoint. authView.js intersects this with
+// window.SITESTOCK_OAUTH_PROVIDERS so a button can only ever appear for a
+// provider that genuinely works - a provider listed in env.js but not set
+// up in Supabase simply doesn't get a button (rather than one that dumps
+// the user on GoTrue's raw "provider is not enabled" error page). Returns
+// [] on any failure - offline, endpoint down - so nothing shows rather than
+// something broken.
+export async function getEnabledOAuthProviders() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+      headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    if (!res.ok) return [];
+    const ext = (await res.json()).external || {};
+    return Object.keys(ext).filter(k => ext[k] === true);
+  } catch {
+    return [];
+  }
+}
+
+export async function signInWithProvider(provider) {
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo },
+  });
+  if (error) return { error: friendlyAuthError(error) };
   return { ok: true };
 }
 

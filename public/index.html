@@ -114,6 +114,22 @@
         <button class="tab-btn" data-auth-tab="register">Create account</button>
       </div>
 
+      <!-- Social sign-in. Each button stays hidden until its provider is
+           listed in window.SITESTOCK_OAUTH_PROVIDERS (env.js) AND configured
+           in supabase/config.toml - authView.js reveals only the enabled
+           ones, and the whole block stays hidden when none are. Works for
+           both logging in and creating an account (a provider account is
+           made on first use), so it sits above both tabs' forms. -->
+      <div id="oauth-block" hidden>
+        <div class="oauth-buttons">
+          <button type="button" class="btn btn-block btn-oauth" data-oauth="google" hidden>Continue with Google</button>
+          <button type="button" class="btn btn-block btn-oauth" data-oauth="azure" hidden>Continue with Microsoft</button>
+          <button type="button" class="btn btn-block btn-oauth" data-oauth="apple" hidden>Continue with Apple</button>
+        </div>
+        <div class="auth-divider"><span>or use your email</span></div>
+        <p id="oauth-status" class="form-status" role="status" aria-live="polite"></p>
+      </div>
+
       <form id="login-form" class="auth-form">
         <label class="field-label" for="login-email-input">Email</label>
         <input type="email" id="login-email-input" class="text-input" autocomplete="email" />
