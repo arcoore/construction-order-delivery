@@ -314,14 +314,14 @@ function renderOrderCard(order, pickup) {
           <label class="field-label" for="delivery-time-input">Delivered at</label>
           <input type="datetime-local" id="delivery-time-input" class="text-input" value="${nowForDateTimeInput()}" />
           <label class="field-label" for="delivery-location-input">Delivered to (location)</label>
-          <input type="text" id="delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${order.deliveryPostcode || ''}" />
+          <input type="text" id="delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${escapeHtml(order.deliveryPostcode || '')}" />
           ${(order.items && order.items.length) ? `
           <p class="field-label">Anything short or missing? (optional)</p>
           <div class="delivery-shortfalls">
             ${order.items.map(it => `
               <label class="shortfall-row">
                 <input type="checkbox" class="shortfall-check" data-item-id="${it.id}" />
-                <span>${it.quantity} × ${it.productName}${it.variant ? ` (${it.variant})` : ''}</span>
+                <span>${escapeHtml(it.quantity)} × ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}</span>
               </label>
               <input type="text" class="text-input shortfall-note" data-note-for="${it.id}" placeholder="What was short? (optional)" hidden />
             `).join('')}

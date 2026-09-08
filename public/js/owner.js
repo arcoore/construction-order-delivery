@@ -676,10 +676,13 @@ async function renderTeamActivity(communityId) {
   teamActivityDetails.hidden = false;
   teamActivityList.innerHTML = events.map(e => {
     const membership = getMembershipById(e.membershipId);
-    const who = membership ? resolveDisplayName(membership.userId) : 'a member';
-    const by = e.actorName || 'An owner';
+    // who / by are display names, reason is free text - all interpolated
+    // into innerHTML by TEAM_EVENT_TEXT below, so escape here (same approach
+    // as orderStatus.js's describeEvent).
+    const who = escapeHtml(membership ? resolveDisplayName(membership.userId) : 'a member');
+    const by = escapeHtml(e.actorName || 'An owner');
     const fn = TEAM_EVENT_TEXT[e.type];
-    const text = fn ? fn(who, by, e.reason) : `${e.type.replace(/_/g, ' ')} - ${who}`;
+    const text = fn ? fn(who, by, escapeHtml(e.reason || '')) : `${escapeHtml(e.type.replace(/_/g, ' '))} - ${who}`;
     return `
       <div class="activity-item">
         <span class="activity-text">${text}</span>
@@ -799,7 +802,7 @@ function renderOrderDetail(order) {
       <div class="product-preview-info">
         <strong>${label}</strong>
         <ul class="order-items-list">
-          ${order.items.map(it => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''}${it.lineTotal != null ? ` &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
+          ${order.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.lineTotal != null ? ` &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
         </ul>
         ${order.totalPrice != null ? `<span><strong>Total: ${formatPrice(order.totalPrice)}</strong></span>` : ''}
         <span class="order-needed-by${urgency !== 'none' && urgency !== 'future' ? ` urgency-${urgency}` : ''}">Needed by: ${formatNeededBy(order.neededByType, order.neededBy)}${urgencyWord ? ` &middot; ${urgencyWord}` : ''}</span>
@@ -1003,7 +1006,7 @@ function renderOrderCard(order) {
         approveLabel = 'Approve';
         approveDisabled = 'disabled';
       } else if (firstDone) {
-        note = `<p class="hint small-hint">${order.approvedBy || 'Another owner'} approved this - it needs your approval too.</p>`;
+        note = `<p class="hint small-hint">${escapeHtml(order.approvedBy || 'Another owner')} approved this - it needs your approval too.</p>`;
         approveLabel = 'Approve (2 of 2)';
       }
       actionHtml = `
@@ -1048,20 +1051,20 @@ function renderOrderCard(order) {
           <span class="route-label">Buy from</span>
           <span class="route-value">${escapeHtml(order.stockistName || "Unknown")}</span>
           ${order.stockistName ? `<span class="route-sub">${escapeHtml(order.stockistWebsite)} &middot; ${escapeHtml(order.stockistPostcode)}</span>` : ''}
-          ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${order.pickupEstimate}</span>` : ''}
+          ${order.pickupEstimate ? `<span class="route-sub route-pickup-estimate">${escapeHtml(order.pickupEstimate)}</span>` : ''}
         </div>
         <div class="route-arrow">to</div>
         <div class="route-step">
           <span class="route-label">Deliver to</span>
           <span class="route-value">${escapeHtml(order.siteName || order.deliveryPostcode)}</span>
-          ${order.siteName ? `<span class="route-sub">${[order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode}</span>` : ''}
+          ${order.siteName ? `<span class="route-sub">${escapeHtml([order.siteAddress, order.sitePostcode].filter(Boolean).join(' · ') || order.deliveryPostcode)}</span>` : ''}
         </div>
       </div>
       ${order.status === 'rejected' ? `<p class="rejection-reason">Rejected by ${escapeHtml(order.rejectedBy || "owner")}${order.rejectionReason ? `: ${escapeHtml(order.rejectionReason)}` : ""}</p>` : ''}
       ${order.status === 'cancelled' ? `<p class="rejection-reason">Cancelled by ${escapeHtml(order.orderCancelledBy || "the worker")}${order.orderCancellationReason ? `: ${escapeHtml(order.orderCancellationReason)}` : ""}</p>` : ''}
       ${order.status === 'purchased' || order.status === 'claimed' || order.status === 'collected' || order.status === 'delivered'
         ? `<p class="hint small-hint">Purchased by ${escapeHtml(order.purchasedBy || "a buyer")}${order.driver ? ` &middot; driver: ${escapeHtml(order.driver)}` : ""}</p>` : ''}
-      ${order.cancelledAt ? `<p class="rejection-reason">Cancelled by ${order.cancelledBy || 'a driver'}: ${order.cancellationReason || ''}</p>` : ''}
+      ${order.cancelledAt ? `<p class="rejection-reason">Cancelled by ${escapeHtml(order.cancelledBy || 'a driver')}: ${escapeHtml(order.cancellationReason || '')}</p>` : ''}
       ${order.status === 'delivered' && order.deliveryLocation
         ? `<p class="hint small-hint">Delivered to ${escapeHtml(order.deliveryLocation)} at ${new Date(order.deliveryTime).toLocaleString()} (confirmed by ${escapeHtml(order.driver || "driver")})</p>` : ''}
       ${actionHtml}

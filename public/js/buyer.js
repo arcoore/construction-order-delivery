@@ -233,7 +233,7 @@ function renderDirectDeliveries() {
           <label class="field-label" for="direct-delivery-time-input">Delivered at</label>
           <input type="datetime-local" id="direct-delivery-time-input" class="text-input" value="${nowForDateTimeInput()}" />
           <label class="field-label" for="direct-delivery-location-input">Delivered to (location)</label>
-          <input type="text" id="direct-delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${o.deliveryPostcode || ''}" />
+          <input type="text" id="direct-delivery-location-input" class="text-input" placeholder="e.g. Site gate, SW1A 1AA" value="${escapeHtml(o.deliveryPostcode || '')}" />
           <div class="reject-form-actions">
             <button class="btn btn-secondary" data-direct-action="never-mind" data-order-id="${o.id}">Never mind</button>
             <button class="btn btn-primary" data-direct-action="confirm" data-order-id="${o.id}">Confirm delivered</button>
@@ -466,7 +466,7 @@ function renderDetail() {
       <span class="source-meta">${escapeHtml(order.stockistWebsite || '')} &middot; ${escapeHtml(order.stockistPostcode || '')}</span>
       ${websiteUrl ? `<a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml((order.stockistName || '').split(' - ')[0])}'s website &nearr;</a>` : ''}
     </div>
-    <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> - d` : 'D'}eliver to <strong>${order.deliveryPostcode}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
+    <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> - d` : 'D'}eliver to <strong>${escapeHtml(order.deliveryPostcode)}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
     <p class="hint small-hint">Buy this from the stockist above yourself, outside SiteStock - this app doesn't process the purchase. Once you've actually paid, come back here and press and hold the button below for 3 seconds to confirm.</p>
 
     <button type="button" class="btn btn-primary btn-block hold-confirm-btn" id="hold-purchase-btn">

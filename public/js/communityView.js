@@ -203,7 +203,7 @@ function render() {
     return `
       <div class="community-card">
         <div class="community-card-info">
-          <strong>${community ? community.name : 'Unknown company'}</strong>
+          <strong>${community ? escapeHtml(community.name) : 'Unknown company'}</strong>
           <span>Requested ${timeAgo(r.requestedAt)} &middot; waiting for approval</span>
         </div>
       </div>

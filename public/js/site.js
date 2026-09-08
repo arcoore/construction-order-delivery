@@ -79,8 +79,8 @@ function renderSiteSelectList() {
 
   workerSitesList.innerHTML = sites.map(s => `
     <button type="button" class="result-card" data-site-id="${s.id}">
-      <span class="result-name">${s.name}</span>
-      <span class="result-meta">${[s.address, s.postcode].filter(Boolean).join(' · ') || 'No address on file'}</span>
+      <span class="result-name">${escapeHtml(s.name)}</span>
+      <span class="result-meta">${escapeHtml([s.address, s.postcode].filter(Boolean).join(' · ')) || 'No address on file'}</span>
     </button>
   `).join('');
 
@@ -147,8 +147,8 @@ function renderResults(products) {
   }
   resultsEl.innerHTML = bar + products.map(p => `
     <button class="result-card" data-id="${p.id}">
-      <span class="result-name">${p.name}</span>
-      <span class="result-meta">${p.category} &middot; ${formatPrice(p.unitPrice)} per ${p.unit}</span>
+      <span class="result-name">${escapeHtml(p.name)}</span>
+      <span class="result-meta">${escapeHtml(p.category)} &middot; ${formatPrice(p.unitPrice)} per ${escapeHtml(p.unit)}</span>
     </button>
   `).join('');
   wireCartBar();
@@ -193,9 +193,9 @@ function renderQuantityStep(product, variant) {
     product.variants ? () => renderVariantStep(product) : backToSearchKeepingCart
   );
   orderFormEl.innerHTML = `
-    <h2>${product.name}${variant ? ` - ${variant}` : ''}</h2>
-    <p class="hint">${product.category} &middot; ${formatPrice(product.unitPrice)} per ${product.unit}</p>
-    <label class="field-label" for="qty-input">How many (${product.unit})?</label>
+    <h2>${escapeHtml(product.name)}${variant ? ` - ${escapeHtml(variant)}` : ''}</h2>
+    <p class="hint">${escapeHtml(product.category)} &middot; ${formatPrice(product.unitPrice)} per ${escapeHtml(product.unit)}</p>
+    <label class="field-label" for="qty-input">How many (${escapeHtml(product.unit)})?</label>
     <input type="number" id="qty-input" class="text-input" min="1" value="1" />
     <button id="add-to-order-btn" class="btn btn-primary btn-block">Add to order</button>
     <p id="order-form-status" class="form-status"></p>
@@ -225,15 +225,15 @@ function renderVariantStep(product) {
   setBackAction('Back to search', closeOrderForm);
 
   orderFormEl.innerHTML = `
-    <h2>${product.name}</h2>
-    <p class="hint">${product.category}</p>
+    <h2>${escapeHtml(product.name)}</h2>
+    <p class="hint">${escapeHtml(product.category)}</p>
 
     <label class="field-label">Which size / type do you need?</label>
     <div class="variant-list">
       ${product.variants.map(v => `
-        <button type="button" class="variant-option" data-variant="${v}">
+        <button type="button" class="variant-option" data-variant="${escapeHtml(v)}">
           <span class="variant-option-radio" aria-hidden="true"></span>
-          <span class="variant-option-label">${v}</span>
+          <span class="variant-option-label">${escapeHtml(v)}</span>
           <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `).join('')}
@@ -373,15 +373,15 @@ function renderDetailsStep(prefill = null) {
 
   orderFormEl.innerHTML = `
     <h2>Your order - ${cart.length} ${cart.length === 1 ? 'material' : 'materials'}</h2>
-    <p class="hint">Requesting as <strong>${getCurrentDisplayName() || 'Unknown'}</strong></p>
+    <p class="hint">Requesting as <strong>${escapeHtml(getCurrentDisplayName() || 'Unknown')}</strong></p>
 
     <ul class="order-items-list" id="cart-items">
-      ${cart.map((it, i) => `<li>${it.quantity} &times; ${it.unit} ${it.productName}${it.variant ? ` (${it.variant})` : ''} <button type="button" class="link-btn" data-remove-item="${i}">Remove</button></li>`).join('')}
+      ${cart.map((it, i) => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''} <button type="button" class="link-btn" data-remove-item="${i}">Remove</button></li>`).join('')}
     </ul>
     <button type="button" class="link-btn" id="add-more-btn">+ Add another material</button>
 
     <label class="field-label" for="postcode-input">Deliver to postcode</label>
-    <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${prefill ? prefill.deliveryPostcode : (selectedSite ? selectedSite.postcode : '')}" />
+    <input type="text" id="postcode-input" class="text-input" placeholder="e.g. SW1A 1AA" value="${escapeHtml(prefill ? prefill.deliveryPostcode : (selectedSite ? selectedSite.postcode : ''))}" />
 
     ${renderNeededByControl(neededByChoice)}
 
@@ -511,8 +511,8 @@ function renderSourceStep(details) {
         <button type="button" class="variant-option source-option" data-branch-id="${s.id}">
           <span class="variant-option-radio" aria-hidden="true"></span>
           <span class="variant-option-label">
-            <span class="source-name">${s.name}</span>
-            <span class="source-meta">${s.website} &middot; ${s.postcode}</span>
+            <span class="source-name">${escapeHtml(s.name)}</span>
+            <span class="source-meta">${escapeHtml(s.website)} &middot; ${escapeHtml(s.postcode)}</span>
             <span class="source-distance">${s.distanceKm != null ? `~${s.distanceKm.toFixed(1)} km from site` : 'Distance unavailable'}</span>
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
@@ -917,9 +917,9 @@ function renderEditPickItemQty() {
   const existing = editState.editIndex !== 'new' ? editState.items[editState.editIndex] : null;
   const startQty = existing && existing.productId === p.id ? existing.quantity : 1;
   orderFormEl.innerHTML = `
-    <h2>${p.name}${v ? ` - ${v}` : ''}</h2>
-    <label class="field-label" for="edit-item-qty-input">How many (${p.unit})?</label>
-    <input type="number" id="edit-item-qty-input" class="text-input" min="1" value="${startQty}" />
+    <h2>${escapeHtml(p.name)}${v ? ` - ${escapeHtml(v)}` : ''}</h2>
+    <label class="field-label" for="edit-item-qty-input">How many (${escapeHtml(p.unit)})?</label>
+    <input type="number" id="edit-item-qty-input" class="text-input" min="1" value="${escapeHtml(startQty)}" />
     <button type="button" id="edit-item-qty-continue" class="btn btn-primary btn-block">${editState.editIndex === 'new' ? 'Add to order' : 'Update material'}</button>
     <button type="button" class="link-btn" id="edit-item-qty-cancel">Cancel</button>
   `;
@@ -962,9 +962,9 @@ function renderEditSummary() {
     <ul class="order-items-list edit-items-list">
       ${s.items.map((it, i) => `
         <li>
-          <span>${it.productName}${it.variant ? ` (${it.variant})` : ''}</span>
-          <input type="number" class="text-input edit-item-qty" min="1" value="${it.quantity}" data-edit-qty="${i}" aria-label="Quantity for ${it.productName}" />
-          <span class="edit-item-unit">${it.unit}</span>
+          <span>${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}</span>
+          <input type="number" class="text-input edit-item-qty" min="1" value="${escapeHtml(it.quantity)}" data-edit-qty="${i}" aria-label="Quantity for ${escapeHtml(it.productName)}" />
+          <span class="edit-item-unit">${escapeHtml(it.unit)}</span>
           <button type="button" class="link-btn" data-edit-change="${i}">Change</button>
           ${s.items.length > 1 ? `<button type="button" class="link-btn link-btn-danger" data-edit-remove="${i}">Remove</button>` : ''}
         </li>
@@ -973,19 +973,19 @@ function renderEditSummary() {
     <button type="button" class="link-btn" id="edit-add-item-btn">+ Add another material</button>
 
     <div class="confirm-source-card">
-      <div class="confirm-source-row"><span class="source-name">${s.stockistName || 'No stockist chosen yet'}</span></div>
+      <div class="confirm-source-row"><span class="source-name">${escapeHtml(s.stockistName || 'No stockist chosen yet')}</span></div>
       <button type="button" class="link-btn" id="edit-change-source-btn">Change stockist</button>
     </div>
 
     <label class="field-label">Site</label>
     <div class="confirm-source-card">
-      <div class="confirm-source-row"><span class="source-name">${s.site.name || 'No site chosen'}</span></div>
-      <span class="source-meta">${[s.site.address, s.site.postcode].filter(Boolean).join(' · ')}</span>
+      <div class="confirm-source-row"><span class="source-name">${escapeHtml(s.site.name || 'No site chosen')}</span></div>
+      <span class="source-meta">${escapeHtml([s.site.address, s.site.postcode].filter(Boolean).join(' · '))}</span>
       <button type="button" class="link-btn" id="edit-change-site-btn">Change site</button>
     </div>
 
     <label class="field-label" for="edit-postcode-input">Deliver to postcode</label>
-    <input type="text" id="edit-postcode-input" class="text-input" value="${s.deliveryPostcode}" />
+    <input type="text" id="edit-postcode-input" class="text-input" value="${escapeHtml(s.deliveryPostcode)}" />
 
     ${renderNeededByControl({ type: s.neededByType, date: s.neededBy != null ? new Date(s.neededBy) : null })}
 
@@ -1050,8 +1050,8 @@ function renderEditPickMaterial() {
     const products = searchProducts(input.value);
     results.innerHTML = products.map(p => `
       <button class="result-card" data-id="${p.id}">
-        <span class="result-name">${p.name}</span>
-        <span class="result-meta">${p.category} &middot; ${formatPrice(p.unitPrice)} per ${p.unit}</span>
+        <span class="result-name">${escapeHtml(p.name)}</span>
+        <span class="result-meta">${escapeHtml(p.category)} &middot; ${formatPrice(p.unitPrice)} per ${escapeHtml(p.unit)}</span>
       </button>
     `).join('');
     results.querySelectorAll('.result-card').forEach(btn => {
@@ -1073,13 +1073,13 @@ function renderEditPickMaterial() {
 function renderEditPickVariant() {
   const product = editState.pickProduct;
   orderFormEl.innerHTML = `
-    <h2>${product.name}</h2>
+    <h2>${escapeHtml(product.name)}</h2>
     <label class="field-label">Which size / type do you need?</label>
     <div class="variant-list">
       ${product.variants.map(v => `
-        <button type="button" class="variant-option" data-variant="${v}">
+        <button type="button" class="variant-option" data-variant="${escapeHtml(v)}">
           <span class="variant-option-radio" aria-hidden="true"></span>
-          <span class="variant-option-label">${v}</span>
+          <span class="variant-option-label">${escapeHtml(v)}</span>
           <span class="variant-option-arrow" aria-hidden="true"></span>
         </button>
       `).join('')}
@@ -1134,8 +1134,8 @@ function renderEditPickSource() {
         <button type="button" class="variant-option source-option" data-branch-id="${s.id}">
           <span class="variant-option-radio" aria-hidden="true"></span>
           <span class="variant-option-label">
-            <span class="source-name">${s.name}</span>
-            <span class="source-meta">${s.website} &middot; ${s.postcode}</span>
+            <span class="source-name">${escapeHtml(s.name)}</span>
+            <span class="source-meta">${escapeHtml(s.website)} &middot; ${escapeHtml(s.postcode)}</span>
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
           <span class="variant-option-arrow" aria-hidden="true"></span>
@@ -1178,8 +1178,8 @@ function renderEditPickSite() {
     <div class="community-list" id="edit-site-list">
       ${sites.map(s => `
         <button type="button" class="result-card" data-site-id="${s.id}">
-          <span class="result-name">${s.name}</span>
-          <span class="result-meta">${[s.address, s.postcode].filter(Boolean).join(' · ') || 'No address on file'}</span>
+          <span class="result-name">${escapeHtml(s.name)}</span>
+          <span class="result-meta">${escapeHtml([s.address, s.postcode].filter(Boolean).join(' · ')) || 'No address on file'}</span>
         </button>
       `).join('') || '<p class="empty-hint">You are not assigned to any active site.</p>'}
     </div>
