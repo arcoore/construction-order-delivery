@@ -375,6 +375,47 @@ export async function addSiteMembers(siteId, userIds, actorId) {
   return { ok: true, addedCount: eligible.length };
 }
 
+// The transpose of addSiteMembers: one member, several sites, in one insert
+// instead of a client-side loop over addSiteMember. Used when a join request
+// is approved with sites pre-ticked (owner.js) - that used to fire one
+// addSiteMember round trip per checked site. Same "already assigned / not
+// eligible is skipped, not an error" rule as addSiteMembers. All sites must
+// belong to one company (owner.js only ever passes sites from the community
+// it is rendering; re-checked here).
+export async function addMemberToSites(userId, siteIds, actorId) {
+  const sites = Array.from(new Set(siteIds)).map(getSite).filter(Boolean);
+  if (sites.length === 0) return { ok: true, addedCount: 0 };
+  const communityId = sites[0].communityId;
+  if (sites.some(s => s.communityId !== communityId)) {
+    return { ok: false, error: 'Those sites are not all in the same company.' };
+  }
+  if (!isOwner(communityId, actorId)) {
+    return { ok: false, error: 'Only the owner can assign employees to a site.' };
+  }
+  if (!isApprovedMember(communityId, userId)) {
+    return { ok: false, error: 'Only approved members of this company can be assigned to a site.' };
+  }
+  const targets = sites.filter(s => !isSiteMember(s.id, userId));
+  if (targets.length === 0) return { ok: true, addedCount: 0 };
+  const { data, error } = await supabase.from('site_memberships').insert(
+    targets.map(s => ({
+      site_id: s.id,
+      community_id: s.communityId,
+      user_id: userId,
+      added_by_id: actorId,
+    }))
+  ).select();
+  if (error) return { ok: false, error: error.message };
+  cache.memberships.push(...data.map(mapMembership));
+  notify();
+
+  await Promise.all(targets.map(async s => {
+    const { error: notifyError } = await supabase.rpc('notify_site_member_added', { p_site_id: s.id, p_recipient_id: userId });
+    if (notifyError) console.error('notify_site_member_added failed:', notifyError.message);
+  }));
+  return { ok: true, addedCount: targets.length };
+}
+
 // Phase 8D.1 hardening (0015): the removal and its notification are now one
 // atomic server-side operation (remove_site_member RPC) - the database
 // itself proves a real membership existed before any notification is

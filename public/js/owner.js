@@ -18,9 +18,10 @@ import {
 // dashboard's Sites summary card. No site CRUD/permission logic lives here;
 // creating/editing/archiving/assigning all still happens exclusively in
 // sitesView.js, reached via the sitestock:show-sites event below.
-// Roadmap Step 5 adds one real write, addSiteMember, reused as-is (not
-// reimplemented) for the optional "assign a site at approval time" flow.
-import { subscribeSites, getSites, getActiveSites, getSiteMembers, getSitesForMember, addSiteMember, refreshSitesCache } from './sites.js';
+// Roadmap Step 5 adds one real write, addMemberToSites (sites.js), reused
+// as-is for the optional "assign sites at approval time" flow - one batched
+// insert for all the ticked sites.
+import { subscribeSites, getSites, getActiveSites, getSiteMembers, getSitesForMember, addMemberToSites, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
@@ -849,8 +850,8 @@ function renderOrderDetail(order) {
 // otherwise-unnecessary second trip to Sites management. Purely additive:
 // assignment is always optional (approving with nothing checked behaves
 // exactly as before), zero-site membership and multi-site membership both
-// remain fully legal, and this reuses sites.js's existing addSiteMember - 
-// no new permission path, no change to what decideJoinRequest itself
+// remain fully legal, and this reuses sites.js's addMemberToSites - no new
+// permission path, no change to what decideJoinRequest itself
 // authorizes. Assignment is attempted only AFTER the approval itself
 // succeeds, and any assignment failure is reported on its own rather than
 // making a successful approval look like it failed.
@@ -922,13 +923,10 @@ function renderJoinRequests(communityId) {
       }
 
       if (checkedSiteIds.length > 0 && memberUserId) {
-        const failures = [];
-        for (const siteId of checkedSiteIds) {
-          const result = await addSiteMember(siteId, memberUserId, ownerId);
-          if (!result.ok) failures.push(result.error || 'unknown error');
-        }
-        if (failures.length > 0) {
-          alert(`Approved, but couldn't assign every site: ${failures.join('; ')}`);
+        // One batched insert for all the ticked sites, not a round trip each.
+        const result = await addMemberToSites(memberUserId, checkedSiteIds, ownerId);
+        if (!result.ok) {
+          alert(`Approved, but couldn't assign the sites: ${result.error}`);
         }
       }
     });
