@@ -319,8 +319,19 @@ authTabs.addEventListener('click', e => {
   activateAuthTab(tab);
 });
 
+// Reflect the selected tab both visually (.active) and to assistive tech
+// (aria-current) - the two must always move together.
+function markAuthTab(tab) {
+  authTabs.querySelectorAll('.tab-btn').forEach(b => {
+    const on = b.dataset.authTab === tab;
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+}
+
 function activateAuthTab(tab) {
-  authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === tab));
+  markAuthTab(tab);
   showAuthForm(tab);
   loginStatus.textContent = '';
   registerStatus.textContent = '';
@@ -343,7 +354,7 @@ resetRequestBackBtn.addEventListener('click', () => {
 });
 
 checkEmailLoginBtn.addEventListener('click', () => {
-  authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
+  markAuthTab('login');
   showAuthForm('login');
 });
 
@@ -540,7 +551,7 @@ registerForm.addEventListener('submit', async e => {
       pendingConfirmEmail = result.email;
       checkEmailAddress.textContent = result.email;
       checkEmailStatus.textContent = '';
-      authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === 'login'));
+      markAuthTab('login');
       // Sign-up just sent the confirmation email - start the resend cooldown
       // so the button isn't immediately mashable.
       startResendCooldown();

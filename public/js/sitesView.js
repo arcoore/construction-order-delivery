@@ -11,6 +11,17 @@ import { getCurrentUserId, resolveDisplayName } from './identity.js';
 const listView = document.getElementById('sites-list-view');
 const tabsEl = document.getElementById('sites-tabs');
 const listEl = document.getElementById('sites-list');
+
+// Keep the tab strip's visual (.active) and assistive-tech (aria-current)
+// selected state in lockstep.
+function syncTabs(container, isActive) {
+  container.querySelectorAll('.tab-btn').forEach(b => {
+    const on = isActive(b);
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+}
 const createNameInput = document.getElementById('site-name-input');
 const createAddressInput = document.getElementById('site-address-input');
 const createPostcodeInput = document.getElementById('site-postcode-input');
@@ -62,7 +73,7 @@ tabsEl.addEventListener('click', e => {
   const btn = e.target.closest('.tab-btn');
   if (!btn) return;
   activeTab = btn.dataset.sitesTab;
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  syncTabs(tabsEl, b => b === btn);
   render();
 });
 
@@ -499,7 +510,7 @@ function wireDetailActions(site) {
 // community) just falls through to the normal list, never a broken screen.
 export function refreshSitesView(siteId = null) {
   activeTab = 'active';
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.sitesTab === 'active'));
+  syncTabs(tabsEl, b => b.dataset.sitesTab === 'active');
   const communityId = getActiveCommunityId();
   const target = siteId && getSite(siteId);
   if (target && target.communityId === communityId) {

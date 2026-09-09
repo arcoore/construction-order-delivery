@@ -73,6 +73,17 @@ const analyticsPanel = document.getElementById('owner-analytics-panel');
 const analyticsSitesEl = document.getElementById('owner-analytics-sites');
 const analyticsSuppliersEl = document.getElementById('owner-analytics-suppliers');
 
+// Keep the tab strip's visual selected state (.active) and its assistive-tech
+// selected state (aria-current) in lockstep.
+function syncTabs(container, isActive) {
+  container.querySelectorAll('.tab-btn').forEach(b => {
+    const on = isActive(b);
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+}
+
 // Groups the existing order.status values into the tabs an owner actually
 // needs to scan for "what needs attention" - no new statuses, this is a
 // pure UI regrouping of the same lifecycle already enforced by
@@ -148,7 +159,7 @@ tabsEl.addEventListener('click', e => {
   if (!btn) return;
   activeTab = btn.dataset.tab;
   rejectingId = null;
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  syncTabs(tabsEl, b => b === btn);
   render();
 });
 
@@ -322,6 +333,7 @@ function renderSetupChecklist(communityId) {
   setupChecklistList.innerHTML = items.map(item => `
     <div class="activity-item checklist-item${item.done ? ' checklist-item-done' : ''}">
       <span class="checklist-state" aria-hidden="true">${item.done ? 'Done' : 'To do'}</span>
+      <span class="sr-only">${item.done ? 'Completed: ' : 'Not done: '}</span>
       <span class="activity-text">${item.label}</span>
       ${!item.done && item.cta ? `<button type="button" class="link-btn" data-checklist-cta="${item.key}">${item.cta}</button>` : ''}
     </div>
@@ -1126,7 +1138,7 @@ async function handleAction(action, orderId) {
 export function refreshOwnerView(orderId = null) {
   activeTab = 'awaiting';
   rejectingId = null;
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'awaiting'));
+  syncTabs(tabsEl, b => b.dataset.tab === 'awaiting');
 
   const communityId = getActiveCommunityId();
   const target = orderId && communityId && latestOrders.find(o => o.id === orderId && o.communityId === communityId);

@@ -197,7 +197,7 @@ function renderQuantityStep(product, variant) {
     <p class="hint">${escapeHtml(product.category)} &middot; ${formatPrice(product.unitPrice)} per ${escapeHtml(product.unit)}</p>
     <label class="field-label" for="qty-input">How many (${escapeHtml(product.unit)})?</label>
     <input type="number" id="qty-input" class="text-input" min="1" value="1" />
-    <button id="add-to-order-btn" class="btn btn-primary btn-block">Add to order</button>
+    <button type="button" id="add-to-order-btn" class="btn btn-primary btn-block">Add to order</button>
     <p id="order-form-status" class="form-status"></p>
   `;
   document.getElementById('add-to-order-btn').addEventListener('click', () => {
@@ -228,8 +228,8 @@ function renderVariantStep(product) {
     <h2>${escapeHtml(product.name)}</h2>
     <p class="hint">${escapeHtml(product.category)}</p>
 
-    <label class="field-label">Which size / type do you need?</label>
-    <div class="variant-list">
+    <span class="field-label" id="variant-pick-label">Which size / type do you need?</span>
+    <div class="variant-list" role="group" aria-labelledby="variant-pick-label">
       ${product.variants.map(v => `
         <button type="button" class="variant-option" data-variant="${escapeHtml(v)}">
           <span class="variant-option-radio" aria-hidden="true"></span>
@@ -297,14 +297,15 @@ function renderVariantStep(product) {
 function renderNeededByControl(current) {
   const time = cutoffTimeLabel();
   return `
-    <label class="field-label">Needed by</label>
-    <div class="needed-by-group" id="needed-by-group">
-      <button type="button" class="needed-by-btn" data-needed-by="asap"><span class="needed-by-btn-label">ASAP</span></button>
-      ${isTodayDeadlineAvailable() ? `<button type="button" class="needed-by-btn" data-needed-by="today"><span class="needed-by-btn-label">Today</span><span class="needed-by-btn-time">by ${time}</span></button>` : ''}
-      <button type="button" class="needed-by-btn" data-needed-by="tomorrow"><span class="needed-by-btn-label">Tomorrow</span><span class="needed-by-btn-time">by ${time}</span></button>
-      <button type="button" class="needed-by-btn" data-needed-by="custom"><span class="needed-by-btn-label">Choose date &amp; time</span></button>
+    <span class="field-label" id="needed-by-label">Needed by</span>
+    <div class="needed-by-group" id="needed-by-group" role="group" aria-labelledby="needed-by-label">
+      <button type="button" class="needed-by-btn" data-needed-by="asap" aria-pressed="false"><span class="needed-by-btn-label">ASAP</span></button>
+      ${isTodayDeadlineAvailable() ? `<button type="button" class="needed-by-btn" data-needed-by="today" aria-pressed="false"><span class="needed-by-btn-label">Today</span><span class="needed-by-btn-time">by ${time}</span></button>` : ''}
+      <button type="button" class="needed-by-btn" data-needed-by="tomorrow" aria-pressed="false"><span class="needed-by-btn-label">Tomorrow</span><span class="needed-by-btn-time">by ${time}</span></button>
+      <button type="button" class="needed-by-btn" data-needed-by="custom" aria-pressed="false"><span class="needed-by-btn-label">Choose date &amp; time</span></button>
     </div>
     <div class="needed-by-custom" id="needed-by-custom-form" hidden>
+      <label class="sr-only" for="needed-by-custom-input">Needed-by date and time</label>
       <input type="datetime-local" id="needed-by-custom-input" class="text-input" min="${dateToDatetimeLocalValue(new Date())}" value="${current.type === 'deadline' && current.date ? dateToDatetimeLocalValue(current.date) : ''}" />
     </div>
     <p id="needed-by-error" class="form-status error" hidden>Please choose when this is needed by.</p>
@@ -321,7 +322,11 @@ function wireNeededByControl(root, initialUiKey, onChange) {
   const customInput = root.querySelector('#needed-by-custom-input');
 
   function setActive(uiKey) {
-    group.querySelectorAll('.needed-by-btn').forEach(b => b.classList.toggle('active', b.dataset.neededBy === uiKey));
+    group.querySelectorAll('.needed-by-btn').forEach(b => {
+      const on = b.dataset.neededBy === uiKey;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
     customForm.hidden = uiKey !== 'custom';
   }
   if (initialUiKey) setActive(initialUiKey);
@@ -385,13 +390,13 @@ function renderDetailsStep(prefill = null) {
 
     ${renderNeededByControl(neededByChoice)}
 
-    <label class="field-label">Delivery</label>
-    <div class="role-toggle-group" id="delivery-method-group">
-      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') !== 'direct_supplier' ? ' active' : ''}" data-delivery-method="driver">A driver collects &amp; delivers it</button>
-      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') === 'direct_supplier' ? ' active' : ''}" data-delivery-method="direct_supplier">The supplier delivers direct to site</button>
+    <span class="field-label" id="delivery-method-label">Delivery</span>
+    <div class="role-toggle-group" id="delivery-method-group" role="group" aria-labelledby="delivery-method-label">
+      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') !== 'direct_supplier' ? ' active' : ''}" data-delivery-method="driver" aria-pressed="${(prefill ? prefill.deliveryMethod : 'driver') !== 'direct_supplier'}">A driver collects &amp; delivers it</button>
+      <button type="button" class="role-toggle-btn${(prefill ? prefill.deliveryMethod : 'driver') === 'direct_supplier' ? ' active' : ''}" data-delivery-method="direct_supplier" aria-pressed="${(prefill ? prefill.deliveryMethod : 'driver') === 'direct_supplier'}">The supplier delivers direct to site</button>
     </div>
 
-    <button id="find-source-btn" class="btn btn-primary btn-block">Find where to order from</button>
+    <button type="button" id="find-source-btn" class="btn btn-primary btn-block">Find where to order from</button>
     <p id="order-form-status" class="form-status"></p>
   `;
 
@@ -412,7 +417,10 @@ function renderDetailsStep(prefill = null) {
     const btn = e.target.closest('[data-delivery-method]');
     if (!btn) return;
     deliveryMethod = btn.dataset.deliveryMethod;
-    deliveryMethodGroup.querySelectorAll('[data-delivery-method]').forEach(b => b.classList.toggle('active', b === btn));
+    deliveryMethodGroup.querySelectorAll('[data-delivery-method]').forEach(b => {
+      b.classList.toggle('active', b === btn);
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
   });
 
   document.getElementById('find-source-btn').addEventListener('click', () => goToSourceStep(neededByChoice, deliveryMethod));
@@ -559,7 +567,7 @@ function renderConfirmStep(details, branch, avail) {
     <p class="hint"><strong>Needed by:</strong> ${formatNeededBy(details.neededByType, details.neededBy)}</p>
     <p class="hint"><strong>Delivery:</strong> ${details.deliveryMethod === 'direct_supplier' ? 'Supplier delivers direct to site' : 'A driver collects & delivers it'}</p>
 
-    <button id="confirm-order-btn" class="btn btn-primary btn-block">Confirm order</button>
+    <button type="button" id="confirm-order-btn" class="btn btn-primary btn-block">Confirm order</button>
   `;
 
   const confirmBtn = document.getElementById('confirm-order-btn');
@@ -1074,8 +1082,8 @@ function renderEditPickVariant() {
   const product = editState.pickProduct;
   orderFormEl.innerHTML = `
     <h2>${escapeHtml(product.name)}</h2>
-    <label class="field-label">Which size / type do you need?</label>
-    <div class="variant-list">
+    <span class="field-label" id="edit-variant-pick-label">Which size / type do you need?</span>
+    <div class="variant-list" role="group" aria-labelledby="edit-variant-pick-label">
       ${product.variants.map(v => `
         <button type="button" class="variant-option" data-variant="${escapeHtml(v)}">
           <span class="variant-option-radio" aria-hidden="true"></span>

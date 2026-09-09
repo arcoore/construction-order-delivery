@@ -33,52 +33,63 @@
     <a href="index.html" class="link-btn">&larr; Back to SiteStock</a>
     <p class="legal-kicker">SiteStock</p>
     <h1>Accessibility</h1>
-    <p class="legal-meta">Effective 6 September 2026 &middot; Last updated 6 September 2026</p>
+    <p class="legal-meta">Effective 6 September 2026 &middot; Last updated 9 September 2026</p>
 
     <div class="legal-note">
       We want SiteStock to be usable by everyone on a construction team,
       including people who use a keyboard only, a screen reader, screen
-      magnification, or need larger text and higher contrast.
+      magnification, voice control, or need larger text and higher contrast.
     </div>
 
     <h2>1. What we aim for</h2>
     <p>
-      We aim to meet the Web Content Accessibility Guidelines (WCAG) 2.1 at
-      level AA. SiteStock is a single evolving app rather than a set of fixed
-      pages, and it has not yet had a full independent audit, so it does not
-      fully meet that standard everywhere.
+      We aim to meet the Web Content Accessibility Guidelines (WCAG) 2.2 at
+      level AA &ndash; the standard referenced by the UK Equality Act 2010 and
+      the EU's harmonised standard EN&nbsp;301&nbsp;549. SiteStock is a single
+      evolving app rather than a set of fixed pages, and it has not yet had a
+      full independent audit, so we cannot claim it meets that standard
+      everywhere. This statement lists what has been built and tested and what
+      still falls short.
     </p>
 
     <h2>2. What currently works</h2>
     <ul>
-      <li>Every screen can be reached and operated with the keyboard alone, and the focus outline is always visible.</li>
-      <li>A &ldquo;Skip to main content&rdquo; link is the first thing the keyboard reaches.</li>
-      <li>Text and interface colours have been checked for contrast against WCAG AA (4.5:1 for text, 3:1 for controls and focus outlines).</li>
-      <li>Every form field has a label, and errors and confirmations are announced to screen readers.</li>
-      <li>Buttons and links are real buttons and links with clear text; decorative icons are hidden from screen readers.</li>
-      <li>The layout reflows to a single column on small screens and when text is enlarged, without loss of content.</li>
-      <li>The one type of image in the app - a driver&rsquo;s delivery photo - carries alternative text.</li>
+      <li>Every screen can be reached and operated with the keyboard alone, and the keyboard focus outline is always visible.</li>
+      <li>A &ldquo;Skip to main content&rdquo; link is the first thing the keyboard reaches, and it moves focus into the main content.</li>
+      <li>When you move between screens, focus moves to the new screen and its name is announced to screen readers; the browser tab title updates too.</li>
+      <li>Text and interface colours have been checked for contrast against WCAG AA (4.5:1 for body text, 3:1 for large text, controls and focus outlines).</li>
+      <li>Every form field has a label. Errors and confirmations are shown in text and announced to screen readers.</li>
+      <li>Buttons and links are real buttons and links with clear text. Decorative icons are hidden from screen readers.</li>
+      <li>Where a tab strip or a set of choice buttons has a selected option, that selection is exposed to assistive technology and shown with more than colour alone.</li>
+      <li>Pop-up dialogs move focus into the dialog, keep the keyboard inside it, close on Escape, and return focus to the control that opened them.</li>
+      <li>The layout reflows to a single column on small screens and at up to 400% zoom, with no horizontal scrolling and no loss of content.</li>
+      <li>Text zoom and increased text spacing are supported; the page is never blocked from being zoomed.</li>
+      <li>If you have &ldquo;reduce motion&rdquo; set in your operating system, animations and transitions are switched off.</li>
+      <li>The one type of image in the app &ndash; a driver&rsquo;s delivery photo &ndash; carries alternative text.</li>
+      <li>Links that open in a new tab say so.</li>
     </ul>
 
     <h2>3. Known limitations</h2>
     <ul>
       <li>
         The tabbed sections (for example the order tabs) are ordinary buttons.
-        They work with Tab and Enter but do not yet support arrow-key movement
-        or announce a &ldquo;tab&rdquo; role.
+        They work with Tab and Enter and announce which one is selected, but
+        do not yet support left/right arrow-key movement or announce a
+        &ldquo;tab&rdquo; role.
       </li>
       <li>
-        Pop-up dialogs move focus to the dialog and can be closed with Escape,
-        but focus management has not been tested with every screen reader and
-        browser combination.
+        A few status changes that happen live (for example a new order
+        arriving through the real-time connection) update on screen but are
+        not always announced.
       </li>
       <li>
-        Some status changes that happen live (for example a new order arriving)
-        update on screen but are not always announced.
+        Focus management in dialogs and the notification panel has not been
+        tested against every screen reader and browser combination.
       </li>
-      <li>The app has not been tested with voice-control software.</li>
+      <li>The app has had only limited testing with voice-control software.</li>
+      <li>No full independent audit has been carried out yet.</li>
     </ul>
-    <p>We are working through these.</p>
+    <p>We are working through these and will update this statement as they are fixed.</p>
 
     <h2>4. Tell us about a problem</h2>
     <p>
@@ -90,12 +101,16 @@
       the meantime.
     </p>
 
-    <h2>5. Enforcement</h2>
+    <h2>5. Your rights and how to escalate</h2>
     <p>
       In the UK, the Equality Act 2010 requires service providers to make
-      reasonable adjustments for disabled people. If you contact us and are not
-      satisfied with our response, you can contact the Equality Advisory and
-      Support Service (EASS).
+      reasonable adjustments so disabled people can use their services,
+      including websites and apps. In the EU, the European Accessibility Act
+      (Directive (EU) 2019/882) sets accessibility requirements for services
+      of this kind. If you contact us and are not satisfied with our response,
+      UK users can contact the Equality Advisory and Support Service (EASS) at
+      <a href="https://www.equalityadvisoryservice.com/">www.equalityadvisoryservice.com</a>;
+      EU users can contact the accessibility enforcement body in their country.
     </p>
 
     <div class="legal-footer">

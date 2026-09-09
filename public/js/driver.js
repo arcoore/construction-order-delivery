@@ -17,6 +17,17 @@ const locationStatus = document.getElementById('location-status');
 const tabsEl = document.getElementById('driver-tabs');
 const listEl = document.getElementById('driver-orders-list');
 
+// Keep the visual selected state (.active) and the assistive-tech selected
+// state (aria-current) on the tab strip in lockstep.
+function syncTabs(container, isActive) {
+  container.querySelectorAll('.tab-btn').forEach(b => {
+    const on = isActive(b);
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+}
+
 let driverPos = null;
 let activeTab = 'available';
 let latestOrders = [];
@@ -54,10 +65,14 @@ function promptManualPostcode() {
   const wrap = document.createElement('div');
   wrap.className = 'manual-postcode';
   wrap.innerHTML = `
-    <input type="text" id="manual-postcode-input" class="text-input" placeholder="Your current postcode" />
-    <button id="manual-postcode-btn" class="btn btn-secondary">Set</button>
+    <label class="sr-only" for="manual-postcode-input">Your current postcode</label>
+    <input type="text" id="manual-postcode-input" class="text-input" placeholder="Your current postcode" autocomplete="postal-code" />
+    <button type="button" id="manual-postcode-btn" class="btn btn-secondary">Set</button>
   `;
   locationStatus.after(wrap);
+  // The field appeared in response to a failed geolocation - move focus to it
+  // so a keyboard/screen-reader user finds it without hunting.
+  document.getElementById('manual-postcode-input').focus();
   document.getElementById('manual-postcode-btn').addEventListener('click', async () => {
     const val = document.getElementById('manual-postcode-input').value.trim();
     if (!val) return;
@@ -82,7 +97,7 @@ tabsEl.addEventListener('click', e => {
   cancellingId = null;
   deliveringId = null;
   completedShowAll = false;
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  syncTabs(tabsEl, b => b === btn);
   render();
 });
 
@@ -472,7 +487,7 @@ export function refreshDriverView() {
   deliveringId = null;
   completedShowAll = false;
   threadOrderId = null;
-  tabsEl.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'available'));
+  syncTabs(tabsEl, b => b.dataset.tab === 'available');
   render();
 }
 

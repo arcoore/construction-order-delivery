@@ -151,8 +151,34 @@ const ROLE_META = {
   buyer: { label: 'Buyer', desc: 'Purchase approved orders and confirm the purchase' },
 };
 
+// SPA route change: a class swap alone leaves a keyboard/screen-reader user
+// stranded on the now-hidden control they just clicked (focus falls to
+// <body>), with no signal the screen changed. So on every genuine
+// navigation we move focus into the new view (each <section class="view">
+// has tabindex="-1" + an aria-label), reset scroll, retitle the tab, and
+// announce the view name through #route-announcer (a visually-hidden
+// polite live region). Skipped on the very first render so a fresh page
+// load doesn't yank focus.
+const routeAnnouncer = document.getElementById('route-announcer');
+let hasRoutedOnce = false;
 function showOnly(view) {
+  const isChange = !view.classList.contains('active');
   ALL_VIEWS.forEach(v => v.classList.toggle('active', v === view));
+  const label = view.getAttribute('aria-label') || '';
+  if (label) document.title = `${label} · SiteStock`;
+  if (hasRoutedOnce && isChange) {
+    try { window.scrollTo(0, 0); } catch { /* jsdom / restricted context */ }
+    try { view.focus({ preventScroll: true }); } catch { /* older browsers */ }
+    if (routeAnnouncer && label) {
+      // Clear then re-set on a short delay so the live region fires even
+      // when two routes land in quick succession or the new name matches
+      // the last. setTimeout (not rAF) so it still runs if the tab briefly
+      // loses visibility mid-navigation.
+      routeAnnouncer.textContent = '';
+      setTimeout(() => { routeAnnouncer.textContent = label; }, 60);
+    }
+  }
+  hasRoutedOnce = true;
 }
 
 // --- Lazy-loaded views ----------------------------------------------

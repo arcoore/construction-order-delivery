@@ -44,6 +44,13 @@
 </head>
 <body>
 
+<a href="#app" class="skip-link">Skip to main content</a>
+
+<!-- Polite live region for single-page route changes: main.js writes the
+     name of the view the user just moved to (e.g. "Companies") so screen
+     readers announce the navigation, which a class-swap alone does not. -->
+<p id="route-announcer" class="sr-only" role="status" aria-live="polite"></p>
+
 <!-- Global kill switch (migration 0042). Hidden unless appStatus.js reads
      app_status.killed = true, in which case main.js shows this instead of
      routing into the app. -->
@@ -81,8 +88,6 @@
 <div id="sticky-cta" hidden>
   <button type="button" id="sticky-cta-btn" class="btn btn-primary btn-block">Create account</button>
 </div>
-
-<a href="#app" class="skip-link">Skip to main content</a>
 
 <header class="topbar">
   <div class="brand">
@@ -124,20 +129,20 @@
   </div>
 </header>
 
-<main id="app">
+<main id="app" tabindex="-1">
 
   <!-- ============ AUTH VIEW ============ -->
   <!-- Shown only during the Phase 8B async bootstrap (session restore +
        initial Supabase cache load) - never a role view, never stale data,
        just a neutral holding state until routing can happen safely. -->
-  <section id="bootstrap-loading" class="view active">
+  <section id="bootstrap-loading" class="view active" tabindex="-1" aria-label="Loading SiteStock">
     <div class="panel">
       <h1>SiteStock</h1>
       <p class="hint">Loading…</p>
     </div>
   </section>
 
-  <section id="auth-view" class="view">
+  <section id="auth-view" class="view" tabindex="-1" aria-label="Sign in">
     <div class="panel">
       <div id="auth-intro">
         <h1>Log in to SiteStock</h1>
@@ -146,9 +151,9 @@
         <p class="hint small-hint">An early-stage prototype. An account is required; the same login works on any device.</p>
       </div>
 
-      <div class="driver-tabs" id="auth-tabs">
-        <button class="tab-btn active" data-auth-tab="login">Log in</button>
-        <button class="tab-btn" data-auth-tab="register">Create account</button>
+      <div class="driver-tabs" id="auth-tabs" role="group" aria-label="Sign in or create an account">
+        <button type="button" class="tab-btn active" data-auth-tab="login" aria-current="true">Log in</button>
+        <button type="button" class="tab-btn" data-auth-tab="register">Create account</button>
       </div>
 
       <!-- Social sign-in. Each button stays hidden until its provider is
@@ -236,11 +241,11 @@
         </div>
         <p class="hint small-hint">You can switch later - this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first - picking it here is just your preference for once you have it.</p>
 
-        <p class="hint small-hint">We use your email to sign you in and to send account and order notifications, and your name so your team can see who placed an order. We don't use analytics or advertising. Full detail is in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+        <p class="hint small-hint">We use your email to sign you in and to send account and order notifications, and your name so your team can see who placed an order. We don't use analytics or advertising. Full detail is in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a>.</p>
 
         <label class="checkbox-field" id="register-terms-field">
           <input type="checkbox" id="register-terms-checkbox" />
-          <span><strong>I am 18 or over</strong>, and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>, <a href="eula.html" target="_blank" rel="noopener">End User License Agreement</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>. SiteStock is a tool for construction businesses and is not for anyone under 18.</span>
+          <span><strong>I am 18 or over</strong>, and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service<span class="sr-only"> (opens in a new tab)</span></a>, <a href="eula.html" target="_blank" rel="noopener">End User License Agreement<span class="sr-only"> (opens in a new tab)</span></a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a>. SiteStock is a tool for construction businesses and is not for anyone under 18.</span>
         </label>
 
         <div class="captcha-slot" data-captcha-form="register"></div>
@@ -263,15 +268,15 @@
       </div>
 
       <p class="hint small-hint" id="auth-legal-links">
-        <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>
+        <a href="terms.html" target="_blank" rel="noopener">Terms of Service<span class="sr-only"> (opens in a new tab)</span></a>
         &middot;
-        <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
+        <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a>
       </p>
     </div>
   </section>
 
   <!-- ============ COMMUNITY PICKER VIEW ============ -->
-  <section id="community-view" class="view">
+  <section id="community-view" class="view" tabindex="-1" aria-label="Welcome">
     <div class="panel">
       <h1>Welcome to SiteStock</h1>
       <p class="hint">Set up your company, then invite your team to join it - head to Companies to create or join one.</p>
@@ -284,7 +289,7 @@
   </section>
 
   <!-- ============ COMMUNITIES MANAGEMENT VIEW ============ -->
-  <section id="communities-view" class="view">
+  <section id="communities-view" class="view" tabindex="-1" aria-label="Companies">
     <div class="panel">
       <button type="button" class="link-btn" id="communities-back-btn">&larr; Back</button>
       <h1>Companies</h1>
@@ -306,7 +311,7 @@
       <p class="hint">You'll be the owner and can approve who joins.</p>
       <label class="field-label" for="create-community-input">Company name</label>
       <input type="text" id="create-community-input" class="text-input" placeholder="e.g. Riverside Construction" />
-      <button id="create-community-btn" class="btn btn-primary btn-block">Create company</button>
+      <button type="button" id="create-community-btn" class="btn btn-primary btn-block">Create company</button>
       <p id="create-community-status" class="form-status" role="status" aria-live="polite"></p>
     </div>
 
@@ -314,7 +319,7 @@
       <h2>Have an invite code?</h2>
       <label class="field-label" for="join-code-input">Invite code</label>
       <input type="text" id="join-code-input" class="text-input text-input-upper" placeholder="e.g. XJ4K9P" />
-      <button id="join-code-btn" class="btn btn-secondary btn-block">Request to join</button>
+      <button type="button" id="join-code-btn" class="btn btn-secondary btn-block">Request to join</button>
       <p id="join-code-status" class="form-status" role="status" aria-live="polite"></p>
     </div>
 
@@ -327,7 +332,7 @@
   </section>
 
   <!-- ============ PROFILE VIEW ============ -->
-  <section id="profile-view" class="view">
+  <section id="profile-view" class="view" tabindex="-1" aria-label="Your profile">
     <div class="panel">
       <button type="button" class="link-btn" id="profile-back-btn">&larr; Back</button>
       <h1>Your profile</h1>
@@ -336,7 +341,7 @@
   </section>
 
   <!-- ============ ROLE SELECT VIEW ============ -->
-  <section id="role-select-view" class="view">
+  <section id="role-select-view" class="view" tabindex="-1" aria-label="Choose your role">
     <div class="panel">
       <h1>Choose your role</h1>
       <p class="hint"><strong id="role-select-name"></strong>, what's your role in <strong id="role-select-community-name"></strong>?</p>
@@ -346,7 +351,7 @@
   </section>
 
   <!-- ============ WORKER VIEW ============ -->
-  <section id="worker-view" class="view">
+  <section id="worker-view" class="view" tabindex="-1" aria-label="Place an order">
     <div class="panel" id="site-select-panel">
       <h1>Which site is this for?</h1>
       <p class="hint">These are the sites in this company you've been assigned to - your owner manages site assignments, so ask them to add you to another one if you don't see it here.</p>
@@ -362,7 +367,7 @@
     </div>
 
     <div class="panel order-panel" id="order-panel" hidden>
-      <button class="link-btn" id="back-to-search">&larr; Back to search</button>
+      <button type="button" class="link-btn" id="back-to-search">&larr; Back to search</button>
       <div id="order-form"></div>
     </div>
 
@@ -373,7 +378,7 @@
   </section>
 
   <!-- ============ OWNER VIEW ============ -->
-  <section id="owner-view" class="view">
+  <section id="owner-view" class="view" tabindex="-1" aria-label="Owner dashboard">
     <div class="panel">
       <h1 id="dashboard-title">Dashboard</h1>
       <div class="dashboard-stats" id="dashboard-stats"></div>
@@ -389,6 +394,7 @@
 
       <h3 class="settings-subhead">Company name</h3>
       <div class="invite-link-row">
+        <label class="sr-only" for="owner-company-name-input">Company name</label>
         <input type="text" id="owner-company-name-input" class="text-input" maxlength="80" />
         <button type="button" class="btn btn-secondary" id="owner-rename-company-btn">Save name</button>
       </div>
@@ -398,6 +404,7 @@
       <h3 class="settings-subhead">Invite people</h3>
       <p class="hint">Share this link or code with your team - they'll still need your approval before they can see anything.</p>
       <div class="invite-link-row">
+        <label class="sr-only" for="owner-invite-link-input">Invite link</label>
         <input type="text" id="owner-invite-link-input" class="text-input" readonly />
         <button type="button" class="btn btn-secondary" id="owner-copy-invite-link-btn">Copy link</button>
       </div>
@@ -427,6 +434,7 @@
         <h3 class="settings-subhead">Delete company</h3>
         <p class="hint small-hint">Only possible while the company has no orders, no sites, and no other members. Type DELETE to confirm - this cannot be undone.</p>
         <div class="invite-link-row">
+          <label class="sr-only" for="owner-delete-company-input">Type DELETE to confirm</label>
           <input type="text" id="owner-delete-company-input" class="text-input" placeholder="DELETE" />
           <button type="button" class="btn btn-secondary link-btn-danger" id="owner-delete-company-btn">Delete company</button>
         </div>
@@ -484,14 +492,14 @@
     </div>
 
     <div class="panel" id="owner-orders-panel">
-      <div class="driver-tabs" id="owner-tabs">
-        <button class="tab-btn active" data-tab="awaiting">Awaiting Approval</button>
-        <button class="tab-btn" data-tab="purchase">Waiting for Purchase</button>
-        <button class="tab-btn" data-tab="purchased">Purchased</button>
-        <button class="tab-btn" data-tab="delivery">Out for Delivery</button>
-        <button class="tab-btn" data-tab="delivered">Delivered</button>
-        <button class="tab-btn" data-tab="rejected">Rejected</button>
-        <button class="tab-btn" data-tab="cancelled">Cancelled</button>
+      <div class="driver-tabs" id="owner-tabs" role="group" aria-label="Filter orders by status">
+        <button type="button" class="tab-btn active" data-tab="awaiting" aria-current="true">Awaiting Approval</button>
+        <button type="button" class="tab-btn" data-tab="purchase">Waiting for Purchase</button>
+        <button type="button" class="tab-btn" data-tab="purchased">Purchased</button>
+        <button type="button" class="tab-btn" data-tab="delivery">Out for Delivery</button>
+        <button type="button" class="tab-btn" data-tab="delivered">Delivered</button>
+        <button type="button" class="tab-btn" data-tab="rejected">Rejected</button>
+        <button type="button" class="tab-btn" data-tab="cancelled">Cancelled</button>
       </div>
       <div id="owner-orders-list" class="orders-list"></div>
     </div>
@@ -503,7 +511,7 @@
   </section>
 
   <!-- ============ SITES VIEW (Owner) ============ -->
-  <section id="sites-view" class="view">
+  <section id="sites-view" class="view" tabindex="-1" aria-label="Sites">
     <div id="sites-list-view">
       <div class="panel">
         <button type="button" class="link-btn" id="sites-back-btn">&larr; Back to dashboard</button>
@@ -539,11 +547,11 @@
       </div>
 
       <div class="panel">
-        <div class="driver-tabs" id="sites-tabs">
-          <button class="tab-btn active" data-sites-tab="active">Active</button>
-          <button class="tab-btn" data-sites-tab="paused">Paused</button>
-          <button class="tab-btn" data-sites-tab="completed">Completed</button>
-          <button class="tab-btn" data-sites-tab="archived">Archived</button>
+        <div class="driver-tabs" id="sites-tabs" role="group" aria-label="Filter sites by status">
+          <button type="button" class="tab-btn active" data-sites-tab="active" aria-current="true">Active</button>
+          <button type="button" class="tab-btn" data-sites-tab="paused">Paused</button>
+          <button type="button" class="tab-btn" data-sites-tab="completed">Completed</button>
+          <button type="button" class="tab-btn" data-sites-tab="archived">Archived</button>
         </div>
         <div id="sites-list" class="community-list"></div>
       </div>
@@ -556,26 +564,26 @@
   </section>
 
   <!-- ============ DRIVER VIEW ============ -->
-  <section id="driver-view" class="view">
+  <section id="driver-view" class="view" tabindex="-1" aria-label="Driver deliveries">
     <div class="panel driver-header-panel">
       <div class="driver-location">
-        <button id="locate-btn" class="btn btn-primary">Use my current location</button>
-        <span id="location-status" class="location-status">Location not set</span>
+        <button type="button" id="locate-btn" class="btn btn-primary">Use my current location</button>
+        <span id="location-status" class="location-status" role="status" aria-live="polite">Location not set</span>
       </div>
     </div>
 
     <div class="panel">
-      <div class="driver-tabs" id="driver-tabs">
-        <button class="tab-btn active" data-tab="available">Requests</button>
-        <button class="tab-btn" data-tab="mine">My Deliveries</button>
-        <button class="tab-btn" data-tab="done">Completed</button>
+      <div class="driver-tabs" id="driver-tabs" role="group" aria-label="Delivery lists">
+        <button type="button" class="tab-btn active" data-tab="available" aria-current="true">Requests</button>
+        <button type="button" class="tab-btn" data-tab="mine">My Deliveries</button>
+        <button type="button" class="tab-btn" data-tab="done">Completed</button>
       </div>
       <div id="driver-orders-list" class="orders-list"></div>
     </div>
   </section>
 
   <!-- ============ BUYER VIEW ============ -->
-  <section id="buyer-view" class="view">
+  <section id="buyer-view" class="view" tabindex="-1" aria-label="Buyer purchasing">
     <div class="panel" id="buyer-cancellation-requests-panel" hidden>
       <h2>Cancellation requests</h2>
       <p class="hint">A worker wants to cancel one of these orders. Approving cancels it inside SiteStock only - it doesn't contact the supplier for you.</p>
@@ -602,7 +610,7 @@
     </div>
 
     <div class="panel" id="buyer-detail-panel" hidden>
-      <button class="link-btn" id="buyer-back-btn">&larr; Back to list</button>
+      <button type="button" class="link-btn" id="buyer-back-btn">&larr; Back to list</button>
       <div id="buyer-detail"></div>
     </div>
   </section>
@@ -615,20 +623,21 @@
     <a href="mailto:arcooreacc@gmail.com">arcooreacc@gmail.com</a>
   </p>
   <nav class="app-footer-links" aria-label="Legal">
-    <a href="terms.html" target="_blank" rel="noopener">Terms</a>
-    <a href="eula.html" target="_blank" rel="noopener">EULA</a>
-    <a href="privacy.html" target="_blank" rel="noopener">Privacy</a>
-    <a href="dmca.html" target="_blank" rel="noopener">Copyright</a>
-    <a href="refunds.html" target="_blank" rel="noopener">Refunds</a>
-    <a href="accessibility.html" target="_blank" rel="noopener">Accessibility</a>
+    <a href="terms.html" target="_blank" rel="noopener">Terms<span class="sr-only"> (opens in a new tab)</span></a>
+    <a href="eula.html" target="_blank" rel="noopener">EULA<span class="sr-only"> (opens in a new tab)</span></a>
+    <a href="privacy.html" target="_blank" rel="noopener">Privacy<span class="sr-only"> (opens in a new tab)</span></a>
+    <a href="dmca.html" target="_blank" rel="noopener">Copyright<span class="sr-only"> (opens in a new tab)</span></a>
+    <a href="refunds.html" target="_blank" rel="noopener">Refunds<span class="sr-only"> (opens in a new tab)</span></a>
+    <a href="accessibility.html" target="_blank" rel="noopener">Accessibility<span class="sr-only"> (opens in a new tab)</span></a>
   </nav>
   <p class="app-footer-a11y">
     <span class="app-footer-a11y-label">Accessibility</span>
-    SiteStock aims for WCAG&nbsp;2.1 AA. Every screen works by keyboard with a
-    visible focus outline, colours are contrast-checked, and the layout reflows
-    when text is enlarged or the screen is small. It has not had a full
+    SiteStock aims for WCAG&nbsp;2.2 AA. Every screen works by keyboard with a
+    visible focus outline, moving between screens moves and announces focus,
+    colours are contrast-checked, the layout reflows to 400% zoom, and a
+    &ldquo;reduce motion&rdquo; setting is respected. It has not had a full
     independent audit yet, so some parts still fall short; the
-    <a href="accessibility.html" target="_blank" rel="noopener">full statement</a>
+    <a href="accessibility.html" target="_blank" rel="noopener">full statement<span class="sr-only"> (opens in a new tab)</span></a>
     lists what works and what does not. If something stops you using SiteStock,
     or you need it in another format, email
     <a href="mailto:arcooreacc@gmail.com">arcooreacc@gmail.com</a> and we&rsquo;ll
