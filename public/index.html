@@ -222,8 +222,25 @@
         <input type="email" id="register-email-input" class="text-input" autocomplete="email" />
 
         <label class="field-label" for="register-password-input">Password</label>
-        <input type="password" id="register-password-input" class="text-input" autocomplete="new-password" />
-        <p class="hint small-hint">At least 10 characters. A passphrase of a few unrelated words is stronger, and easier to remember, than a short one with symbols.</p>
+        <input type="password" id="register-password-input" class="text-input" autocomplete="new-password" aria-describedby="pw-checklist" />
+        <ul id="pw-checklist" class="pw-checklist" aria-live="polite">
+          <li class="pw-rule" data-rule="length">
+            <span class="pw-rule-mark" aria-hidden="true"></span>
+            <span>At least 10 characters</span>
+            <span class="sr-only pw-rule-state"> — not yet met</span>
+          </li>
+          <li class="pw-rule" data-rule="breach">
+            <span class="pw-rule-mark" aria-hidden="true"></span>
+            <span>Not found in a known data breach</span>
+            <span class="sr-only pw-rule-state"> — not yet met</span>
+          </li>
+          <li class="pw-rule" data-rule="match">
+            <span class="pw-rule-mark" aria-hidden="true"></span>
+            <span>Matches the confirmation below</span>
+            <span class="sr-only pw-rule-state"> — not yet met</span>
+          </li>
+        </ul>
+        <p class="hint small-hint">Tip: a few unrelated words make a stronger password than a short one with symbols &ndash; and it&rsquo;s easier to remember.</p>
 
         <label class="field-label" for="register-confirm-input">Confirm password</label>
         <input type="password" id="register-confirm-input" class="text-input" autocomplete="new-password" />

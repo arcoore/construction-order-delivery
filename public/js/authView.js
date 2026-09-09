@@ -10,6 +10,7 @@ import {
   isMfaChallengePending, verifyMfaLogin, logout, isAuthenticated,
   signInWithProvider, getEnabledOAuthProviders,
 } from './auth.js';
+import { isPasswordPwned } from './pwnedPassword.js';
 
 const authView = document.getElementById('auth-view');
 const authIntro = document.getElementById('auth-intro');
@@ -22,6 +23,9 @@ const loginSubmitBtn = document.getElementById('login-submit-btn');
 const registerSubmitBtn = document.getElementById('register-submit-btn');
 const registerRoleGroup = document.getElementById('register-role-group');
 const registerTermsCheckbox = document.getElementById('register-terms-checkbox');
+const pwInput = document.getElementById('register-password-input');
+const pwConfirmInput = document.getElementById('register-confirm-input');
+const pwChecklist = document.getElementById('pw-checklist');
 const forgotPasswordLink = document.getElementById('forgot-password-link');
 const resetRequestForm = document.getElementById('reset-request-form');
 const resetRequestBackBtn = document.getElementById('reset-request-back-btn');
@@ -212,12 +216,76 @@ function resetCaptcha(formKey) {
   }
 }
 
-// "Create account" stays disabled until the Terms/Privacy box is ticked -
-// index.html ships the button disabled, this keeps it in sync. The submit
-// handler still re-checks (defence in depth), but the button is the real
-// gate the user sees.
+// --- Live password requirements on the register form -----------------
+// Length + "not in a known breach" + match, checked as the user types, so
+// the "Create account" button only enables once the password would actually
+// be accepted - not after a failed submit. The breach check is the same
+// k-anonymous Have-I-Been-Pwned lookup createAccount() runs; here it's
+// debounced and fails open (a network blip shows the rule as met and the
+// submit handler still re-checks server-side).
+const PW_MIN_LENGTH = 10;
+let pwBreachState = 'idle'; // idle | checking | ok | pwned | unknown
+let pwBreachTimer = null;
+let pwBreachSeq = 0;
+
+function setPwRule(rule, cls, stateWord) {
+  const li = pwChecklist && pwChecklist.querySelector(`[data-rule="${rule}"]`);
+  if (!li) return;
+  li.classList.remove('met', 'fail', 'checking');
+  if (cls) li.classList.add(cls);
+  const stateEl = li.querySelector('.pw-rule-state');
+  if (stateEl) stateEl.textContent = ` — ${stateWord}`;
+}
+
+function refreshPwChecklist() {
+  if (!pwInput) return;
+  const pw = pwInput.value;
+  const confirm = pwConfirmInput ? pwConfirmInput.value : '';
+
+  const lengthOk = pw.length >= PW_MIN_LENGTH;
+  setPwRule('length', lengthOk ? 'met' : '', lengthOk ? 'met' : 'not yet met');
+
+  const matchOk = !!pw && !!confirm && pw === confirm;
+  setPwRule('match', matchOk ? 'met' : '', matchOk ? 'met' : 'not yet met');
+
+  if (pwBreachState === 'checking') setPwRule('breach', 'checking', 'checking…');
+  else if (pwBreachState === 'pwned') setPwRule('breach', 'fail', 'found in a known breach - pick another');
+  else if (pwBreachState === 'ok' || pwBreachState === 'unknown') setPwRule('breach', 'met', 'met');
+  else setPwRule('breach', '', 'not yet met');
+
+  syncRegisterSubmitEnabled();
+}
+
+function schedulePwBreachCheck() {
+  clearTimeout(pwBreachTimer);
+  const pw = pwInput ? pwInput.value : '';
+  if (pw.length < PW_MIN_LENGTH) { pwBreachState = 'idle'; refreshPwChecklist(); return; }
+  pwBreachState = 'checking';
+  refreshPwChecklist();
+  const seq = ++pwBreachSeq;
+  pwBreachTimer = setTimeout(async () => {
+    const result = await isPasswordPwned(pw);
+    if (seq !== pwBreachSeq || pwInput.value !== pw) return; // superseded by newer input
+    pwBreachState = !result.checked ? 'unknown' : (result.pwned ? 'pwned' : 'ok');
+    refreshPwChecklist();
+  }, 550);
+}
+
+pwInput?.addEventListener('input', () => { schedulePwBreachCheck(); refreshPwChecklist(); });
+pwConfirmInput?.addEventListener('input', refreshPwChecklist);
+
+// "Create account" stays disabled until the Terms/Privacy box is ticked AND
+// the password meets every rule above - index.html ships the button
+// disabled, this keeps it in sync. The submit handler still re-checks
+// (defence in depth), but the button is the real gate the user sees.
 function syncRegisterSubmitEnabled() {
-  const disabled = !registerTermsCheckbox.checked;
+  const pw = pwInput ? pwInput.value : '';
+  const confirm = pwConfirmInput ? pwConfirmInput.value : '';
+  const passwordReady =
+    pw.length >= PW_MIN_LENGTH &&
+    confirm.length > 0 && pw === confirm &&
+    (pwBreachState === 'ok' || pwBreachState === 'unknown');
+  const disabled = !registerTermsCheckbox.checked || !passwordReady;
   registerSubmitBtn.disabled = disabled;
   const sticky = document.getElementById('sticky-cta-btn');
   if (sticky) sticky.disabled = disabled;
@@ -258,6 +326,9 @@ function showAuthForm(which) {
   authTabs.hidden = which !== 'login' && which !== 'register';
   authIntro.hidden = authTabs.hidden;
   oauthBlock.hidden = authTabs.hidden || !oauthProvidersShown;
+  // Re-sync the password checklist to whatever's already in the fields (they
+  // keep their value across a tab switch) so it never shows stale state.
+  if (which === 'register') refreshPwChecklist();
   setStickyCta(which === 'register');
 }
 
