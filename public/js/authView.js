@@ -7,7 +7,7 @@
 import {
   createAccount, login, requestPasswordReset, completePasswordReset,
   inPasswordRecoveryContext, subscribeAuth, resendConfirmation,
-  isMfaChallengePending, verifyMfaLogin, logout,
+  isMfaChallengePending, verifyMfaLogin, logout, isAuthenticated,
   signInWithProvider, getEnabledOAuthProviders,
 } from './auth.js';
 
@@ -217,7 +217,10 @@ function resetCaptcha(formKey) {
 // handler still re-checks (defence in depth), but the button is the real
 // gate the user sees.
 function syncRegisterSubmitEnabled() {
-  registerSubmitBtn.disabled = !registerTermsCheckbox.checked;
+  const disabled = !registerTermsCheckbox.checked;
+  registerSubmitBtn.disabled = disabled;
+  const sticky = document.getElementById('sticky-cta-btn');
+  if (sticky) sticky.disabled = disabled;
 }
 registerTermsCheckbox.addEventListener('change', syncRegisterSubmitEnabled);
 
@@ -255,7 +258,28 @@ function showAuthForm(which) {
   authTabs.hidden = which !== 'login' && which !== 'register';
   authIntro.hidden = authTabs.hidden;
   oauthBlock.hidden = authTabs.hidden || !oauthProvidersShown;
+  setStickyCta(which === 'register');
 }
+
+// --- Sticky mobile CTA (index.html #sticky-cta) --------------------
+// On a narrow screen the "Create account" button sits well below the fold
+// on the register form, so a fixed copy of it stays in reach at the bottom.
+// CSS keeps it off desktop and off while the cookie notice is up; this just
+// toggles visibility (register form only) and mirrors the real button's
+// disabled state. The click forwards to the real submit button.
+const stickyCta = document.getElementById('sticky-cta');
+const stickyCtaBtn = document.getElementById('sticky-cta-btn');
+function setStickyCta(show) {
+  if (!stickyCta) return;
+  stickyCta.hidden = !show;
+  document.body.classList.toggle('sticky-cta-open', show);
+  if (show) syncRegisterSubmitEnabled();
+}
+stickyCtaBtn?.addEventListener('click', () => {
+  registerSubmitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!registerSubmitBtn.disabled) registerSubmitBtn.click();
+});
+subscribeAuth(() => { if (isAuthenticated()) setStickyCta(false); });
 
 // A pending 2FA challenge (from login() or a mid-challenge page refresh)
 // replaces the login/register tabs with the code form - same "one-shot flow
@@ -292,10 +316,21 @@ authTabs.addEventListener('click', e => {
   const btn = e.target.closest('.tab-btn');
   if (!btn) return;
   const tab = btn.dataset.authTab;
-  authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  activateAuthTab(tab);
+});
+
+function activateAuthTab(tab) {
+  authTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.authTab === tab));
   showAuthForm(tab);
   loginStatus.textContent = '';
   registerStatus.textContent = '';
+}
+
+// "Create an account" link in the intro copy - same as tapping the Create
+// account tab, just more discoverable above the fold.
+document.getElementById('auth-intro-register-btn')?.addEventListener('click', () => {
+  activateAuthTab('register');
+  document.getElementById('register-email-input')?.focus();
 });
 
 forgotPasswordLink.addEventListener('click', () => {

@@ -8,6 +8,7 @@
 <meta name="description" content="What personal data SiteStock collects, why, who can see it, how long it is kept, and your rights under UK data protection law." />
 <link rel="canonical" href="https://arcoore.github.io/construction-order-delivery/privacy.html" />
 <meta name="theme-color" content="#12344a" />
+<link rel="icon" href="favicon.ico" sizes="any" />
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -101,8 +102,9 @@
         error, your browser may send us a short diagnostic report - the error
         message, which page you were on, your browser and device type, and your
         account ID if you are signed in. It does not include what you typed. We
-        also use one cookieless, privacy-preserving page-view counter (see
-        section 5); we do not use advertising or cross-site tracking of any kind.
+        also offer one optional, cookieless, privacy-preserving page-view
+        counter that only runs if you allow it (see section 5); we do not use
+        advertising or cross-site tracking of any kind.
       </dd>
     </dl>
 
@@ -123,6 +125,11 @@
       <li>
         <strong>To support you</strong> - responding when you contact us.
         Legal basis: legitimate interests, or performance of the contract.
+      </li>
+      <li>
+        <strong>To understand how the Service is used</strong> - a cookieless
+        page-view count, only if you allow it (see section 5). Legal basis:
+        your consent, which you can withdraw at any time.
       </li>
       <li>
         <strong>To meet legal obligations</strong> - where we are required
@@ -152,20 +159,25 @@
 
     <h2>5. Cookies and local storage</h2>
     <p>
-      The Service does not use tracking or advertising cookies, and does not
-      set any cookie that needs your consent. It stores a small amount of data
-      in your browser purely to keep you signed in and to remember which
-      company and role you last used. Your sign-in token is held in
-      <strong>session storage</strong>, which your browser clears when you close
-      the tab; it is never written to disk by us. Blocking this data will stop
-      the Service working.
+      The Service does not use tracking or advertising cookies. It stores a
+      small amount of data in your browser that is <strong>strictly necessary</strong>
+      to run the Service &ndash; a sign-in token and a note of which company and
+      role you last used. The sign-in token is held in <strong>session storage</strong>,
+      which your browser clears when you close the tab; it is never written to
+      disk by us. This storage does not require consent, and blocking it will
+      stop the Service working.
     </p>
     <p>
-      We use <strong>GoatCounter</strong> for basic page-view analytics. It is
-      cookieless: it counts page views without setting cookies, without
-      fingerprinting your device, and without tracking you across other sites.
-      No personal data is collected by it. This is why the Service shows no
-      cookie-consent banner.
+      For basic page-view analytics we would use <strong>GoatCounter</strong>,
+      which is <strong>cookieless</strong>: it counts page views without setting
+      cookies, without fingerprinting your device, and without tracking you
+      across other sites, and it collects no personal data. Even so, it is
+      optional: a short notice on your first visit asks you to choose
+      &ldquo;Allow analytics&rdquo; or &ldquo;Essential only&rdquo;, and the
+      analytics counter only loads if you allow it. You can change that choice
+      at any time from the <strong>&ldquo;Cookie choices&rdquo;</strong> link in
+      the footer. (The counter is not switched on yet, but this is how it will
+      work when it is.)
     </p>
 
     <h2>6. Where your data is stored and processed</h2>
@@ -286,10 +298,12 @@
       </dd>
       <dt>GoatCounter</dt>
       <dd>
-        Cookieless page-view analytics (see section 5). Your browser sends a
-        count request when a page loads; GoatCounter records the page path,
-        referrer, and a coarse browser/country derived in-memory from your
-        request. It does not store your IP address and sets no cookie.
+        Optional cookieless page-view analytics (see section 5), loaded only
+        if you choose &ldquo;Allow analytics&rdquo; in the cookie notice. When
+        enabled, your browser sends a count request when a page loads;
+        GoatCounter records the page path, referrer, and a coarse
+        browser/country derived in-memory from your request. It does not store
+        your IP address and sets no cookie.
       </dd>
     </dl>
     <p>
@@ -431,5 +445,6 @@
 </main>
 
 <script src="js/analytics.js"></script>
+<script src="js/cookieConsent.js"></script>
 </body>
 </html>

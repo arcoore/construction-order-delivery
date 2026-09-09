@@ -10,7 +10,7 @@ export async function renderDeliveryPhotos(container, orderId, { canUpload = fal
     <div class="photo-strip">
       ${photos.length === 0
         ? '<p class="empty-hint">No delivery photos.</p>'
-        : photos.map(p => `<a class="photo-thumb" data-path="${escapeHtml(p.storagePath)}" target="_blank" rel="noopener noreferrer"><img alt="Delivery photo" loading="lazy" /></a>`).join('')}
+        : photos.map((p, i) => `<a class="photo-thumb" data-path="${escapeHtml(p.storagePath)}" target="_blank" rel="noopener noreferrer"><img alt="Delivery photo ${i + 1} of ${photos.length}" loading="lazy" /></a>`).join('')}
     </div>
     ${canUpload ? `
       <label class="btn btn-secondary photo-upload-btn">

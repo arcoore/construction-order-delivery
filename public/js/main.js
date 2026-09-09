@@ -7,7 +7,7 @@ import { refreshCommunitiesView, applyPendingJoinIntent } from './communityView.
 // view-only shared deps (orderStatus/deadline/geo/orderThreadView/
 // deliveryPhotosView) ride along in each module's own import subtree and so
 // leave the initial load too.
-import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, isMfaChallengePending, getMfaEnabled, startMfaEnrollment, confirmMfaEnrollment, disableMfa, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
+import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, didJustConfirmEmail, isMfaChallengePending, getMfaEnabled, startMfaEnrollment, confirmMfaEnrollment, disableMfa, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
 import { getInitials, timeAgo, escapeHtml } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
 import {
@@ -1407,7 +1407,23 @@ async function bootstrap() {
   startRealtimeForSession();
   bootstrapLoadingView.classList.remove('active');
   routeFromTop();
+  if (didJustConfirmEmail() && isAuthenticated()) showConfirmBanner();
 }
+
+// One-time "email confirmed - welcome" acknowledgement after a signup link
+// lands the user in the app (auth.js didJustConfirmEmail). Auto-dismisses
+// after 8s; the close button dismisses it sooner. Shown once per page load.
+const confirmBanner = document.getElementById('confirm-banner');
+const confirmBannerCloseBtn = document.getElementById('confirm-banner-close');
+function hideConfirmBanner() {
+  if (confirmBanner) confirmBanner.hidden = true;
+}
+function showConfirmBanner() {
+  if (!confirmBanner) return;
+  confirmBanner.hidden = false;
+  setTimeout(hideConfirmBanner, 8000);
+}
+confirmBannerCloseBtn?.addEventListener('click', hideConfirmBanner);
 
 // Lightweight freshness mechanism, kept as a fallback even after Phase
 // 8D.2 added Realtime (see CLAUDE.md's Phase 8D.2 section) - Realtime

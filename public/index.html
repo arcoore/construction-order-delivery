@@ -24,6 +24,7 @@
 <meta name="description" content="SiteStock coordinates material ordering and delivery for a construction firm: workers request from site, owners approve, buyers purchase, drivers deliver. An early-stage prototype - an account is required." />
 <link rel="canonical" href="https://arcoore.github.io/construction-order-delivery/" />
 <meta name="theme-color" content="#12344a" />
+<link rel="icon" href="favicon.ico" sizes="any" />
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -62,6 +63,23 @@
     <span class="view-loading-spinner" aria-hidden="true"></span>
     Loading…
   </div>
+</div>
+
+<!-- One-time "your email is confirmed" acknowledgement, shown by main.js
+     after routing when the page was reached from a signup-confirmation link
+     (auth.js didJustConfirmEmail). Auto-dismisses; also has a close button. -->
+<div id="confirm-banner" role="status" hidden>
+  <span><strong>Email confirmed.</strong> Welcome to SiteStock &ndash; you're all set.</span>
+  <button type="button" id="confirm-banner-close" aria-label="Dismiss">&times;</button>
+</div>
+
+<!-- Sticky CTA: on a narrow screen the Create-account button sits well below
+     the fold on the register form. authView.js shows this bar only while the
+     register form is visible; the button proxies to #register-submit-btn and
+     mirrors its disabled state. CSS keeps it off desktop and off while the
+     cookie notice is up. -->
+<div id="sticky-cta" hidden>
+  <button type="button" id="sticky-cta-btn" class="btn btn-primary btn-block">Create account</button>
 </div>
 
 <a href="#app" class="skip-link">Skip to main content</a>
@@ -123,7 +141,9 @@
     <div class="panel">
       <div id="auth-intro">
         <h1>Log in to SiteStock</h1>
-        <p class="hint">This is still a prototype, but accounts are now real (Supabase-backed) - the same login works from any browser or device. An account is required to continue.</p>
+        <p class="hint">SiteStock runs a construction site's material orders end to end &ndash; a worker requests what's needed on site, the owner approves it, a buyer purchases it, and a driver delivers it.</p>
+        <p class="hint"><strong>New here?</strong> <button type="button" class="link-btn" id="auth-intro-register-btn">Create an account</button> to set up your company and invite your team.</p>
+        <p class="hint small-hint">An early-stage prototype. An account is required; the same login works on any device.</p>
       </div>
 
       <div class="driver-tabs" id="auth-tabs">
@@ -695,5 +715,6 @@
 <script src="js/env.js"></script>
 <script type="module" src="js/main.js"></script>
 <script src="js/analytics.js"></script>
+<script src="js/cookieConsent.js"></script>
 </body>
 </html>

@@ -52,6 +52,18 @@ export function inPasswordRecoveryContext() {
   return inPasswordRecovery;
 }
 
+// A signup-confirmation link lands here with `type=signup` in the hash (the
+// same public, non-secret marker shape as `type=recovery` above). Unlike
+// recovery this doesn't gate routing - the user just enters the app
+// normally - so main.js only uses it, after routing, to show a one-time
+// "email confirmed, welcome" acknowledgement. Read synchronously at module
+// load, before supabase-js's detectSessionInUrl strips the hash; if it's
+// already gone the acknowledgement is simply skipped (harmless).
+const justConfirmedEmail = /(?:^|[#&])type=signup(?:&|$)/.test(window.location.hash);
+export function didJustConfirmEmail() {
+  return justConfirmedEmail;
+}
+
 // main.js's bootstrap awaits this before the first route happens - nothing
 // ever renders a role view off an unknown/uninitialized auth state.
 export const authReady = supabase.auth.getSession().then(async ({ data }) => {

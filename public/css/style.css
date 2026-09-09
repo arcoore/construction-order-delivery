@@ -2041,6 +2041,112 @@ summary:focus-visible,
   .view-loading-spinner { animation: none; border-top-color: var(--orange); }
 }
 
+/* --- "Email confirmed" acknowledgement bar (main.js showConfirmBanner) ---
+   In normal flow at the very top of the page (pushes the topbar down while
+   shown, no space when hidden) rather than a fixed overlay, so it never
+   covers the topbar. */
+#confirm-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: center;
+}
+#confirm-banner[hidden] { display: none; }
+#confirm-banner button {
+  flex: none;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 9px;
+  cursor: pointer;
+  border-radius: 0;
+}
+#confirm-banner button:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* --- Sticky mobile CTA (authView.js) ---
+   Off on desktop; on a narrow screen it shows only when authView.js clears
+   [hidden] (register form visible), and never while the cookie notice is up. */
+#sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 110;
+  display: none;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 10px rgba(63, 41, 31, 0.12);
+}
+#sticky-cta .btn { margin: 0; }
+@media (max-width: 640px) {
+  #sticky-cta:not([hidden]) { display: block; }
+  /* room to scroll past the real button without the sticky bar covering it */
+  body.sticky-cta-open #register-form { padding-bottom: 72px; }
+}
+body.cookie-choice-pending #sticky-cta { display: none; }
+
+/* --- Cookie / storage consent notice (cookieConsent.js) --- */
+#cookie-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 130;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--card);
+  border-top: 2px solid var(--navy);
+  box-shadow: 0 -3px 16px rgba(63, 41, 31, 0.18);
+}
+.cookie-banner-text {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+.cookie-banner-link { color: var(--navy-light); font-weight: 600; white-space: nowrap; }
+.cookie-banner-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cookie-banner-actions .btn { margin: 0; }
+@media (max-width: 560px) {
+  .cookie-banner-actions { width: 100%; }
+  .cookie-banner-actions .btn { flex: 1 1 auto; }
+}
+/* Footer re-open control, injected by cookieConsent.js into .app-footer-links
+   (uppercase mono) or .legal-footer (plain) - inherit so it matches either. */
+.cookie-settings-btn {
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--navy-light);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cookie-settings-btn:hover { color: var(--orange-dark); }
+
+/* "Create an account" link sits inline in the auth intro sentence - drop
+   .link-btn's standalone bottom padding so it doesn't push the line box. */
+#auth-intro-register-btn { padding: 0; font-size: inherit; }
+
 /* --- Global kill switch / maintenance screen (migration 0042) --- */
 #kill-switch-panel {
   position: fixed;
