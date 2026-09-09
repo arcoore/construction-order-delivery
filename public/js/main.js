@@ -1,10 +1,12 @@
 import './authView.js';
 import { refreshCommunitiesView, applyPendingJoinIntent } from './communityView.js';
-import { refreshWorkerView } from './site.js';
-import { refreshOwnerView } from './owner.js';
-import { refreshDriverView } from './driver.js';
-import { refreshBuyerView } from './buyer.js';
-import { refreshSitesView } from './sitesView.js';
+// The five role/screen modules (site/owner/driver/buyer/sitesView) are the
+// bulk of this app's JS and any given user only ever needs one or two of
+// them, so they're pulled in on first navigation via dynamic import()
+// instead of at bootstrap - see loadView() and showRoleView() below. Their
+// view-only shared deps (orderStatus/deadline/geo/orderThreadView/
+// deliveryPhotosView) ride along in each module's own import subtree and so
+// leave the initial load too.
 import { isAuthenticated, getLoggedInAccount, logout as authLogout, authReady, inPasswordRecoveryContext, isMfaChallengePending, getMfaEnabled, startMfaEnrollment, confirmMfaEnrollment, disableMfa, deleteAccount, requestEmailChange, updateDisplayName } from './auth.js';
 import { getInitials, timeAgo, escapeHtml } from './data.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName, subscribeIdentity, loadAllProfiles } from './identity.js';
@@ -153,6 +155,98 @@ function showOnly(view) {
   ALL_VIEWS.forEach(v => v.classList.toggle('active', v === view));
 }
 
+// --- Lazy-loaded views ----------------------------------------------
+// Dynamic import() with a small promise cache. import() already dedupes on
+// its own (a second call for the same specifier returns the same module),
+// but caching the promise here also lets a failed first fetch (flaky
+// network on the very first navigation into a role) be retried instead of
+// permanently wedging that view. Each module's top-level side effects (its
+// subscribeX render hooks, its revert-countdown setInterval) run on this
+// first import - which is exactly when its view first matters; showRoleView/
+// showSitesView still call refreshXView() on every entry, and the pub-sub
+// convention re-runs each listener immediately on subscribe, so nothing
+// renders stale. Same-origin import() is permitted by the page CSP
+// (script-src 'self').
+const _viewModules = new Map();
+function loadView(path) {
+  let p = _viewModules.get(path);
+  if (!p) {
+    p = import(path).catch(err => { _viewModules.delete(path); throw err; });
+    _viewModules.set(path, p);
+  }
+  return p;
+}
+
+const ROLE_VIEW_MODULE = {
+  worker: './site.js',
+  owner: './owner.js',
+  driver: './driver.js',
+  buyer: './buyer.js',
+};
+
+// --- View-transition loading veil ----------------------------------
+// Every transition (showRoleView/showSitesView/showCommunitiesView/
+// showProfile/showRoleSelect/enterCommunityFlow) leaves the previous
+// screen up while its async work runs - a cache refresh, and since
+// lazy-loading, possibly the first fetch of a role/screen module - then
+// swaps in the finished view. Invisible on a fast connection, a dead
+// feedback-free pause on a slow one. beginViewLoading() arms a veil that
+// only appears once the wait passes ~150ms (so quick transitions never
+// flash it) and then stays for at least ~350ms (so it can't strobe).
+// Refcounted: enterCommunityFlow -> showRoleView both wrap, and the veil
+// only clears when the outermost transition finishes.
+const viewLoadingEl = document.getElementById('view-loading');
+const VIEW_LOADING_DELAY_MS = 150;
+const VIEW_LOADING_MIN_SHOW_MS = 350;
+let viewLoadingDepth = 0;
+let viewLoadingShowTimer = null;
+let viewLoadingHideTimer = null;
+let viewLoadingShownAt = 0;
+
+function beginViewLoading() {
+  viewLoadingDepth++;
+  if (viewLoadingHideTimer !== null) { clearTimeout(viewLoadingHideTimer); viewLoadingHideTimer = null; }
+  if (viewLoadingShowTimer === null && viewLoadingEl.hidden) {
+    viewLoadingShowTimer = setTimeout(() => {
+      viewLoadingShowTimer = null;
+      if (viewLoadingDepth > 0) {
+        viewLoadingEl.hidden = false;
+        viewLoadingShownAt = Date.now();
+      }
+    }, VIEW_LOADING_DELAY_MS);
+  }
+}
+
+function endViewLoading() {
+  viewLoadingDepth = Math.max(0, viewLoadingDepth - 1);
+  if (viewLoadingDepth > 0) return;
+  if (viewLoadingShowTimer !== null) { clearTimeout(viewLoadingShowTimer); viewLoadingShowTimer = null; }
+  if (viewLoadingEl.hidden || viewLoadingHideTimer !== null) return;
+  const remaining = VIEW_LOADING_MIN_SHOW_MS - (Date.now() - viewLoadingShownAt);
+  if (remaining <= 0) {
+    viewLoadingEl.hidden = true;
+  } else {
+    viewLoadingHideTimer = setTimeout(() => {
+      viewLoadingHideTimer = null;
+      if (viewLoadingDepth === 0) viewLoadingEl.hidden = true;
+    }, remaining);
+  }
+}
+
+// Wrap an async transition function so it drives the veil on every path
+// (including a thrown error or an early return). The refcount in
+// begin/endViewLoading makes nesting safe.
+function guardTransition(fn) {
+  return async function guardedTransition(...args) {
+    beginViewLoading();
+    try {
+      return await fn.apply(this, args);
+    } finally {
+      endViewLoading();
+    }
+  };
+}
+
 // True whenever the current user actually owns the active community - a
 // real permission check (isOwner), not "which role view happens to be on
 // screen right now". This is what lets the Sites pill follow the owner
@@ -192,7 +286,8 @@ function showCommunityPicker() {
   updateTopRightPills();
 }
 
-async function showCommunitiesView() {
+const showCommunitiesView = guardTransition(showCommunitiesViewImpl);
+async function showCommunitiesViewImpl() {
   showOnly(communitiesView);
   sessionBar.hidden = true;
   communityIndicator.textContent = 'Orders & Deliveries';
@@ -216,7 +311,8 @@ function renderBuyerBadge(membership) {
   return `<button type="button" class="link-btn" data-request-buyer="${membership.id}">Request buyer access</button>`;
 }
 
-async function showProfile() {
+const showProfile = guardTransition(showProfileImpl);
+async function showProfileImpl() {
   await refreshDataCaches();
 
   const account = getLoggedInAccount();
@@ -549,7 +645,8 @@ async function showProfile() {
   updateTopRightPills();
 }
 
-async function showRoleSelect() {
+const showRoleSelect = guardTransition(showRoleSelectImpl);
+async function showRoleSelectImpl() {
   await refreshDataCaches();
 
   const community = getActiveCommunity();
@@ -594,13 +691,22 @@ async function showRoleSelect() {
   updateTopRightPills();
 }
 
-async function showRoleView() {
+const showRoleView = guardTransition(showRoleViewImpl);
+async function showRoleViewImpl() {
+  const role = getActiveRole();
+  // Kick the role's view module download off now so it runs concurrently
+  // with the cache refresh below (both are independent; the cache fetch is
+  // the slower, network-bound one). Awaited further down, right before the
+  // view is revealed. A stale role that fails validation just leaves this
+  // fetch to finish harmlessly in the background - the module is then warm
+  // for a later legitimate entry.
+  const modulePromise = ROLE_VIEW_MODULE[role] ? loadView(ROLE_VIEW_MODULE[role]) : null;
+
   await refreshDataCaches();
 
   const community = getActiveCommunity();
   const userId = getCurrentUserId();
   const displayName = getCurrentDisplayName();
-  const role = getActiveRole();
 
   if (!community || !isApprovedMember(community.id, userId)) {
     setActiveCommunityId(null);
@@ -611,6 +717,16 @@ async function showRoleView() {
   const roles = eligibleRoles(community.id, userId);
   if (!role || !roles.includes(role)) {
     showRoleSelect();
+    return;
+  }
+
+  let view;
+  try {
+    view = await modulePromise;
+  } catch (err) {
+    console.error('SiteStock: failed to load the view for role', role, err);
+    alert("Couldn't load that screen - check your connection and try again.");
+    showCommunityPicker();
     return;
   }
 
@@ -628,15 +744,15 @@ async function showRoleView() {
 
   if (role === 'worker') {
     showOnly(workerView);
-    refreshWorkerView();
+    view.refreshWorkerView();
     highlightOrderIfPending();
   } else if (role === 'owner') {
     showOnly(ownerView);
-    refreshOwnerView(pendingNotifOrderId);
+    view.refreshOwnerView(pendingNotifOrderId);
     pendingNotifOrderId = null;
   } else if (role === 'driver') {
     showOnly(driverView);
-    refreshDriverView();
+    view.refreshDriverView();
     highlightOrderIfPending();
   } else if (role === 'buyer') {
     showOnly(buyerView);
@@ -644,7 +760,7 @@ async function showRoleView() {
     // refreshBuyerView is itself async since Phase 8C - it awaits
     // releaseHoldIfAny(), a real abandonPurchase RPC, before it's safe to
     // treat the Buyer view as actually refreshed.
-    await refreshBuyerView(pendingNotifOrderId);
+    await view.refreshBuyerView(pendingNotifOrderId);
     pendingNotifOrderId = null;
   }
 
@@ -725,11 +841,24 @@ feedbackSendBtn.addEventListener('click', async () => {
 // this deliberately doesn't re-derive community/role chrome the way
 // showRoleView does - it just swaps which section is visible and keeps the
 // existing session bar.
-async function showSitesView(siteId = null) {
+const showSitesView = guardTransition(showSitesViewImpl);
+async function showSitesViewImpl(siteId = null) {
+  let view;
+  try {
+    // refreshDataCaches never rejects (it catches internally), so Promise.all
+    // here only rejects if the sitesView.js fetch itself fails. Load before
+    // revealing the section so the veil covers the previous screen rather
+    // than an empty #sites-view.
+    [view] = await Promise.all([loadView('./sitesView.js'), refreshDataCaches()]);
+  } catch (err) {
+    console.error('SiteStock: failed to load the Sites view', err);
+    alert("Couldn't load Sites - check your connection and try again.");
+    routeFromTop();
+    return;
+  }
   showOnly(sitesView);
   updateTopRightPills();
-  await refreshDataCaches();
-  refreshSitesView(siteId);
+  view.refreshSitesView(siteId);
 }
 
 // Set right before routing into a role-view from a notification click, so
@@ -757,7 +886,8 @@ function highlightOrderIfPending() {
 // go straight there (owner only ever applies if they actually are one).
 // Falls back to the manual picker for skipped sessions / accounts made
 // before this existed.
-async function enterCommunityFlow() {
+const enterCommunityFlow = guardTransition(enterCommunityFlowImpl);
+async function enterCommunityFlowImpl() {
   await refreshDataCaches();
 
   const community = getActiveCommunity();

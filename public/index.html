@@ -10,10 +10,17 @@
 <link rel="preload" href="fonts/dmmono-500-latin.woff2" as="font" type="font/woff2" crossorigin />
 <!-- Critical-path modules: start these in parallel now instead of discovering
      them import-by-import (main.js -> supabaseClient.js -> the vendored SDK is
-     otherwise a 3-deep waterfall, and the SDK bundle is the largest asset). -->
+     otherwise a 3-deep waterfall, and the SDK bundle is the largest asset).
+     auth/community/orderLifecycle are the three largest modules main.js always
+     needs on every path (never lazy-loaded), so they're preloaded too rather
+     than discovered a level down. The five role/screen views are deliberately
+     NOT here - they're dynamically imported on navigation (see main.js). -->
 <link rel="modulepreload" href="js/main.js" />
 <link rel="modulepreload" href="js/supabaseClient.js" />
 <link rel="modulepreload" href="js/vendor/supabase-js.bundle.js" />
+<link rel="modulepreload" href="js/auth.js" />
+<link rel="modulepreload" href="js/community.js" />
+<link rel="modulepreload" href="js/orderLifecycle.js" />
 <meta name="description" content="SiteStock coordinates material ordering and delivery for a construction firm: workers request from site, owners approve, buyers purchase, drivers deliver. An early-stage prototype - an account is required." />
 <link rel="canonical" href="https://arcoore.github.io/construction-order-delivery/" />
 <meta name="theme-color" content="#12344a" />
@@ -44,6 +51,16 @@
     <p class="legal-kicker">SiteStock</p>
     <h1>Briefly offline</h1>
     <p class="hint" id="kill-switch-message"></p>
+  </div>
+</div>
+
+<!-- Shown during a view transition that runs long (>~150ms) - a slow cache
+     refresh, or the first fetch of a lazily-loaded role/screen module.
+     main.js's beginViewLoading/endViewLoading toggle [hidden]. -->
+<div id="view-loading" hidden role="status">
+  <div class="view-loading-card">
+    <span class="view-loading-spinner" aria-hidden="true"></span>
+    Loading…
   </div>
 </div>
 

@@ -1999,6 +1999,48 @@ summary:focus-visible,
 /* --- Bootstrap holding screen --- */
 #bootstrap-loading .panel { text-align: left; }
 
+/* --- View-transition loading veil (main.js beginViewLoading) ---
+   Sits above the content and the account/notification dropdowns (z 10) but
+   below the modal overlay (z 100) and the skip link (z 200). */
+#view-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 22vh;
+  background: rgba(247, 239, 230, 0.72);
+  /* Purely a visual cue - never intercept clicks, so a stuck transition
+     (hung backend) can't lock the user out of the topbar. */
+  pointer-events: none;
+}
+#view-loading[hidden] { display: none; }
+.view-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font: 500 0.8rem var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.view-loading-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--border);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: view-loading-spin 0.7s linear infinite;
+}
+@keyframes view-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .view-loading-spinner { animation: none; border-top-color: var(--orange); }
+}
+
 /* --- Global kill switch / maintenance screen (migration 0042) --- */
 #kill-switch-panel {
   position: fixed;
