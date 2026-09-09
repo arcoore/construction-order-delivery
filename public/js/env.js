@@ -22,16 +22,20 @@
   //   window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
   window.SITESTOCK_TURNSTILE_KEY = '';
 
-  // Social sign-in providers to show on the auth screen. Empty = none (the
-  // buttons stay hidden, no change for anyone). A provider only actually
-  // works if it is ALSO enabled + configured in supabase/config.toml's
-  // [auth.external.<provider>] with a real client id + secret - the two
-  // gates must move together, same as SITESTOCK_TURNSTILE_KEY. Accepted
-  // values: 'google', 'azure' (shown as "Microsoft"), 'apple'. See
-  // supabase/.env.example and the launch checklist for the per-provider
-  // setup, which needs an adult (and, for Apple, the paid Developer
-  // Program).
-  window.SITESTOCK_OAUTH_PROVIDERS = [];
+  // Social sign-in providers the app is willing to show. This is only the
+  // FIRST of two gates: authView.js also asks GoTrue's /auth/v1/settings
+  // which providers are actually enabled, and a button appears only when
+  // BOTH agree (see authView.js's wireSocialSignIn + auth.js's
+  // getEnabledOAuthProviders). So listing a provider here is inert - no
+  // button, no error - until it is ALSO enabled with real credentials in
+  // supabase/config.toml's [auth.external.<provider>].
+  //
+  // google + azure are listed because they're free and the plan is to use
+  // them (see supabase/OAUTH_SETUP.md for the register-the-app steps).
+  // 'apple' is left out on purpose - it needs the $99/yr Apple Developer
+  // Program, deferred until SiteStock is wrapped as a native app.
+  // Accepted values: 'google', 'azure' (shown as "Microsoft"), 'apple'.
+  window.SITESTOCK_OAUTH_PROVIDERS = ['google', 'azure'];
 
   if (host === 'localhost' || host === '127.0.0.1') {
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply

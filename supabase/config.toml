@@ -69,15 +69,14 @@ secret = "env(TURNSTILE_SECRET)"
 # hibp_enabled = true
 
 # Social sign-in (Google / Microsoft / Apple) - the buttons exist in the app
-# (public/index.html #oauth-block) but stay HIDDEN until a provider is both
-# listed in window.SITESTOCK_OAUTH_PROVIDERS (public/js/env.js) AND enabled
-# here with real credentials. All OFF and unconfigured for now: each needs an
-# OAuth app registered with the provider (an adult step; Apple also needs the
-# paid Developer Program) - see supabase/.env.example and the launch
-# checklist. To turn one on: fill its two vars in supabase/.env, flip
-# `enabled` here, add the provider name to SITESTOCK_OAUTH_PROVIDERS, then
-# restart / `supabase config push`. `enabled = false` keeps GoTrue from
-# touching the (empty) credentials, exactly like [auth.captcha] above.
+# (public/index.html #oauth-block). env.js already lists 'google' + 'azure' in
+# SITESTOCK_OAUTH_PROVIDERS, so the ONLY thing still holding each button back
+# is `enabled` below + real credentials in supabase/.env. That last step needs
+# you to register an OAuth app with the provider - full click-by-click is in
+# supabase/OAUTH_SETUP.md. Do NOT flip `enabled` to true before its two vars
+# in .env are filled: GoTrue then tries to configure the provider with empty
+# credentials (same reason [auth.captcha] stays false until its key exists).
+# Apple is intentionally left for the native-app conversion ($99/yr program).
 [auth.external.google]
 enabled = false
 client_id = "env(GOOGLE_OAUTH_CLIENT_ID)"
@@ -120,12 +119,15 @@ max_frequency = "60s"
 # heavily rate-limited. So a real SMTP provider is required to email actual
 # users in either place.
 #
-# All five values are read from supabase/.env (git-ignored). That file, and
-# supabase/.env.example, spell out the two free options: Resend (best
-# deliverability, but no-domain sending is limited to your own address until
-# you verify a domain) and Brevo (any recipient with just a verified sender,
-# no domain). `supabase config push` carries this whole block, and the URLs
-# above, to the hosted project.
+# All five values are read from supabase/.env (git-ignored); the template and
+# per-provider steps are in supabase/.env.example. The chosen provider is
+# Resend (smtp.resend.com) - free, best deliverability. One catch: until a
+# sending DOMAIN is verified in Resend, it only delivers to the address the
+# Resend account signed up with (arcooreacc@gmail.com); every other recipient
+# gets a 403 and their signup fails. So "verify a domain in Resend" is a real
+# pre-beta task (Snagging List section 3). Brevo is kept in .env.example as a
+# fallback - it sends to any recipient with just a verified sender, no domain.
+# `supabase config push` carries this whole block to the hosted project.
 [auth.email.smtp]
 enabled = true
 host = "env(SMTP_HOST)"
