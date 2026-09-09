@@ -1,20 +1,27 @@
-// Cookieless page-view analytics (GoatCounter).
+// Privacy-friendly page-view analytics — Cloudflare Web Analytics.
 //
-// Privacy-first: no cookies, no fingerprinting, no cross-site tracking, no
-// personal data. It still only loads AFTER the visitor picks "Allow
-// analytics" in the cookie notice (cookieConsent.js) - so with no choice, or
-// "Essential only", nothing here runs.
+// Chosen because it is genuinely free with no usage cap and free for
+// commercial use (GoatCounter's hosted service is free for non-commercial
+// use only). It is cookieless: no cookies, no localStorage, no
+// fingerprinting, no cross-site tracking, and it does not store visitor IP
+// addresses. See https://developers.cloudflare.com/web-analytics/
 //
-// Disabled until you set a code below:
-//   1. Sign up free at https://www.goatcounter.com and pick a code
-//      (that becomes your subdomain, e.g. "sitestock").
-//   2. Set GOATCOUNTER_CODE to that code and redeploy.
-//   3. View stats at https://<code>.goatcounter.com
+// It still only loads AFTER the visitor picks "Allow analytics" in the
+// cookie notice (cookieConsent.js) — so with no choice, or "Essential
+// only", nothing here runs.
+//
+// Disabled until you set a token below:
+//   1. Sign up free at https://dash.cloudflare.com (no card, no domain
+//      needed) → Web Analytics → Add a site → "Manual installation".
+//   2. Copy the token from the snippet it shows (data-cf-beacon {"token": …})
+//      into CF_BEACON_TOKEN and redeploy.
+//   3. View stats in the Cloudflare dashboard.
 //
 // Loaded as a plain classic <script> on every page (app + legal pages),
-// before cookieConsent.js.
+// before cookieConsent.js. The token is public by design (it ships in the
+// page), so hardcoding it here is fine — same as GoatCounter's code was.
 (function () {
-  var GOATCOUNTER_CODE = ''; // e.g. 'sitestock'
+  var CF_BEACON_TOKEN = ''; // e.g. 'a1b2c3d4e5f6...'
   var loaded = false;
 
   function consentGiven() {
@@ -24,14 +31,14 @@
 
   function load() {
     if (loaded) return;
-    if (!GOATCOUNTER_CODE) return;
+    if (!CF_BEACON_TOKEN) return;
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return;
     if (!consentGiven()) return;
     loaded = true;
     var s = document.createElement('script');
-    s.async = true;
-    s.src = 'https://gc.zgo.at/count.js';
-    s.setAttribute('data-goatcounter', 'https://' + GOATCOUNTER_CODE + '.goatcounter.com/count');
+    s.defer = true;
+    s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+    s.setAttribute('data-cf-beacon', JSON.stringify({ token: CF_BEACON_TOKEN }));
     document.head.appendChild(s);
   }
 

@@ -2,7 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://gc.zgo.at https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://*.goatcounter.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://*.goatcounter.com https://challenges.cloudflare.com https://api.pwnedpasswords.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://cloudflareinsights.com https://challenges.cloudflare.com https://api.pwnedpasswords.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Privacy Policy - SiteStock</title>
 <meta name="description" content="What personal data SiteStock collects, why, who can see it, how long it is kept, and your rights under UK data protection law." />
@@ -46,7 +46,7 @@
     <p>
       The controller of personal data processed through the SiteStock
       application and website (the &ldquo;Service&rdquo;) is
-      <strong>Archie Moore</strong>, <strong>23 Grange Mansions, Kingston Road, Surrey</strong>.
+      <strong>Archie Moore</strong>, <strong>23 Grange Mansions, Kingston Road, Surrey, KT17 2AD</strong>.
       For any privacy question, or to exercise your rights, contact us at
       <strong>arcooreacc@gmail.com</strong>.
     </p>
@@ -168,15 +168,16 @@
       stop the Service working.
     </p>
     <p>
-      For basic page-view analytics we would use <strong>GoatCounter</strong>,
-      which is <strong>cookieless</strong>: it counts page views without setting
-      cookies, without fingerprinting your device, and without tracking you
-      across other sites, and it collects no personal data. Even so, it is
+      For basic page-view analytics we would use <strong>Cloudflare Web
+      Analytics</strong>, which is <strong>cookieless</strong>: it counts page
+      views without setting cookies, without fingerprinting your device, and
+      without tracking you across other sites. It does not store your IP
+      address and does not identify individual visitors. Even so, it is
       optional: a short notice on your first visit asks you to choose
       &ldquo;Allow analytics&rdquo; or &ldquo;Essential only&rdquo;, and the
-      analytics counter only loads if you allow it. You can change that choice
+      analytics script only loads if you allow it. You can change that choice
       at any time from the <strong>&ldquo;Cookie choices&rdquo;</strong> link in
-      the footer. (The counter is not switched on yet, but this is how it will
+      the footer. (Analytics is not switched on yet, but this is how it will
       work when it is.)
     </p>
 
@@ -237,9 +238,10 @@
             <td>Optional social sign-in</td>
           </tr>
           <tr>
-            <td>GoatCounter</td>
-            <td>The page path and referring page. It does not store your IP
-              address and sets no cookie</td>
+            <td>Cloudflare Web Analytics</td>
+            <td>Only if you allow analytics: the page path and referring page.
+              It does not store your IP address, sets no cookie, and does not
+              identify you</td>
             <td>Counts page views</td>
           </tr>
         </tbody>
@@ -296,14 +298,15 @@
         sign in with an email and password, none of these providers is
         involved at all.
       </dd>
-      <dt>GoatCounter</dt>
+      <dt>Cloudflare Web Analytics</dt>
       <dd>
         Optional cookieless page-view analytics (see section 5), loaded only
         if you choose &ldquo;Allow analytics&rdquo; in the cookie notice. When
-        enabled, your browser sends a count request when a page loads;
-        GoatCounter records the page path, referrer, and a coarse
-        browser/country derived in-memory from your request. It does not store
-        your IP address and sets no cookie.
+        enabled, your browser sends one measurement request when a page loads;
+        Cloudflare aggregates page path, referrer, and coarse browser/country
+        information. It does not store your IP address, sets no cookie, and
+        does not identify individual visitors. Cloudflare, Inc. is a US company;
+        this data is covered by its standard data-processing terms.
       </dd>
     </dl>
     <p>

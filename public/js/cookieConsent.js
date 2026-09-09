@@ -7,9 +7,9 @@
 //     not work without these, so they are "strictly necessary" and are
 //     never blocked by this notice.
 //   - OPTIONAL: a cookieless, privacy-friendly page-view counter
-//     (GoatCounter - see analytics.js and the Privacy Policy). No cookies,
-//     no fingerprinting, no personal data, no cross-site tracking. It only
-//     loads after an explicit "Allow analytics" here.
+//     (Cloudflare Web Analytics - see analytics.js and the Privacy Policy).
+//     No cookies, no fingerprinting, no personal data, no cross-site
+//     tracking. It only loads after an explicit "Allow analytics" here.
 //
 // Loaded as a plain classic <script> on every page (app + legal pages),
 // after analytics.js. The banner markup and the footer "Cookie choices"
