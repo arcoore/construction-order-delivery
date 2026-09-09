@@ -481,7 +481,7 @@ registerForm.addEventListener('submit', async e => {
   }
 
   if (!registerTermsCheckbox.checked) {
-    setStatus(registerStatus, 'Please agree to the Terms of Service and Privacy Policy to continue.', 'error');
+    setStatus(registerStatus, 'Please confirm you are 18 or over and agree to the Terms of Service, EULA and Privacy Policy to continue.', 'error');
     return;
   }
 
