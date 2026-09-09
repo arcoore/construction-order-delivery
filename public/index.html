@@ -597,6 +597,9 @@
     <a href="mailto:arcooreacc@gmail.com">arcooreacc@gmail.com</a> and we&rsquo;ll
     reply within 5 working days.
   </p>
+  <p class="app-footer-feedback">
+    Beta feedback? <button type="button" class="link-btn" id="footer-feedback-btn">Send feedback</button>
+  </p>
   <p class="app-footer-note">Early-stage software, provided as is - see the Terms.</p>
 </footer>
 
@@ -605,6 +608,27 @@
     <h2 id="owner-upgrade-title">You have been upgraded to owner level</h2>
     <p class="hint" id="owner-upgrade-message"></p>
     <button type="button" class="btn btn-primary btn-block" id="owner-upgrade-ok-btn">Got it</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title" hidden>
+  <div class="modal-box">
+    <h2 id="feedback-title">Send feedback</h2>
+    <p class="hint" id="feedback-intro">Tell us what's working, what isn't, or what you wish it did. This goes straight to the person who builds SiteStock - it's not a public review.</p>
+    <div id="feedback-form">
+      <label class="field-label" for="feedback-input">Your message</label>
+      <textarea id="feedback-input" class="text-input" rows="5" maxlength="4000" placeholder="e.g. the site picker was confusing when I first signed in&hellip;"></textarea>
+      <p class="hint small-hint"><span id="feedback-count">0</span>/4000</p>
+      <div class="reject-form-actions">
+        <button type="button" class="btn btn-secondary" id="feedback-cancel-btn">Not now</button>
+        <button type="button" class="btn btn-primary" id="feedback-send-btn">Send</button>
+      </div>
+      <p id="feedback-status" class="form-status" role="status" aria-live="polite"></p>
+    </div>
+    <div id="feedback-thanks" hidden>
+      <p class="hint">Thanks - that's genuinely useful. If you left your email on your account we may follow up.</p>
+      <button type="button" class="btn btn-primary btn-block" id="feedback-close-btn">Close</button>
+    </div>
   </div>
 </div>
 

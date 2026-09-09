@@ -23,7 +23,8 @@ import {
   refreshNotificationCache,
 } from './notifications.js';
 import { canAccessSite, refreshSitesCache } from './sites.js';
-import { refreshOrderCache } from './orderLifecycle.js';
+import { sendFeedback, feedbackCooldownRemaining, milestoneFeedbackPending, markMilestoneFeedbackDone } from './feedback.js';
+import { refreshOrderCache, getOrders } from './orderLifecycle.js';
 import { refreshMessageCache } from './orderMessages.js';
 import { refreshPhotoCache } from './deliveryPhotos.js';
 import { refreshSupplierCache } from './suppliers.js';
@@ -92,6 +93,17 @@ const roleSelectList = document.getElementById('role-select-list');
 const ownerUpgradeModal = document.getElementById('owner-upgrade-modal');
 const ownerUpgradeMessage = document.getElementById('owner-upgrade-message');
 const ownerUpgradeOkBtn = document.getElementById('owner-upgrade-ok-btn');
+const feedbackModal = document.getElementById('feedback-modal');
+const feedbackIntro = document.getElementById('feedback-intro');
+const feedbackForm = document.getElementById('feedback-form');
+const feedbackThanks = document.getElementById('feedback-thanks');
+const feedbackInput = document.getElementById('feedback-input');
+const feedbackCount = document.getElementById('feedback-count');
+const feedbackStatus = document.getElementById('feedback-status');
+const feedbackSendBtn = document.getElementById('feedback-send-btn');
+const feedbackCancelBtn = document.getElementById('feedback-cancel-btn');
+const feedbackCloseBtn = document.getElementById('feedback-close-btn');
+const footerFeedbackBtn = document.getElementById('footer-feedback-btn');
 const notifWrap = document.getElementById('notif-wrap');
 const notifBellBtn = document.getElementById('notif-bell-btn');
 const notifBadge = document.getElementById('notif-badge');
@@ -157,6 +169,8 @@ function updateTopRightPills() {
   communitiesPillBtn.hidden = false;
   notifWrap.hidden = false;
   sitesPillBtn.hidden = !hasActiveOwnerSession();
+  // Feedback needs a real account (the table is authenticated-only insert).
+  if (footerFeedbackBtn) footerFeedbackBtn.hidden = !isAuthenticated();
 }
 
 function showAuth() {
@@ -167,6 +181,7 @@ function showAuth() {
   sitesPillBtn.hidden = true;
   notifWrap.hidden = true;
   notifPanel.hidden = true;
+  if (footerFeedbackBtn) footerFeedbackBtn.hidden = true;
   communityIndicator.textContent = 'Orders & Deliveries';
 }
 
@@ -326,6 +341,7 @@ async function showProfile() {
         <li>every company, site, order, approval, cancellation, delivery and in-app message you create or act on - with your name and the time against each one</li>
         <li>any delivery photos you upload</li>
         <li>your notifications and notification settings</li>
+        <li>any feedback you send us through the &ldquo;Send feedback&rdquo; box</li>
         <li>if you're a driver and choose to share it, an approximate location from your device - used only to sort nearby pickups, not stored long-term</li>
         <li>standard security logs (your IP address, request times) and, if the app hits an error, a diagnostic report your browser sends us</li>
       </ul>
@@ -631,7 +647,78 @@ async function showRoleView() {
     await refreshBuyerView(pendingNotifOrderId);
     pendingNotifOrderId = null;
   }
+
+  maybePromptFeedback();
 }
+
+// --- Feedback --------------------------------------------------------
+// Footer "Send feedback" any time; plus one gentle prompt the first time
+// the user's active company has a completed delivery. Everything writes
+// one row to the private `feedback` table (feedback.js).
+let feedbackContext = 'general';
+
+function openFeedback(context) {
+  feedbackContext = context;
+  feedbackForm.hidden = false;
+  feedbackThanks.hidden = true;
+  feedbackInput.value = '';
+  feedbackCount.textContent = '0';
+  feedbackStatus.textContent = '';
+  feedbackStatus.className = 'form-status';
+  feedbackIntro.textContent = context === 'milestone_first_delivery'
+    ? "You've had your first delivery through SiteStock. How's it going so far - anything clunky, confusing, or missing? This goes straight to the person who builds it, not a public review."
+    : "Tell us what's working, what isn't, or what you wish it did. This goes straight to the person who builds SiteStock - it's not a public review.";
+  feedbackSendBtn.disabled = false;
+  feedbackModal.hidden = false;
+}
+
+function closeFeedback() {
+  feedbackModal.hidden = true;
+}
+
+function maybePromptFeedback() {
+  if (!milestoneFeedbackPending()) return;
+  if (!isAuthenticated()) return;
+  const community = getActiveCommunity();
+  if (!community) return;
+  const hasDelivered = getOrders().some(o => o.communityId === community.id && o.status === 'delivered');
+  if (!hasDelivered) return;
+  // Don't jump in front of another dialog or the notification panel.
+  if (document.querySelector('.modal-overlay:not([hidden])') || !notifPanel.hidden) return;
+  markMilestoneFeedbackDone();               // once ever, even if they dismiss
+  setTimeout(() => {
+    if (document.querySelector('.modal-overlay:not([hidden])')) return;
+    openFeedback('milestone_first_delivery');
+  }, 1500);
+}
+
+footerFeedbackBtn?.addEventListener('click', () => openFeedback('general'));
+feedbackCancelBtn.addEventListener('click', closeFeedback);
+feedbackCloseBtn.addEventListener('click', closeFeedback);
+feedbackInput.addEventListener('input', () => {
+  feedbackCount.textContent = String(feedbackInput.value.length);
+});
+
+feedbackSendBtn.addEventListener('click', async () => {
+  const remaining = feedbackCooldownRemaining();
+  if (remaining > 0) {
+    feedbackStatus.textContent = `Just a moment - you can send again in ${Math.ceil(remaining / 1000)}s.`;
+    feedbackStatus.className = 'form-status error';
+    return;
+  }
+  feedbackSendBtn.disabled = true;
+  feedbackStatus.textContent = 'Sending…';
+  feedbackStatus.className = 'form-status';
+  const result = await sendFeedback(feedbackInput.value, feedbackContext);
+  if (!result.ok) {
+    feedbackStatus.textContent = result.error;
+    feedbackStatus.className = 'form-status error';
+    feedbackSendBtn.disabled = false;
+    return;
+  }
+  feedbackForm.hidden = true;
+  feedbackThanks.hidden = false;
+});
 
 // Sites is reached only from inside an active owner session (the pill
 // itself is only ever visible when hasActiveOwnerSession() is true), so
@@ -1111,6 +1198,7 @@ notifPrefsCancelBtn.addEventListener('click', () => {
 const DIALOGS = [
   { el: ownerUpgradeModal, close: () => ownerUpgradeOkBtn.click() },
   { el: notifPrefsModal, close: () => notifPrefsCancelBtn.click() },
+  { el: feedbackModal, close: () => (feedbackThanks.hidden ? feedbackCancelBtn : feedbackCloseBtn).click() },
 ];
 let dialogOpener = null;
 

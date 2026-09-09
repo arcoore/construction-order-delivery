@@ -19,7 +19,8 @@ declare
   v_driver uuid := 'd0000000-0000-0000-0000-000000000005';
   v_co     uuid := 'd0000000-0000-0000-0000-0000000000c1';
   v_site   uuid := 'd0000000-0000-0000-0000-000000000551';
-  v_pw     text := crypt('demopass123', gen_salt('bf'));
+  -- cost 10 to match what GoTrue itself writes; it rejects lower-cost hashes.
+  v_pw     text := crypt('demopass123', gen_salt('bf', 10));
   r record;
 begin
   if exists (select 1 from auth.users where id = v_owner) then return; end if;
@@ -33,11 +34,29 @@ begin
       (v_driver, 'demo-driver@test.local',  'Dan Rutherford')
     ) as t(id, email, name)
   loop
-    insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at,
-                            created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
-    values (r.id, 'authenticated', 'authenticated', r.email, v_pw, now(), now(), now(),
-            '{"provider":"email","providers":["email"]}',
-            jsonb_build_object('display_name', r.name));
+    -- GoTrue scans several token/change columns as non-null strings, so they
+    -- must be '' not NULL (raw SQL inserts miss this; the Admin API doesn't).
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      created_at, updated_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data,
+      confirmation_token, recovery_token, email_change_token_new, email_change,
+      email_change_token_current, phone_change, phone_change_token, reauthentication_token
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000', r.id, 'authenticated', 'authenticated',
+      r.email, v_pw, now(), now(), now(), now(),
+      '{"provider":"email","providers":["email"]}',
+      jsonb_build_object('display_name', r.name),
+      '', '', '', '', '', '', '', ''
+    );
+    insert into auth.identities (
+      provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+    )
+    values (
+      r.id::text, r.id,
+      jsonb_build_object('sub', r.id::text, 'email', r.email, 'email_verified', true),
+      'email', now(), now(), now()
+    );
     -- profiles row is made by the 0002 trigger; make sure the name matches
     update profiles set display_name = r.name where id = r.id;
   end loop;

@@ -2065,6 +2065,13 @@ summary:focus-visible,
   margin-bottom: 3px;
 }
 .app-footer-note { font-size: 0.75rem; margin-top: 10px; }
+.app-footer-feedback { font-size: 0.8rem; margin-top: 12px; }
+.app-footer-feedback .link-btn { font-size: 0.8rem; }
+
+/* Feedback modal */
+#feedback-modal .modal-box { max-width: 460px; text-align: left; }
+#feedback-input { min-height: 110px; resize: vertical; margin-bottom: 4px; font-family: inherit; }
+#feedback-count { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 480px) {
   .tab-btn { font-size: 0.68rem; padding: 10px 9px; letter-spacing: 0.05em; }
