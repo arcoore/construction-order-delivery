@@ -52,8 +52,74 @@
   --paper: #f7efe6;
   --sink: #f4ece0;
 
+  /* Fixed "always dark navy panel with light writing on it" tokens (topbar,
+     filled buttons, badges, the skip link) — deliberately NEVER redefined
+     for dark mode below. --navy/--orange-dark themselves ARE redefined
+     (they're used as ordinary foreground text/link/outline color dozens of
+     times, which must lighten against a dark page background), but a
+     handful of call sites pair the SAME variable with a hardcoded white/
+     var(--paper) text color expecting it to stay put — redefining --navy
+     there too would silently turn "white text on dark navy" into "white
+     text on light navy" mid-theme-switch. These three exist so those call
+     sites have a genuinely constant color to point at instead. */
+  --navy-surface: #12344a;
+  --on-navy-surface: #fffaf5;
+  --orange-surface: #bd4c14;
+
   --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* --- Dark mode --------------------------------------------------------
+   Same warm editorial palette, inverted: near-black warm brown page/card
+   surfaces, light cream text, lightened navy/orange accents (re-verified
+   for WCAG AA against the new dark surfaces, not just eyeballed — see the
+   contrast block at the end of this file). Two ways in: the OS/browser's
+   own dark-mode setting (automatic, matches "the one on my phone" with no
+   action needed) or an explicit choice from the footer toggle
+   (public/js/theme.js), which always wins over the system setting in
+   either direction. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --navy: #8ec4e8;
+    --navy-light: #6dd3c8;
+    --orange: #ff8a52;
+    --orange-dark: #ff7a33;
+    --bg: #1b1512;
+    --card: #332619;
+    --border: rgba(216, 194, 174, 0.25);
+    --text: #f2e8dc;
+    --text-muted: #b9a897;
+    --green: #4caf6e;
+    --red: #e57468;
+
+    --blue: #8ec4e8;
+    --brown: #c9ad93;
+    --brown-dark: #f2e8dc;
+    --sand: #d8c2ae;
+    --paper: #332619;
+    --sink: #0a0705;
+  }
+}
+:root[data-theme="dark"] {
+  --navy: #8ec4e8;
+  --navy-light: #6dd3c8;
+  --orange: #ff8a52;
+  --orange-dark: #ff7a33;
+  --bg: #1b1512;
+  --card: #332619;
+  --border: rgba(216, 194, 174, 0.25);
+  --text: #f2e8dc;
+  --text-muted: #b9a897;
+  --green: #4caf6e;
+  --red: #e57468;
+
+  --blue: #8ec4e8;
+  --brown: #c9ad93;
+  --brown-dark: #f2e8dc;
+  --sand: #d8c2ae;
+  --paper: #332619;
+  --sink: #0a0705;
 }
 
 * { box-sizing: border-box; }
@@ -72,7 +138,7 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  background: var(--navy);
+  background: var(--navy-surface);
   color: white;
   padding: 14px 20px;
   /* Positioning context for .notif-panel: it is anchored here (full viewport
@@ -280,7 +346,7 @@ body {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  border: 2px solid var(--navy);
+  border: 2px solid var(--navy-surface);
 }
 
 .notif-badge[hidden] {
@@ -929,7 +995,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   position: absolute;
   inset: 0;
   width: 0%;
-  background: var(--orange-dark);
+  background: var(--orange-surface);
   z-index: 0;
 }
 
@@ -995,7 +1061,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   width: 40px;
   height: 40px;
   border-radius: 0;
-  background: var(--navy);
+  background: var(--navy-surface);
   color: white;
   display: flex;
   align-items: center;
@@ -1039,9 +1105,9 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
 
 .status-delivered.status-badge,
 .status-granted.status-badge {
-  background: var(--navy);
-  color: var(--paper);
-  border-color: var(--navy);
+  background: var(--navy-surface);
+  color: var(--on-navy-surface);
+  border-color: var(--navy-surface);
 }
 
 .status-rejected.status-badge,
@@ -1830,7 +1896,7 @@ h3 { font-size: 1rem; font-weight: 700; }
 
 /* --- Topbar: flat dark blue field --- */
 .topbar {
-  background: var(--blue);
+  background: var(--navy-surface);
   border-bottom: 1px solid rgba(216, 194, 174, 0.28);
 }
 .brand-mark {
@@ -1872,7 +1938,7 @@ h3 { font-size: 1rem; font-weight: 700; }
   color: var(--navy);
   box-shadow: inset 0 0 0 1px var(--navy);
 }
-.btn-secondary:hover { background: var(--navy); color: var(--paper); }
+.btn-secondary:hover { background: var(--navy-surface); color: var(--on-navy-surface); }
 .btn-danger:hover { background: #8f2b1d; }
 .btn-small, .btn-block { font-size: 0.78rem; }
 /* Mono caps + tracking widen labels — keep row-buttons from wrapping mid-word
@@ -1984,9 +2050,9 @@ summary:focus-visible,
    as a UI outline on the light grounds. Everything else in the palette
    was checked and passes (body 13:1, muted 5.3:1, links 6:1, every status
    chip >5:1). */
-.btn-primary { background: var(--orange-dark); }
+.btn-primary { background: var(--orange-surface); }
 .btn-primary:hover { background: #9a3d0e; }
-.circle-btn-account { background: var(--orange-dark); }
+.circle-btn-account { background: var(--orange-surface); }
 .tab-btn.active { border-bottom-color: var(--orange-dark); }
 .search-input:focus,
 .text-input:focus,
@@ -2180,6 +2246,21 @@ body.cookie-choice-pending #sticky-cta { display: none; }
 }
 .cookie-settings-btn:hover { color: var(--orange-dark); }
 
+/* Footer dark-mode toggle, injected by theme.js - same treatment as
+   .cookie-settings-btn just above (inherit so it matches either footer). */
+.theme-toggle-btn {
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--navy-light);
+  font-weight: 600;
+  cursor: pointer;
+}
+.theme-toggle-btn:hover { color: var(--orange-dark); }
+
 /* "Create an account" link sits inline in the auth intro sentence - drop
    .link-btn's standalone bottom padding so it doesn't push the line box. */
 #auth-intro-register-btn { padding: 0; font-size: inherit; }
@@ -2204,7 +2285,7 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   left: 12px;
   top: -60px;
   z-index: 200;
-  background: var(--navy);
+  background: var(--navy-surface);
   color: #fff;
   padding: 10px 16px;
   border-radius: 0;
@@ -2244,7 +2325,8 @@ body.cookie-choice-pending #sticky-cta { display: none; }
    they sit in a flex row, not a sentence, so the inline exception does
    not apply. Vertical padding + row-gap keeps 24px circles clear. */
 .app-footer-links a,
-.app-footer-links .cookie-settings-btn {
+.app-footer-links .cookie-settings-btn,
+.app-footer-links .theme-toggle-btn {
   display: inline-block;
   padding: 6px 2px;
   min-height: 24px;
