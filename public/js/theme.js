@@ -2,7 +2,7 @@
 // the device/browser's own dark-mode setting (the style.css
 // `@media (prefers-color-scheme: dark)` block handles that with zero JS),
 // or force it explicitly regardless of the device setting via this file's
-// footer toggle, stored in localStorage.
+// footer switch, stored in localStorage.
 //
 // This file does two genuinely different things at two genuinely different
 // times:
@@ -14,9 +14,15 @@
 //      the bottom of <body>, where main.js/analytics.js/cookieConsent.js
 //      all sit) would paint the page in the wrong theme first and flip
 //      partway through.
-//   2. Inject the footer toggle button, which only makes sense once the
-//      footer it attaches to actually exists - deferred to DOMContentLoaded,
-//      same as cookieConsent.js's footer control.
+//   2. Inject the footer switch + Save control, which only makes sense
+//      once the footer it attaches to actually exists - deferred to
+//      DOMContentLoaded, same as cookieConsent.js's footer control.
+//
+// The switch itself is a display-only "what would I be choosing" control -
+// flipping it does not apply or persist anything. Only Save does. This
+// matches an ordinary settings-page pattern (change a control, then
+// explicitly confirm) rather than the more surprising "every click takes
+// effect immediately" a bare toggle button would have been.
 (function () {
   var KEY = 'sitestock_theme'; // 'light' | 'dark' | absent = follow system
   var doc = document;
@@ -39,36 +45,58 @@
     }
   }
 
+  // What's actually being shown right now, resolving "follow system" down
+  // to a real light/dark so the switch's starting position is honest.
+  function effectiveTheme() {
+    var stored = readChoice();
+    if (stored === 'light' || stored === 'dark') return stored;
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) {
+      return 'light';
+    }
+  }
+
   // Step 1 - runs now, synchronously, before <body> exists.
   apply(readChoice());
 
-  // Step 2 - the actual toggle control, once there's a footer to put it in.
-  function label(choice) {
-    if (choice === 'dark') return 'Dark mode: on';
-    if (choice === 'light') return 'Dark mode: off';
-    return 'Dark mode: auto';
-  }
-
+  // Step 2 - the switch + Save control, once there's a footer to put it in.
   function injectFooterControl() {
     var footer = doc.querySelector('.app-footer-links, .legal-footer');
-    if (!footer || footer.querySelector('[data-theme-toggle]')) return;
-    var el = doc.createElement('button');
-    el.type = 'button';
-    el.className = 'theme-toggle-btn';
-    el.setAttribute('data-theme-toggle', '');
-    el.textContent = label(readChoice());
-    el.addEventListener('click', function () {
-      // Cycles auto -> dark -> light -> auto. "Auto" first because that's
-      // the everyday phone-app behaviour this was asked to match; the
-      // explicit choices are the override for anyone who wants one theme
-      // regardless of the device setting.
-      var current = readChoice();
-      var next = current === 'dark' ? 'light' : (current === 'light' ? null : 'dark');
-      writeChoice(next);
-      apply(next);
-      el.textContent = label(next);
+    if (!footer || footer.querySelector('[data-theme-switch]')) return;
+
+    var startDark = effectiveTheme() === 'dark';
+
+    var group = doc.createElement('span');
+    group.className = 'theme-toggle-group';
+    group.innerHTML =
+      '<label class="theme-switch-label">' +
+        '<input type="checkbox" data-theme-switch' + (startDark ? ' checked' : '') + '>' +
+        '<span class="theme-switch-track" aria-hidden="true"><span class="theme-switch-thumb"></span></span>' +
+        'Dark mode' +
+      '</label>' +
+      '<button type="button" class="theme-save-btn" data-theme-save disabled>Save</button>' +
+      '<span class="theme-save-status" data-theme-status aria-live="polite"></span>';
+    footer.appendChild(group);
+
+    var checkbox = group.querySelector('[data-theme-switch]');
+    var saveBtn = group.querySelector('[data-theme-save]');
+    var status = group.querySelector('[data-theme-status]');
+    var savedDark = startDark; // what's actually applied right now
+
+    checkbox.addEventListener('change', function () {
+      saveBtn.disabled = checkbox.checked === savedDark;
+      status.textContent = '';
     });
-    footer.appendChild(el);
+
+    saveBtn.addEventListener('click', function () {
+      var choice = checkbox.checked ? 'dark' : 'light';
+      writeChoice(choice);
+      apply(choice);
+      savedDark = checkbox.checked;
+      saveBtn.disabled = true;
+      status.textContent = 'Saved';
+    });
   }
 
   if (doc.readyState === 'loading') {
