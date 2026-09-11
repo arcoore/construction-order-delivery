@@ -61,8 +61,21 @@ export function subscribeCommunities(fn) {
   return () => listeners.delete(fn);
 }
 
+// The active-company/role pointer changed in another tab. This must
+// refresh the cache before notifying, not just call notify() on whatever
+// this tab already had cached - a real bug found live (2026-09-11): a tab
+// that hadn't refreshed recently (e.g. open since before a company was
+// created elsewhere) would see main.js's subscribeCommunities reactive
+// handler check isApprovedMember() against its own stale cache, wrongly
+// conclude "not a member", and call setActiveCommunityId(null) - which
+// writes back to the SAME shared localStorage key, evicting every tab
+// (including the one with correct, current data) from a company the user
+// genuinely belongs to. refreshCommunityCache() already calls notify()
+// itself once the cache is authoritatively fresh, so every listener -
+// including that reactive handler - sees real, current, server-checked
+// state, exactly like every other trigger in this file already does.
 window.addEventListener('storage', e => {
-  if (e.key === ACTIVE_COMMUNITY_KEY || e.key === ACTIVE_ROLE_KEY) notify();
+  if (e.key === ACTIVE_COMMUNITY_KEY || e.key === ACTIVE_ROLE_KEY) refreshCommunityCache();
 });
 
 export function getActiveCommunityId() {
