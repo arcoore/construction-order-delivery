@@ -51,7 +51,7 @@ additional_redirect_urls = [
 #   3. `supabase config push`  (carries this whole [auth] block to hosted).
 #   4. Deploy the env.js change.
 [auth.captcha]
-enabled = false
+enabled = true
 provider = "turnstile"
 secret = "env(TURNSTILE_SECRET)"
 

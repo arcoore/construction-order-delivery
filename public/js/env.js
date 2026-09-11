@@ -16,11 +16,12 @@
   // whose browser blocks the Turnstile script, for zero security gain.
   //
   // The widget exists ("SiteStock" in Cloudflare; hostnames arcoore.github.io
-  // + localhost + 127.0.0.1) and its secret is in supabase/.env, but it's
-  // OFF everywhere for now - see supabase/config.toml's [auth.captcha] note
-  // for the turn-it-on steps. When ready, set the key on the matching branch:
-  //   window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
-  window.SITESTOCK_TURNSTILE_KEY = '';
+  // + localhost + 127.0.0.1) and its secret is in supabase/.env. Turned ON
+  // 2026-09-11 as part of the pre-launch security pass - this key alone does
+  // nothing without [auth.captcha] enabled = true also reaching the SAME
+  // backend (see supabase/config.toml), which needs a `supabase config push`
+  // that only the founder can run (see CLAUDE.md's harness-block note).
+  window.SITESTOCK_TURNSTILE_KEY = '0x4AAAAAAErzTvwChrSXq43-';
 
   // Social sign-in providers the app is willing to show. This is only the
   // FIRST of two gates: authView.js also asks GoTrue's /auth/v1/settings
