@@ -21,7 +21,7 @@
 // before cookieConsent.js. The token is public by design (it ships in the
 // page), so hardcoding it here is fine — same as GoatCounter's code was.
 (function () {
-  var CF_BEACON_TOKEN = ''; // e.g. 'a1b2c3d4e5f6...'
+  var CF_BEACON_TOKEN = '74cd69efcf6447ce9de033ff4e0ebf96';
   var loaded = false;
 
   function consentGiven() {
