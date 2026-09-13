@@ -132,6 +132,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.topbar[hidden] { display: none; }
 .topbar {
   display: flex;
   align-items: center;
@@ -609,6 +610,14 @@ main#app {
   max-width: 720px;
   margin: 0 auto;
   padding: 20px 16px 60px;
+}
+
+/* The landing page is a full-bleed marketing layout, not a centered panel -
+   main.js's showOnly() toggles this only while landing-view is active. */
+main#app.app-full-bleed {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .view { display: none; }

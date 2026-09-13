@@ -44,6 +44,7 @@
 <meta name="twitter:description" content="SiteStock coordinates material ordering and delivery for a construction firm: workers request from site, owners approve, buyers purchase, drivers deliver. An early-stage prototype - an account is required." />
 <meta name="twitter:image" content="https://arcoore.github.io/construction-order-delivery/og-image.png" />
 <link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/landing.css" />
 </head>
 <body>
 
@@ -144,6 +145,148 @@
       <p class="hint">Loading…</p>
     </div>
   </section>
+
+  <!-- ============ LANDING VIEW ============ -->
+  <!-- Marketing homepage for a logged-out, first-time visitor - see
+       CLAUDE.md for the integration notes. Shown by routeFromTop() instead
+       of auth-view for a fresh unauthenticated visit; its CTAs route into
+       the real auth-view (see main.js sitestock:go-to-auth handling). -->
+  <section id="landing-view" class="view" tabindex="-1" aria-label="Welcome">
+  <header class="site-header">
+    <a class="landing-brand" href="#top" data-page-target="home" aria-label="SiteStock home"><svg viewBox="0 0 38 38" aria-hidden="true"><path d="M4 4h14v6h-8v8H4V4Zm16 0h14v14h-6v-8h-8V4ZM4 20h6v8h8v6H4V20Zm24 0h6v14H20v-6h8v-8Z"/></svg><span>SiteStock</span></a>
+    <nav aria-label="Primary navigation">
+      <button class="page-nav-button" type="button" data-auth-target="register">Get Started for Free</button>
+      <button class="page-nav-button" type="button" data-page-target="how">See How It Works</button>
+      <button class="page-nav-button" type="button" data-page-target="problems">Problems We Solve For You</button>
+    </nav>
+    <div class="header-actions">
+      <button class="login-button" type="button" data-auth-target="login">Log In</button>
+      <button class="login-button login-button-secondary" type="button" data-auth-target="register">Create an Account</button>
+      <button class="menu-button" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span></button>
+    </div>
+  </header>
+  <div id="landing-main">
+    <section class="hero home-page" id="top">
+      <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-copy">
+      <div class="kicker reveal"><span class="signal"></span> Materials coordination for construction teams</div>
+      <h1 class="reveal">Clearer material coordination, from the moment it’s needed to when it arrives.</h1>
+      <p class="hero-lede reveal">The new, completely free way to have your materials on the way and in time.</p>
+      <nav class="home-page-actions reveal" aria-label="Site pages">
+        <button class="home-page-action home-page-action-primary page-nav-button" type="button" data-auth-target="register">Get Started for Free <span aria-hidden="true">→</span></button>
+        <button class="home-page-action page-nav-button" type="button" data-page-target="how">See How It Works <span aria-hidden="true">→</span></button>
+        <button class="home-page-action page-nav-button" type="button" data-page-target="problems">Problems We Solve For You <span aria-hidden="true">→</span></button>
+      </nav>
+      <p class="login-hint">Already have an account? <button class="login-inline" type="button" data-auth-target="login">Log in</button></p>
+    </div>
+    </section>
+    <div class="page-sources" hidden aria-hidden="true">
+      <section class="start-page section" id="start-page-source">
+        <div class="section-intro"><h2>Start with a clearer next material request.</h2><p>SiteStock is a completely free service. Review the workflow first, then bring your team in when access opens.</p></div>
+      </section>
+      <div class="offer-problem-row">
+    <section class="offer-section section" id="offer">
+      <article class="offer-card offer-promise offer-core-promise reveal"><span class="offer-label">The core promise</span><h3>Clearer material coordination, from the moment it’s needed to when it arrives.</h3><p>One shared record keeps the request, site, specification and next action together.</p></article>
+      <div class="section-intro offer-intro reveal"><span class="section-num">THE OFFER</span><h2>For construction teams: know what’s needed, who owns the next step and whether it has arrived.</h2><p>One focused workflow for material handoffs—not live stock or automatic purchasing.</p></div>
+      <div class="offer-grid">
+        <article class="offer-card offer-mechanism reveal"><span class="offer-label">The mechanism</span><h3>Five stages. One shared record.</h3><div class="offer-stages"><span><b>1</b>Request</span><i></i><span><b>2</b>Approve if needed</span><i></i><span><b>3</b>Purchase</span><i></i><span><b>4</b>Collect</span><i></i><span><b>5</b>Deliver</span></div></article>
+        <article class="offer-card offer-risk reveal"><p>SiteStock is completely free. Review the workflow now; onboarding details will be shared when access opens.</p></article>
+        <article class="offer-card offer-urgency reveal"><p>If your team is still coordinating materials through calls, messages and notes, the next request is the practical moment to make the handoff visible. No countdown. Straight into your own hands.</p></article>
+      </div>
+    </section>
+    <section class="problem-section section" id="problems">
+      <div class="problem-grid">
+        <article class="problem-card reveal"><span>01</span><div class="problem-icon" aria-hidden="true">Aa</div><h3>Unclear requests</h3><p>A material request can arrive as a vague message or a half-remembered call. Sizes, specifications, site details and required dates end up split across threads, so the team spends time checking what was actually asked for.</p></article>
+        <article class="problem-card reveal"><span>02</span><div class="problem-icon" aria-hidden="true">↳</div><h3>Unclear ownership</h3><p>Once a request is made, it is hard to tell who should approve, purchase, collect or receive it. Without a visible owner and next action, work waits between roles and small gaps become avoidable delays.</p></article>
+        <article class="problem-card accent-card reveal"><span>03</span><div class="problem-icon" aria-hidden="true">•••</div><h3>Constant chasing</h3><p>Progress updates live in scattered texts, inboxes and conversations. People chase the latest answer instead of seeing a current status, interrupting site work and making every handoff feel urgent.</p></article>
+        <article class="problem-card reveal"><span>04</span><div class="problem-icon" aria-hidden="true">→</div><h3>No clear next step</h3><p>Teams can see the current stage, the person responsible and what happens next. That shared view removes guesswork from the first request through delivery, so everyone can act without another round of messages.</p></article>
+      </div>
+      <div class="problem-page-actions" aria-label="Next steps">
+        <button class="button" type="button" data-auth-target="register">Get Started for Free</button>
+        <button class="button button-ghost" type="button" data-page-target="how">See How It Works</button>
+      </div>
+    </section>
+    </div>
+    <section class="workflow-section section dark" id="workflow">
+      <div class="workflow-layout">
+        <aside class="workflow-rail">
+          <h2 class="reveal">Software that flows with your site team.</h2>
+          <p class="workflow-rail-copy reveal">One shared record carries the right detail from the first request through to recorded delivery.</p>
+          <nav class="workflow-nav" aria-label="Workflow stages">
+            <button class="is-active" type="button" data-step="0">01 <span>Request</span></button>
+            <button type="button" data-step="1">02 <span>Approve if needed</span></button>
+            <button type="button" data-step="2">03 <span>Purchase</span></button>
+            <button type="button" data-step="3">04 <span>Collect</span></button>
+            <button type="button" data-step="4">05 <span>Deliver</span></button>
+          </nav>
+          <a class="button button-ghost workflow-rail-cta" href="#getting-started">Set up your workflow <span>↓</span></a>
+        </aside>
+        <div class="workflow-cards">
+          <article class="workflow-step reveal" id="workflow-request"><div class="workflow-card-top"><span class="step-index">01</span><div class="role-tag">Worker</div></div><h3>Request the right material</h3><p>Select the assigned site, find the material, choose the specification, enter the quantity and say when it is needed.</p><div class="workflow-detail"><span>Site + specification</span><span>Quantity</span><span>Needed-by choice</span></div></article>
+          <article class="workflow-step reveal" id="workflow-approve"><div class="workflow-card-top"><span class="step-index">02</span><div class="role-tag">Owner</div></div><h3>Approve where required</h3><p>Review an eligible request and approve or reject it when the Company’s approval setting is switched on.</p><div class="workflow-detail"><span>Review detail</span><span>Approve / reject</span><span>Company control</span></div></article>
+          <article class="workflow-step reveal" id="workflow-purchase"><div class="workflow-card-top"><span class="step-index">03</span><div class="role-tag">Buyer</div></div><h3>Arrange and record purchasing</h3><p>Coordinate the purchase externally, then record that it has been made so the next person can act.</p><div class="workflow-detail"><span>Purchase handoff</span><span>Recorded status</span><span>Order history</span></div></article>
+          <article class="workflow-step reveal" id="workflow-collect"><div class="workflow-card-top"><span class="step-index">04</span><div class="role-tag">Driver</div></div><h3>Claim and collect</h3><p>See the collection details, claim an available purchased order and mark it collected.</p><div class="workflow-detail"><span>Collection detail</span><span>Specification</span><span>Claim status</span></div></article>
+          <article class="workflow-step reveal" id="workflow-deliver"><div class="workflow-card-top"><span class="step-index">05</span><div class="role-tag">Driver</div></div><h3>Record the delivery</h3><p>Record when and where the material was delivered, then confirm the final stage for everyone to see.</p><div class="workflow-detail"><span>Delivery time</span><span>Location</span><span>Shared history</span></div></article>
+        </div>
+      </div>
+      <div class="workflow-note reveal"><span>Control when you need it.</span><p>Owner approval is configurable at Company level, so the workflow can reflect how your team operates.</p></div>
+    </section>
+    <section class="benefits-section section">
+      <div class="section-intro reveal"><span class="section-num">BUILT FOR THE REAL HANDOFF</span><h2>Less uncertainty between the people doing the work.</h2></div>
+      <div class="benefits-grid">
+        <article class="benefit-large reveal"><div class="crosshair" aria-hidden="true"></div><div><span class="tag">Clearer requests</span><h3>Keep the site, specification, quantity and needed-by information together.</h3></div></article>
+        <article class="benefit reveal"><span class="tag">Connected handoffs</span><h3>See what is waiting and who is responsible for the next stage.</h3><div class="mini-flow"><span>W</span><i></i><span>O</span><i></i><span>B</span><i></i><span>D</span></div></article>
+        <article class="benefit reveal"><span class="tag">Progress to follow</span><h3>Keep relevant updates, notifications and order history in one shared workflow.</h3><div class="status-stack"><span><i class="green"></i> Collected</span><span><i class="yellow"></i> Awaiting approval</span><span><i></i> Purchased</span></div></article>
+        <article class="benefit reveal"><span class="tag">Owner oversight</span><h3>Oversee orders across sites and view recorded purchased spend.</h3><div class="site-lines"><span>Site A <b>8 active</b></span><span>Site B <b>3 active</b></span><span>Site C <b>1 active</b></span></div></article>
+      </div>
+    </section>
+    <section class="roles-section section" id="roles">
+      <div class="section-intro reveal"><span class="section-num">YOUR TEAM</span><h2>Different jobs. One connected record.</h2></div>
+      <div class="role-rows">
+        <article class="role-row reveal"><span class="role-letter">W</span><h3>Worker</h3><p>Requests the right materials for an assigned site and follows relevant orders.</p><span class="row-action">Request</span></article>
+        <article class="role-row reveal"><span class="role-letter">O</span><h3>Owner</h3><p>Sets up the Company and sites, manages access and oversees orders.</p><span class="row-action">Oversee</span></article>
+        <article class="role-row reveal"><span class="role-letter">B</span><h3>Buyer</h3><p>Reviews eligible requests, arranges purchasing and records the purchase.</p><span class="row-action">Purchase</span></article>
+        <article class="role-row reveal"><span class="role-letter">D</span><h3>Driver</h3><p>Claims collections and records collection and delivery progress.</p><span class="row-action">Deliver</span></article>
+      </div>
+    </section>
+    <section class="getting-started section dark" id="getting-started">
+      <div class="section-intro reveal"><span class="section-num">GETTING STARTED</span><h2>Start with the way your Company already works.</h2></div>
+      <div class="start-layout"><ol class="start-list">
+        <li class="reveal"><span>01</span><div><h3>Create your Company</h3><p>The Owner starts the Company workspace.</p></div></li>
+        <li class="reveal"><span>02</span><div><h3>Add your sites</h3><p>Organise orders around the places your team is working.</p></div></li>
+        <li class="reveal"><span>03</span><div><h3>Bring in your team</h3><p>Invite people and assign the right site access.</p></div></li>
+        <li class="reveal"><span>04</span><div><h3>Make the first request</h3><p>Begin the shared workflow from site to delivery.</p></div></li>
+      </ol><div class="start-right-column"><div class="getting-started-deliverables-area"><article class="offer-card offer-deliverables problem-deliverables reveal"><span class="offer-label">What you get</span><h3>Practical tools for the handoff.</h3><ul><li>Company and site workspace</li><li>Material and specification request record</li><li>Configurable Owner approval</li><li>Status updates, notifications and order history</li><li>Owner overview and recorded purchased spend</li></ul></article></div><aside class="next-step reveal"><h3>Ready to organise your next material request?</h3><p>The completely free service is being prepared. Start by reviewing the workflow; this page does not create an account or connect a supplier.</p><button class="button" type="button" data-auth-target="register">Get Started for Free</button><a class="plain-link" href="#workflow">See How It Works →</a></aside></div></div>
+    </section>
+    <section class="faq-section section" id="faq">
+      <div class="section-intro reveal"><span class="section-num">FAQS</span><h2>Straight answers.</h2></div>
+      <div class="faq-list reveal">
+        <details><summary>What does SiteStock do?<span>+</span></summary><p>SiteStock helps construction teams keep material requests, approvals, purchasing and delivery updates organised in one shared workflow across people and sites.</p></details>
+        <details><summary>Does SiteStock buy materials for us?<span>+</span></summary><p>No. The current workflow helps your Buyer coordinate and record purchasing. A “Purchased” status records progress in SiteStock; it does not mean SiteStock placed or paid for a merchant order.</p></details>
+        <details><summary>Do we still need a Buyer?<span>+</span></summary><p>The current workflow includes a Buyer. Reducing manual buying work is a longer-term ambition, not a capability available today.</p></details>
+        <details><summary>Does every request need Owner approval?<span>+</span></summary><p>No. Approval is configurable at Company level. When it is switched off, eligible requests can proceed to the Buyer without that stage.</p></details>
+        <details><summary>Are supplier prices and stock live?<span>+</span></summary><p>Not currently. Live supplier pricing and stock integrations are deferred. Any values shown in early product examples are demo data, not live merchant information.</p></details>
+        <details><summary>Does SiteStock include live driver tracking?<span>+</span></summary><p>No. Delivery progress is based on recorded status updates. SiteStock does not currently claim live GPS tracking or route optimisation.</p></details>
+      </div>
+    </section>
+    <section class="contact-section" id="contact"><div class="contact-grid" aria-hidden="true"></div><span class="section-num reveal">SITE → TEAM → DELIVERY</span><h2 class="reveal">Make the next step <em>clear.</em></h2><p class="reveal">SiteStock is a completely free service being prepared for launch. Review the workflow now; onboarding details will be shared when access opens.</p><div class="contact-actions reveal"><a class="button" href="#workflow">See How It Works <span>↑</span></a><a class="button button-ghost" href="#top">Back to top <span>↑</span></a></div></section>
+    </div>
+  </div>
+  <footer><a class="landing-brand" href="#top"><svg viewBox="0 0 38 38" aria-hidden="true"><path d="M4 4h14v6h-8v8H4V4Zm16 0h14v14h-6v-8h-8V4ZM4 20h6v8h8v6H4V20Zm24 0h6v14H20v-6h8v-8Z"/></svg><span>SiteStock</span></a><p>Organise orders and deliveries across employees and sites.</p><span>© 2026 SiteStock</span></footer>
+  <div class="site-layer" id="site-layer" hidden aria-hidden="true">
+    <div class="site-layer-scrim" data-layer-close></div>
+    <section class="site-layer-panel" role="dialog" aria-modal="true" aria-labelledby="site-layer-title">
+      <header class="site-layer-header">
+        <div class="site-layer-header-top"><a class="site-layer-brand" href="#top" data-page-target="home" aria-label="Back to SiteStock home">SiteStock</a><button class="site-layer-close" type="button" data-layer-close aria-label="Close page">×</button></div>
+        <nav class="site-layer-nav" aria-label="Page navigation"><button class="page-nav-button" type="button" data-auth-target="register">Get Started for Free</button><button class="page-nav-button" type="button" data-page-target="how">See How It Works</button><button class="page-nav-button" type="button" data-page-target="problems">Problems We Solve For You</button></nav>
+        <div><h1 id="site-layer-title">Get Started for Free</h1></div>
+      </header>
+      <div class="site-layer-body"></div>
+    </section>
+  </div>
+  <script src="script.js?v=20260909-refactor-v1"></script>
+  </section>
+
 
   <section id="auth-view" class="view" tabindex="-1" aria-label="Sign in">
     <div class="panel">
@@ -743,6 +886,7 @@
 
 <script src="js/env.js"></script>
 <script type="module" src="js/main.js"></script>
+<script type="module" src="js/landing.js"></script>
 <script src="js/analytics.js"></script>
 <script src="js/cookieConsent.js"></script>
 </body>

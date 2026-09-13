@@ -59,6 +59,9 @@ async function refreshDataCaches() {
 }
 
 const bootstrapLoadingView = document.getElementById('bootstrap-loading');
+const landingView = document.getElementById('landing-view');
+const appTopbar = document.querySelector('.topbar');
+const appMain = document.getElementById('app');
 const authView = document.getElementById('auth-view');
 const communityView = document.getElementById('community-view');
 const communitiesView = document.getElementById('communities-view');
@@ -124,7 +127,7 @@ const prefDeliveryCollected = document.getElementById('pref-delivery-collected')
 const notifPrefsSaveBtn = document.getElementById('notif-prefs-save-btn');
 const notifPrefsCancelBtn = document.getElementById('notif-prefs-cancel-btn');
 
-const ALL_VIEWS = [authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
+const ALL_VIEWS = [landingView, authView, communityView, communitiesView, profileView, roleSelectView, workerView, ownerView, driverView, buyerView, sitesView];
 
 const killSwitchPanel = document.getElementById('kill-switch-panel');
 const killSwitchMessage = document.getElementById('kill-switch-message');
@@ -164,6 +167,15 @@ let hasRoutedOnce = false;
 function showOnly(view) {
   const isChange = !view.classList.contains('active');
   ALL_VIEWS.forEach(v => v.classList.toggle('active', v === view));
+  // The landing page brings its own full header (logo, nav, Log in/Create
+  // account) - showing the app's own topbar above it would look like a
+  // duplicate header. Every other view keeps the real topbar as normal.
+  if (appTopbar) appTopbar.hidden = (view === landingView);
+  // main#app is a narrow 720px centered column, right for every dashboard
+  // panel view but wrong for the landing page's own full-bleed marketing
+  // layout (edge-to-edge hero/sections up to 1440px). Toggle the constraint
+  // off only while landing-view is showing.
+  if (appMain) appMain.classList.toggle('app-full-bleed', view === landingView);
   const label = view.getAttribute('aria-label') || '';
   if (label) document.title = `${label} · SiteStock`;
   if (hasRoutedOnce && isChange) {
@@ -303,6 +315,20 @@ function showAuth() {
   notifPanel.hidden = true;
   if (footerFeedbackBtn) footerFeedbackBtn.hidden = true;
   communityIndicator.textContent = 'Orders & Deliveries';
+}
+
+// Marketing homepage - the front door for a logged-out visitor. routeFromTop()
+// shows this instead of showAuth() on a fresh unauthenticated visit; its own
+// CTAs (data-auth-target, wired below) route into the real auth-view.
+function showLanding() {
+  showOnly(landingView);
+  sessionBar.hidden = true;
+  profilePillBtn.hidden = true;
+  communitiesPillBtn.hidden = true;
+  sitesPillBtn.hidden = true;
+  notifWrap.hidden = true;
+  notifPanel.hidden = true;
+  if (footerFeedbackBtn) footerFeedbackBtn.hidden = true;
 }
 
 function showCommunityPicker() {
@@ -966,7 +992,7 @@ function routeFromTop() {
     return;
   }
   if (!isAuthenticated()) {
-    showAuth();
+    showLanding();
     return;
   }
   // Roadmap Step 5 - a shareable invite link (`?join=CODE`) is consumed once
@@ -1114,8 +1140,24 @@ window.addEventListener('sitestock:logout', async () => {
   showAuth();
 });
 
-window.addEventListener('sitestock:go-to-auth', () => showAuth());
+window.addEventListener('sitestock:go-to-auth', (e) => {
+  showAuth();
+  const tab = e.detail?.tab;
+  if (tab === 'register' || tab === 'login') {
+    document.querySelector(`#auth-tabs [data-auth-tab="${tab}"]`)?.click();
+  }
+});
 window.addEventListener('sitestock:show-profile', () => showProfile());
+
+// Landing page CTAs (Get Started for Free / Log In / Create an Account) -
+// see index.html's landing-view and public/js/landing.js's own separate
+// in-page-layer nav, which these buttons were deliberately pulled out of
+// (they carry data-auth-target instead of data-page-target now).
+landingView.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-auth-target]');
+  if (!btn) return;
+  window.dispatchEvent(new CustomEvent('sitestock:go-to-auth', { detail: { tab: btn.dataset.authTarget } }));
+});
 // The active company was deleted from under us - drop it and go to the picker.
 window.addEventListener('sitestock:active-community-gone', () => {
   setActiveCommunityId(null);
