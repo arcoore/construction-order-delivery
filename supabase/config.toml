@@ -78,7 +78,7 @@ secret = "env(TURNSTILE_SECRET)"
 # credentials (same reason [auth.captcha] stays false until its key exists).
 # Apple is intentionally left for the native-app conversion ($99/yr program).
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "env(GOOGLE_OAUTH_CLIENT_ID)"
 secret = "env(GOOGLE_OAUTH_SECRET)"
 
@@ -86,7 +86,7 @@ secret = "env(GOOGLE_OAUTH_SECRET)"
 # Leave `url` unset to accept any Microsoft account (the 'common' tenant); set
 # it to a single tenant's authority URL to restrict to one organisation.
 [auth.external.azure]
-enabled = false
+enabled = true
 client_id = "env(AZURE_OAUTH_CLIENT_ID)"
 secret = "env(AZURE_OAUTH_SECRET)"
 # url = "https://login.microsoftonline.com/<tenant-id>"
