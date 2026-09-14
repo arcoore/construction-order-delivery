@@ -172,11 +172,18 @@ effective origin:
 
 ## After cutover
 
+- **Done (2026-09-14): the old Ireland project (`sitestock-dev`,
+  `jntbbrkiygbobknzivpe`) is paused**, not deleted - reversible, resumable
+  for up to a year, data untouched. Chosen deliberately over permanent
+  deletion given how little real time had passed since cutover (this was
+  the same session) and the free tier's lack of backups; deletion remains
+  the founder's own call to make later, once London has run for real
+  without issue.
 - Update `privacy.html`'s "a Supabase region in the UK or Ireland" wording
   to name London specifically.
 - Update CLAUDE.md's deploy banner and PROGRESS.md.
-- Wind down the old Ireland project and the GitHub Pages deployment once the
-  cooldown window has passed with no issues.
+- GitHub Pages is unchanged and still the primary host - see the Step 4
+  hosting-half note above for why a full cutover away from it wasn't done.
 
 ---
 
