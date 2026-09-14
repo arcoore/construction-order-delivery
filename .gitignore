@@ -5,3 +5,8 @@ supabase/.env
 # Database dumps - contain real user data, never commit (see supabase/RESTORE_RUNBOOK.md)
 backups/
 *.dump
+
+# tests/e2e (Playwright + pytest) local run artifacts
+.pytest_cache/
+__pycache__/
+*.pyc
