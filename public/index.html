@@ -2,7 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://cloudflareinsights.com https://challenges.cloudflare.com https://api.pwnedpasswords.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.postcodes.io https://cloudflareinsights.com https://challenges.cloudflare.com https://api.pwnedpasswords.com http://127.0.0.1:* ws://127.0.0.1:*; frame-src https://challenges.cloudflare.com; form-action 'self'" />
 <script src="js/frameGuard.js"></script>
 <script src="js/theme.js"></script>
 <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -31,6 +31,21 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<!-- PWA installability. manifest.webmanifest covers Android/Chrome/desktop
+     "Add to Home Screen"/install-app prompts (icon-192/icon-512/the
+     maskable 512 variant, all generated from the same navy/cream "S" mark
+     as favicon.svg - see the scratchpad icon-generation note in
+     CLAUDE.md). iOS Safari does not read the manifest for its own home-
+     screen icon - it uses the existing apple-touch-icon link above and the
+     two apple-mobile-web-app-* metas below instead, so both mechanisms are
+     needed side by side, not redundant. public/js/swRegister.js registers
+     public/sw.js - see that file's own header for why it's a deliberately
+     conservative network-first worker, not a precaching one. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="SiteStock" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="SiteStock" />
 <meta property="og:title" content="SiteStock - Ordering and deliveries for construction sites" />
@@ -285,7 +300,6 @@
       <div class="site-layer-body"></div>
     </section>
   </div>
-  <script src="script.js?v=20260909-refactor-v1"></script>
   </section>
 
 
@@ -890,5 +904,6 @@
 <script type="module" src="js/landing.js"></script>
 <script src="js/analytics.js"></script>
 <script src="js/cookieConsent.js"></script>
+<script src="js/swRegister.js"></script>
 </body>
 </html>
