@@ -81,55 +81,64 @@
 }
 
 /* --- Dark mode --------------------------------------------------------
-   Same warm editorial palette, inverted: near-black warm brown page/card
-   surfaces, light cream text, lightened navy/orange accents (re-verified
-   for WCAG AA against the new dark surfaces, not just eyeballed — see the
-   contrast block at the end of this file). Two ways in: the OS/browser's
-   own dark-mode setting (automatic, matches "the one on my phone" with no
-   action needed) or an explicit choice from the footer toggle
-   (public/js/theme.js), which always wins over the system setting in
-   either direction. */
+   Simplified to a genuine black/white swap 2026-09-14, per explicit
+   direction after the earlier warm-brown-inverted palette ("I don't like
+   the dark mode that much"): page/card surfaces go to true black, text to
+   true white, --navy (the heading/emphasis accent) also goes to white
+   rather than a tinted blue. Two things are DELIBERATELY untouched here,
+   both because they were already on fixed tokens that never vary by theme
+   even before this change: the topbar (--navy-surface/--on-navy-surface)
+   and every filled orange button (--orange-surface) — see those tokens'
+   own comment further up. --orange/--orange-dark (hover tints, focus
+   rings, non-button accents) are also left exactly as they were. White on
+   black is the maximum possible contrast (21:1), so every text colour
+   below clears WCAG AAA by a wide margin without needing a fresh
+   per-token contrast check the way the previous palette did. Two ways in:
+   the OS/browser's own dark-mode setting (automatic, matches "the one on
+   my phone" with no action needed) or an explicit choice from the footer
+   toggle (public/js/theme.js), which always wins over the system setting
+   in either direction. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --navy: #8ec4e8;
+    --navy: #ffffff;
     --navy-light: #6dd3c8;
     --orange: #ff8a52;
     --orange-dark: #ff7a33;
-    --bg: #1b1512;
-    --card: #332619;
-    --border: rgba(216, 194, 174, 0.25);
-    --text: #f2e8dc;
-    --text-muted: #b9a897;
+    --bg: #000000;
+    --card: #000000;
+    --border: rgba(255, 255, 255, 0.18);
+    --text: #ffffff;
+    --text-muted: #a8a8a8;
     --green: #4caf6e;
     --red: #e57468;
 
-    --blue: #8ec4e8;
+    --blue: #ffffff;
     --brown: #c9ad93;
     --brown-dark: #f2e8dc;
     --sand: #d8c2ae;
-    --paper: #332619;
-    --sink: #0a0705;
+    --paper: #000000;
+    --sink: #141414;
   }
 }
 :root[data-theme="dark"] {
-  --navy: #8ec4e8;
+  --navy: #ffffff;
   --navy-light: #6dd3c8;
   --orange: #ff8a52;
   --orange-dark: #ff7a33;
-  --bg: #1b1512;
-  --card: #332619;
-  --border: rgba(216, 194, 174, 0.25);
-  --text: #f2e8dc;
-  --text-muted: #b9a897;
+  --bg: #000000;
+  --card: #000000;
+  --border: rgba(255, 255, 255, 0.18);
+  --text: #ffffff;
+  --text-muted: #a8a8a8;
   --green: #4caf6e;
   --red: #e57468;
 
-  --blue: #8ec4e8;
+  --blue: #ffffff;
   --brown: #c9ad93;
   --brown-dark: #f2e8dc;
   --sand: #d8c2ae;
-  --paper: #332619;
-  --sink: #0a0705;
+  --paper: #000000;
+  --sink: #141414;
 }
 
 * { box-sizing: border-box; }
