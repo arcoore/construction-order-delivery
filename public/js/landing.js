@@ -171,10 +171,23 @@ const setActivePage = (pageKey) => {
   });
 };
 
+const landingViewRoot = document.getElementById('landing-view');
+
+// Deliberately not document.querySelector('main')/('footer') - the
+// standalone project's own <main id="main"> was renamed to <div
+// id="landing-main"> when it was merged into the app (to avoid an invalid
+// nested <main> inside the app's real main#app - see CLAUDE.md), so a
+// global 'main' query now matches main#app itself. #site-layer lives
+// inside that same main#app, so marking it inert along with the true
+// background regions would make the overlay this function just opened
+// completely unresponsive to clicks/scroll (it still renders - inert
+// only blocks interaction). Scope explicitly to landing-view's own
+// background regions instead.
 const setBackgroundInert = (shouldDisable) => {
   const backgroundRegions = [
-    document.querySelector('main'),
-    document.querySelector('footer'),
+    landingViewRoot?.querySelector('.site-header'),
+    document.getElementById('landing-main'),
+    landingViewRoot?.querySelector('footer'),
   ];
 
   backgroundRegions.forEach((region) => {
