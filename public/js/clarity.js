@@ -10,22 +10,16 @@
 // analytics.js's Cloudflare Web Analytics — not a second, separate consent —
 // so the two always load (or don't) together.
 //
-// Disabled until you set a project ID below:
-//   1. Sign up free at https://clarity.microsoft.com (existing Microsoft
-//      account works, no card needed) -> Add new project -> enter the site
-//      URL -> copy the project ID from the setup snippet it shows you.
-//   2. Before pasting it here: Settings -> Masking -> set to Strict, so this
-//      file's privacy.html promise is actually true from the first session
-//      recorded, not just from whenever someone remembers to flip it.
-//   3. Put the ID in CLARITY_PROJECT_ID below and redeploy.
-//   4. View recordings/heatmaps in the Clarity dashboard.
+// Live since 2026-09-14, project "sitestock". Masking mode set to Strict
+// in the dashboard before this ID was pasted in, so the privacy.html
+// promise held from the very first session recorded.
 //
 // Loaded as a plain classic <script> on index.html only (the app itself —
 // session replay on the static legal pages would record nothing useful).
 // The project ID is not a secret — Clarity's own embed snippet ships it in
 // the page by design, same as the Cloudflare beacon token.
 (function () {
-  var CLARITY_PROJECT_ID = ''; // e.g. 'abcd1234ef'
+  var CLARITY_PROJECT_ID = 'yiaeugmahi';
   var loaded = false;
 
   function consentGiven() {
