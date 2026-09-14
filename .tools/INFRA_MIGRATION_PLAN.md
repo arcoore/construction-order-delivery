@@ -1,6 +1,16 @@
 # SiteStock — Supabase London region + hosting platform migration plan
 
-**Status: NOT YET RUN. Needs the founder's explicit "go" before any step that touches production.**
+**Status (2026-09-14): Steps 1–2 DONE and verified. Step 3 (Cloudflare Pages) not started. Step 4 (actual cutover) NOT started — needs a fresh explicit go-ahead, since that's the one step with real user-facing impact.**
+
+## Progress so far
+
+- **Step 1 — new project**: `sitestock-london` created, region `eu-west-2` (London), ref `rcdrgoxtawlemhzmpcry`. All 51 migrations applied (`migration list --linked` confirms local = remote, matching the original project's `sitestock-dev`). `config push` run — Brevo SMTP, Turnstile, password/rate-limit rules, Google + Microsoft OAuth all mirror the original project exactly. Google Cloud Console and the Azure app registration both got the new project's callback URL added alongside the existing one (nothing removed).
+- **Security parity verified directly** (not just assumed from identical migrations): anon reading `orders` → refused `permission denied` (no anon grant, matching original); anon forging a `notifications` row → refused the same way; a password-grant request with no Turnstile token → refused `captcha_failed`; `/auth/v1/settings` confirms `google`/`azure` both `true`.
+- **Step 2 — data migration**: done and verified. `db dump --data-only` from the original project (excluding the tables migrations already seed themselves — `products`/`product_variants`/`suppliers`/`supplier_branches`/`app_status`/the `delivery-photos` storage bucket — to avoid duplicate-key conflicts with what `db push` already created), restored via `psql` through the connection pooler (the direct `db.<ref>.supabase.co` host is IPv6-only and unreachable from this environment). **Row counts match exactly** on every table checked: orders 45=45, order_events 216=216, order_items 45=45, profiles 55=55, communities 19=19, community_memberships 30=30, sites 18=18, site_memberships 20=20, notifications 81=81, cancellation_requests 6=6, buyer_grants 13=13, buyer_requests 3=3, owner_grants 0=0, auth.users 54, auth.identities 54 (profiles' one extra row is the expected tombstoned deleted-account row per migration `0045`'s documented behaviour).
+- **Not yet done**: a genuine test login against the new project (to directly confirm a carried-over bcrypt password hash validates, not just that the row exists) — cheap to do with a disposable account before cutover, not done yet since it needs a real Turnstile-passed request. Storage bucket *file contents* (delivery photos) weren't copied — `storage.objects` was empty on the original project anyway (0 rows), so there was nothing to copy.
+- The original Ireland project's database password was reset to enable the dump (only direct-Postgres connections were affected, not the REST API/live app).
+
+The rest of this document is the original plan, kept as written for Steps 3–4.
 
 Two decisions from the 2026-09-14 session, planned together because they
 touch overlapping things (redirect URLs, the frontend's deploy target) even
