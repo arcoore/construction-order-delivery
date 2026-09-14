@@ -171,7 +171,7 @@
       stop the Service working.
     </p>
     <p>
-      For basic page-view analytics we would use <strong>Cloudflare Web
+      For basic page-view analytics we use <strong>Cloudflare Web
       Analytics</strong>, which is <strong>cookieless</strong>: it counts page
       views without setting cookies, without fingerprinting your device, and
       without tracking you across other sites. It does not store your IP
@@ -180,8 +180,20 @@
       &ldquo;Allow analytics&rdquo; or &ldquo;Essential only&rdquo;, and the
       analytics script only loads if you allow it. You can change that choice
       at any time from the <strong>&ldquo;Cookie choices&rdquo;</strong> link in
-      the footer. (Analytics is not switched on yet, but this is how it will
-      work when it is.)
+      the footer.
+    </p>
+    <p>
+      We also plan to use <strong>Microsoft Clarity</strong> for session
+      recordings and heatmaps &ndash; a record of how a visitor moved through
+      a page (clicks, scrolling, taps), so we can find and fix confusing
+      screens without guessing. It is gated by the exact same &ldquo;Allow
+      analytics&rdquo; choice as Cloudflare Web Analytics above, is never
+      switched on for anyone who chooses &ldquo;Essential only&rdquo;, and
+      records the page you are looking at, not the contents of password
+      fields or any field marked sensitive, which Clarity masks
+      automatically before anything leaves your browser. See section 6 for
+      what it receives. (Not switched on yet, but this is how it will work
+      when it is.)
     </p>
 
     <h2>6. Where your data is stored and processed</h2>
@@ -247,6 +259,14 @@
               identify you</td>
             <td>Counts page views</td>
           </tr>
+          <tr>
+            <td>Microsoft Clarity</td>
+            <td>Only if you allow analytics: a recording of clicks, scrolling
+              and taps on the page, with password and other sensitive fields
+              automatically masked before it leaves your browser</td>
+            <td>Session recordings and heatmaps, to find and fix confusing
+              screens</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -310,6 +330,19 @@
         information. It does not store your IP address, sets no cookie, and
         does not identify individual visitors. Cloudflare, Inc. is a US company;
         this data is covered by its standard data-processing terms.
+      </dd>
+      <dt>Microsoft Clarity</dt>
+      <dd>
+        Optional session recordings and heatmaps (see section 5), loaded only
+        if you choose &ldquo;Allow analytics&rdquo; in the cookie notice - the
+        exact same choice that gates Cloudflare Web Analytics above, not a
+        separate one. It is configured in <strong>Strict Mode</strong>, which
+        masks every piece of text on the page - names, addresses, postcodes,
+        order details, everything - by default before it ever leaves your
+        browser, and only the shape of what you clicked, scrolled to, or
+        typed into is recorded, not the content. Microsoft is a US company;
+        this data is covered by its standard data-processing terms. Free,
+        with no separate charge to you.
       </dd>
     </dl>
     <p>
