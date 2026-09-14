@@ -43,8 +43,13 @@
   }
 
   if (host === 'arcoore.github.io') {
-    window.SITESTOCK_SUPABASE_URL = 'https://jntbbrkiygbobknzivpe.supabase.co';
-    window.SITESTOCK_SUPABASE_ANON_KEY = 'sb_publishable_aol6yne0oTut4gXGba9EAA_-07pkZhQ';
+    // Migrated 2026-09-14 to the London-region project (was Ireland,
+    // jntbbrkiygbobknzivpe) - see .tools/INFRA_MIGRATION_PLAN.md. Data,
+    // migrations, and auth/security config all verified identical before
+    // this switch; the old project is kept running, untouched, as a
+    // fallback during the cooldown window.
+    window.SITESTOCK_SUPABASE_URL = 'https://rcdrgoxtawlemhzmpcry.supabase.co';
+    window.SITESTOCK_SUPABASE_ANON_KEY = 'sb_publishable_jBPbTsYSxIP3vi7Tspsu7g_OUEF6ige';
     return;
   }
 
