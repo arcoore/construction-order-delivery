@@ -36,11 +36,21 @@
      ~3:1 on white, so it is kept for decorative fills and hover tints
      only — see the contrast block at the end of this file. */
   --orange-dark: #bd4c14;
-  --bg: #f7efe6;
-  --card: #fffaf5;
-  --border: rgba(101, 65, 46, 0.38);
-  --text: #3f291f;
-  --text-muted: #735f53;
+  /* bg/card/border/text/text-muted below are the landing page's own
+     neutral tokens (--landing-paper/-white/-line/-ink/-muted in
+     landing.css) — matched 2026-09-14 so the logged-in app reads as the
+     same design system as the marketing homepage, not just a sibling with
+     the same accent colours. Every accent below (navy/orange/brown/sand)
+     already matched landing.css byte-for-byte before this change; only
+     the neutrals were still the older, warmer palette. Dark mode further
+     down is deliberately NOT re-matched to landing — landing has no dark
+     variant to copy, so dark mode keeps its own pre-existing warm-dark
+     tokens rather than guessing at an unreviewed palette. */
+  --bg: #f3f2eb;
+  --card: #ffffff;
+  --border: rgba(17, 19, 16, 0.16);
+  --text: #111310;
+  --text-muted: #696c65;
   --green: #2e7d46;
   --red: #b23524;
   --radius: 0;
@@ -49,8 +59,8 @@
   --brown: #65412e;
   --brown-dark: #3f291f;
   --sand: #d8c2ae;
-  --paper: #f7efe6;
-  --sink: #f4ece0;
+  --paper: #f3f2eb;
+  --sink: #ece9e0;
 
   /* Fixed "always dark navy panel with light writing on it" tokens (topbar,
      filled buttons, badges, the skip link) — deliberately NEVER redefined
@@ -1844,9 +1854,21 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
    specificity ties without touching the feature-ordered rules above. It
    restyles the shared primitives — type scale, mono micro-labels, buttons,
    topbar, panels, cards, tabs, badges — to the SiteStock landing-page design
-   language (Manrope + DM Mono, blue/orange/brown on warm paper, sharp 1px
-   grid, tight display headings). No class name or id changes; purely visual.
-   ========================================================================= */
+   language (Manrope + DM Mono, blue/orange/brown on warm paper, tight
+   display headings). No class name or id changes; purely visual.
+
+   Shape language (updated 2026-09-14 to match the actual, now-finished
+   public/css/landing.css byte-for-byte, not just the general idea of it):
+   structural containers — panels, cards, list rows, inputs, modals — stay
+   perfectly square (var(--radius), always 0), exactly like landing.css's
+   own .product-shell/.workflow-section/.site-layer-panel. Buttons, pills,
+   toggle chips and status/availability badges get landing's soft 4px
+   corner (its .button/.role-tag/.page-nav-button/.site-chip are all 4px).
+   Round icon badges (avatar initials, role/product icon tiles, the notif
+   count bubble) are true circles (50%), matching landing's .avatar/
+   .role-letter/.crosshair. Never introduce a fourth radius value without
+   updating this note — the whole point is these three are the only ones
+   landing.css itself ever uses. */
 
 /* --- Display headings: Manrope, heavy, tight tracking, blue ink --- */
 h1, h2, h3,
@@ -1926,7 +1948,7 @@ h3 { font-size: 1rem; font-weight: 700; }
   font-weight: 500;
 }
 .btn {
-  border-radius: 0;
+  border-radius: 4px;
   font-size: 0.82rem;
   padding: 13px 18px;
 }
@@ -1955,18 +1977,18 @@ h3 { font-size: 1rem; font-weight: 700; }
 .invite-link-row .btn { white-space: nowrap; flex: 0 0 auto; }
 
 .pill-btn {
-  border-radius: 0;
+  border-radius: 4px;
   font-size: 0.72rem;
   background: rgba(255, 255, 255, 0.06);
   border-width: 1px;
 }
 .pill-btn:hover { background: rgba(255, 255, 255, 0.16); }
 .circle-btn-account {
-  border-radius: 0;
+  border-radius: 4px;
   font-size: 0.7rem;
   letter-spacing: 0.1em;
 }
-.circle-btn { border-width: 1px; }
+.circle-btn { border-width: 1px; border-radius: 4px; }
 .circle-btn-community, .circle-btn-notif { background: rgba(255, 255, 255, 0.06); }
 
 .link-btn { color: var(--navy-light); font-weight: 600; }
@@ -1982,7 +2004,10 @@ h3 { font-size: 1rem; font-weight: 700; }
 }
 .tab-btn.active { color: var(--navy); border-bottom-color: var(--orange); }
 
-/* --- Panels & cards: flat, 1px grid, sharp --- */
+/* --- Panels & cards: flat, 1px grid, sharp (structural containers stay
+   square, matching landing.css's own product-shell/workflow-section/
+   site-layer-panel etc — landing only rounds buttons/pills/badges/icon
+   badges, never a card or panel) --- */
 .panel {
   border-radius: var(--radius);
   box-shadow: none;
@@ -1990,8 +2015,6 @@ h3 { font-size: 1rem; font-weight: 700; }
 .result-card,
 .variant-option,
 .role-select-card,
-.role-toggle-btn,
-.needed-by-btn,
 .community-card,
 .order-card,
 .profile-community-row,
@@ -2002,6 +2025,21 @@ h3 { font-size: 1rem; font-weight: 700; }
 }
 .stat-value { font-weight: 800; letter-spacing: -0.02em; color: var(--navy); }
 .stat-tile-highlight { border-color: var(--navy); }
+
+/* --- Toggle chips + icon badges: landing's soft 4px / circle treatment
+   (its .role-tag/.row-action/.button = 4px, its .avatar/.role-letter/
+   .crosshair = 50%) — these read as buttons/badges, not cards, so they
+   don't belong in the "stay square" group above. */
+.role-toggle-btn,
+.needed-by-btn {
+  border-radius: 4px;
+}
+.role-select-icon,
+.product-preview-icon,
+.requester-avatar,
+.notif-badge {
+  border-radius: 50%;
+}
 
 /* Inputs: warm fill, square, orange focus ring */
 .search-input, .text-input,
@@ -2033,7 +2071,7 @@ h3 { font-size: 1rem; font-weight: 700; }
   letter-spacing: 0.07em;
   font-weight: 500;
   font-size: 0.64rem;
-  border-radius: 0;
+  border-radius: 4px;
   padding: 4px 8px;
 }
 
@@ -2057,8 +2095,11 @@ summary:focus-visible,
    or a hover tint, not for text, a focus ring, or a persistent selected
    state. Those all use --orange-dark (#bd4c14): ~5:1 with white, ~4.4:1
    as a UI outline on the light grounds. Everything else in the palette
-   was checked and passes (body 13:1, muted 5.3:1, links 6:1, every status
-   chip >5:1). */
+   was checked and passes (body text ~16.6:1, muted text ~4.8:1 against
+   --bg / ~5.3:1 against --card — both re-verified after the 2026-09-14
+   neutral-token swap to landing.css's ink/paper/muted values, since that
+   changed --text/--text-muted/--bg/--card together — links ~6.2:1, every
+   status chip >5:1). */
 .btn-primary { background: var(--orange-surface); }
 .btn-primary:hover { background: #9a3d0e; }
 .circle-btn-account { background: var(--orange-surface); }
@@ -2178,7 +2219,7 @@ summary:focus-visible,
   line-height: 1;
   padding: 2px 9px;
   cursor: pointer;
-  border-radius: 0;
+  border-radius: 4px;
 }
 #confirm-banner button:hover { background: rgba(255, 255, 255, 0.15); }
 
@@ -2257,8 +2298,9 @@ body.cookie-choice-pending #sticky-cta { display: none; }
 
 /* Footer dark-mode switch + Save button, injected by theme.js. A real
    sliding switch (not this app's usual plain checkbox) since that's the
-   familiar "phone settings" shape being matched here - but square, not the
-   typical rounded pill, to match --radius:0 everywhere else in this file.
+   familiar "phone settings" shape being matched here - softly rounded
+   (4px) to match the landing-page shape language used elsewhere for
+   interactive controls, not the typical fully-rounded stadium pill.
    Moving the switch only changes its own visual state; nothing is applied
    or persisted until Save is pressed (theme.js enables/disables Save based
    on whether the switch currently disagrees with what's actually applied). */
@@ -2292,6 +2334,7 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   height: 22px;
   background: var(--sink);
   border: 1px solid var(--text-muted);
+  border-radius: 4px;
 }
 .theme-switch-thumb {
   position: absolute;
@@ -2300,6 +2343,7 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   width: 16px;
   height: 16px;
   background: var(--text-muted);
+  border-radius: 3px;
   transition: transform 0.15s ease, background-color 0.15s ease;
 }
 .theme-switch-label input:checked ~ .theme-switch-track .theme-switch-thumb {
