@@ -2668,8 +2668,13 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   color: var(--text);
   border: 1px solid var(--text-muted);
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 .btn-oauth[hidden] { display: none; }
+.oauth-icon { width: 18px; height: 18px; flex: none; }
 .btn-oauth:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
 .btn-oauth:disabled { opacity: 0.5; cursor: not-allowed; }
 .auth-divider {
