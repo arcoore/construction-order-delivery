@@ -1149,10 +1149,12 @@ window.addEventListener('sitestock:go-to-auth', (e) => {
 });
 window.addEventListener('sitestock:show-profile', () => showProfile());
 
-// Landing page CTAs (Get Started for Free / Log In / Create an Account) -
-// see index.html's landing-view and public/js/landing.js's own separate
-// in-page-layer nav, which these buttons were deliberately pulled out of
-// (they carry data-auth-target instead of data-page-target now).
+// Landing page CTAs that go straight to auth (Log In / Create an Account /
+// the "Get Started for Free" button inside the start-page-source info page)
+// carry data-auth-target and are handled here. Every other "Get Started for
+// Free" button carries data-page-target="start" instead, routing into the
+// info page via landing.js's own in-page-layer nav - see index.html's
+// landing-view and CLAUDE.md's "Landing page" section.
 landingView.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-auth-target]');
   if (!btn) return;
