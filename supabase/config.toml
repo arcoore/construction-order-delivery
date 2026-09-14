@@ -34,22 +34,12 @@ additional_redirect_urls = [
 # signUp; GoTrue verifies it here before doing anything else, so a script
 # hammering the endpoint is stopped at the door.
 #
-# Set up but OFF, on purpose. The widget exists (Cloudflare, "SiteStock",
-# hostnames arcoore.github.io + localhost + 127.0.0.1) and TURNSTILE_SECRET is
-# in supabase/.env. Verified working end-to-end against the local stack on
-# 2026-09-07 (widget issues a token invisibly in Managed mode, login succeeds
-# with it, GoTrue refuses a tokenless password grant).
-#
-# Left disabled here because `enabled = true` in this file would be carried to
-# the HOSTED project by any `supabase config push` - and the deployed
-# public/js/env.js has no Turnstile key on the arcoore.github.io branch, so
-# hosted enforcement without a matching client widget would break every hosted
-# login. To actually turn it on:
-#   1. Set the site key on env.js's arcoore.github.io branch (value is in that
-#      file's comment).
-#   2. Flip `enabled` to true below.
-#   3. `supabase config push`  (carries this whole [auth] block to hosted).
-#   4. Deploy the env.js change.
+# ON, live on both local and hosted. The widget exists (Cloudflare,
+# "SiteStock", hostnames arcoore.github.io + localhost + 127.0.0.1),
+# TURNSTILE_SECRET is in supabase/.env, and env.js ships the site key
+# unconditionally (commit 16022a9, 2026-09-11). Confirmed enforced on hosted
+# 2026-09-14: a password-grant request against jntbbrkiygbobknzivpe.supabase.co
+# with no captcha_token is refused `captcha_failed`.
 [auth.captcha]
 enabled = true
 provider = "turnstile"
