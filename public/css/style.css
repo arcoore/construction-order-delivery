@@ -2295,6 +2295,32 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   .cookie-banner-actions { width: 100%; }
   .cookie-banner-actions .btn { flex: 1 1 auto; }
 }
+
+/* --- "Install app" prompt (pwaInstall.js) - same shape as #cookie-banner,
+   deliberately, so the two never look like different UI systems even though
+   they never actually show at the same time. --- */
+#pwa-install-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 130;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--card);
+  border-top: 2px solid var(--orange);
+  box-shadow: 0 -3px 16px rgba(63, 41, 31, 0.18);
+}
+.pwa-install-text { flex: 1 1 320px; margin: 0; font-size: 0.85rem; line-height: 1.5; color: var(--text); }
+.pwa-install-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.pwa-install-actions .btn { margin: 0; }
+@media (max-width: 560px) {
+  .pwa-install-actions { width: 100%; }
+  .pwa-install-actions .btn { flex: 1 1 auto; }
+}
 /* Footer re-open control, injected by cookieConsent.js into .app-footer-links
    (uppercase mono) or .legal-footer (plain) - inherit so it matches either. */
 .cookie-settings-btn {

@@ -53,6 +53,9 @@
       // page reload.
       window.dispatchEvent(new CustomEvent('sitestock:analytics-consent'));
     }
+    // pwaInstall.js waits for this before showing its own banner, so the
+    // two never stack on a first visit.
+    window.dispatchEvent(new CustomEvent('sitestock:cookie-choice-made'));
   }
 
   function showBanner() {
