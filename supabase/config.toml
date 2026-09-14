@@ -24,6 +24,7 @@ minimum_password_length = 10
 # origin + window.location.pathname, e.g. .../ or .../index.html).
 additional_redirect_urls = [
   "https://arcoore.github.io/construction-order-delivery/**",
+  "https://construction-order-delivery.pages.dev/**",
   "http://localhost:3000/**",
   "http://127.0.0.1:3000/**",
 ]

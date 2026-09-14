@@ -42,12 +42,16 @@
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply
   }
 
-  if (host === 'arcoore.github.io') {
+  if (host === 'arcoore.github.io' || host === 'construction-order-delivery.pages.dev') {
     // Migrated 2026-09-14 to the London-region project (was Ireland,
     // jntbbrkiygbobknzivpe) - see .tools/INFRA_MIGRATION_PLAN.md. Data,
     // migrations, and auth/security config all verified identical before
     // this switch; the old project is kept running, untouched, as a
     // fallback during the cooldown window.
+    //
+    // construction-order-delivery.pages.dev is the new Cloudflare Pages
+    // mirror (Step 3 of the same plan) - GitHub Pages stays the primary
+    // host for now, both point at the same backend so either origin works.
     window.SITESTOCK_SUPABASE_URL = 'https://rcdrgoxtawlemhzmpcry.supabase.co';
     window.SITESTOCK_SUPABASE_ANON_KEY = 'sb_publishable_jBPbTsYSxIP3vi7Tspsu7g_OUEF6ige';
     return;
