@@ -176,6 +176,16 @@ function showOnly(view) {
   // layout (edge-to-edge hero/sections up to 1440px). Toggle the constraint
   // off only while landing-view is showing.
   if (appMain) appMain.classList.toggle('app-full-bleed', view === landingView);
+  // Defensive cleanup, independent of landing.js's own closeInternalPage
+  // fix for the same bug: landing.css's body.layer-open sets
+  // overflow:hidden while the landing page's internal "How it works"/
+  // "Problems"/"Get Started" overlay is open, and main.js has no import-
+  // level knowledge of that module's state. A real bug (2026-09-14) left
+  // this class stuck after navigating away from landing-view via its
+  // internal "Get Started for Free" CTA, breaking scroll for the rest of
+  // the session (auth form, then the whole authenticated app). Belt and
+  // braces: leaving landing-view by ANY path always clears it here too.
+  if (view !== landingView) document.body.classList.remove('layer-open');
   const label = view.getAttribute('aria-label') || '';
   if (label) document.title = `${label} · SiteStock`;
   if (hasRoutedOnce && isChange) {

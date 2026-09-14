@@ -338,6 +338,22 @@ document.querySelectorAll('[data-page-target]').forEach((pageTrigger) => {
   });
 });
 
+// A real bug found live 2026-09-14: the "Get Started for Free" info page
+// (opened via openInternalPage) has its own data-auth-target="register"
+// button that routes straight to auth-view (see main.js's sitestock:go-to-
+// auth handling) without ever passing through closeInternalPage. That left
+// #site-layer open and, critically, body.layer-open's overflow:hidden
+// (landing.css) permanently stuck - main.js has no idea this class exists,
+// so nothing ever cleared it again, and the ENTIRE rest of the session
+// (the auth form, then the authenticated app after login) lost the ability
+// to scroll. Any data-auth-target click must close the layer first, exactly
+// like the "home" page-target already does, regardless of which element -
+// inside the layer or not - triggered it.
+document.addEventListener('click', (event) => {
+  const clickedElement = event.target instanceof Element ? event.target : null;
+  if (clickedElement?.closest('[data-auth-target]')) closeInternalPage();
+});
+
 siteLayer?.addEventListener('click', (event) => {
   const clickedElement = event.target instanceof Element ? event.target : null;
   const pageTrigger = clickedElement?.closest('[data-page-target]');

@@ -2041,12 +2041,17 @@ h3 { font-size: 1rem; font-weight: 700; }
   border-radius: 50%;
 }
 
-/* Inputs: warm fill, square, orange focus ring */
+/* Inputs: warm fill, square, orange focus ring. color is explicit here
+   because form controls don't inherit body's color from the UA stylesheet
+   (a real bug found live 2026-09-14: in dark mode the background went
+   dark via --sink but the text stayed at the browser's own default input
+   color, rendering password/email fields as invisible black-on-black). */
 .search-input, .text-input,
 .driver-id input,
 .worker-header-panel input {
   border-radius: 0;
   background: var(--sink);
+  color: var(--text);
 }
 .search-input:focus, .text-input:focus {
   border-color: var(--orange);
