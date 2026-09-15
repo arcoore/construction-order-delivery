@@ -752,6 +752,7 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   width: 100%;
   text-align: left;
   background: var(--sink);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 0;
   padding: 12px 14px;
