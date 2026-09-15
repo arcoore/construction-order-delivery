@@ -579,12 +579,23 @@
       <div class="dashboard-stats" id="dashboard-stats"></div>
     </div>
 
+    <!-- The dashboard hub (2026-09-15): every other section below is its own
+         page now, reached by name from this list, instead of one long
+         stacked scroll. owner.js's renderHub() builds this list and hides
+         it whenever a page is open (see each panel's own
+         .owner-page-back-btn). -->
+    <div class="panel" id="owner-hub-panel">
+      <h2>Manage</h2>
+      <div id="owner-hub-list" class="community-list"></div>
+    </div>
+
     <div class="panel" id="owner-setup-checklist-panel" hidden>
       <h2>Set up your company</h2>
       <div id="owner-setup-checklist-list" class="activity-list"></div>
     </div>
 
     <div class="panel" id="owner-invite-panel">
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>Company settings</h2>
 
       <h3 class="settings-subhead">Company name</h3>
@@ -638,45 +649,41 @@
     </div>
 
     <div class="panel" id="owner-people-panel" hidden>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>People needing attention</h2>
       <div id="owner-people-list" class="activity-list"></div>
     </div>
 
     <div class="panel" id="owner-analytics-panel" hidden>
-      <h2>This month</h2>
-      <p class="hint">Committed spend (orders placed this calendar month, excluding rejected/cancelled).</p>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
+      <h2>This month's spend</h2>
+      <p class="hint">Committed spend (orders placed this calendar month, excluding rejected/cancelled), broken down by site and by supplier.</p>
       <h3 class="settings-subhead">By site</h3>
       <div id="owner-analytics-sites" class="activity-list"></div>
       <h3 class="settings-subhead">By supplier</h3>
       <div id="owner-analytics-suppliers" class="activity-list"></div>
     </div>
 
-    <div class="panel" id="owner-sites-summary-panel">
-      <h2>Sites</h2>
-      <p class="hint">The sites/projects in this company - create one, assign employees, and see each site's orders.</p>
-      <div id="owner-sites-summary-list" class="community-list"></div>
-      <div class="owner-actions">
-        <button type="button" class="btn btn-secondary" id="owner-new-site-btn">+ New site</button>
-        <button type="button" class="link-btn" id="owner-manage-sites-btn">Manage all Sites</button>
-      </div>
-    </div>
-
-    <div class="panel">
+    <div class="panel" id="owner-activity-panel" hidden>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>Recent activity</h2>
       <div id="dashboard-activity" class="activity-list"></div>
     </div>
 
     <div class="panel" id="owner-join-requests-panel" hidden>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>Company join requests</h2>
       <div id="owner-join-requests-list" class="orders-list"></div>
     </div>
 
     <div class="panel" id="owner-buyer-requests-panel" hidden>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>Buyer access requests</h2>
       <div id="owner-buyer-requests-list" class="orders-list"></div>
     </div>
 
     <div class="panel" id="owner-team-panel" hidden>
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>Team</h2>
       <p class="hint">Give a trusted member owner-level access so they can also approve requests and see this dashboard. Buyer access is separate - grant it to whoever handles purchasing.</p>
       <div id="owner-team-list" class="orders-list"></div>
@@ -687,6 +694,7 @@
     </div>
 
     <div class="panel" id="owner-orders-panel">
+      <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <div class="driver-tabs" id="owner-tabs" role="group" aria-label="Filter orders by status">
         <button type="button" class="tab-btn active" data-tab="awaiting" aria-current="true">Awaiting Approval</button>
         <button type="button" class="tab-btn" data-tab="purchase">Waiting for Purchase</button>

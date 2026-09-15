@@ -14,14 +14,15 @@ import {
   subscribe, approveOrder, rejectOrder, revertApproval, getEventsForCommunity, getOrderEvents, subscribeOrderEvents, REVERT_WINDOW_MS,
   getPendingCancellationRequestForOrder, subscribeCancellationRequests,
 } from './orderLifecycle.js';
-// Phase 8E - read-only reuse of sites.js's existing data functions for the
-// dashboard's Sites summary card. No site CRUD/permission logic lives here;
-// creating/editing/archiving/assigning all still happens exclusively in
-// sitesView.js, reached via the sitestock:show-sites event below.
+// Read-only reuse of sites.js's existing data functions for the setup
+// checklist and join-request site-assignment checkboxes. No site CRUD/
+// permission logic lives here; creating/editing/archiving/assigning all
+// still happens exclusively in sitesView.js, reached via the dashboard
+// hub's "Sites" entry dispatching sitestock:show-sites (see renderHub).
 // Roadmap Step 5 adds one real write, addMemberToSites (sites.js), reused
 // as-is for the optional "assign sites at approval time" flow - one batched
 // insert for all the ticked sites.
-import { subscribeSites, getSites, getActiveSites, getSiteMembers, getSitesForMember, addMemberToSites, refreshSitesCache } from './sites.js';
+import { subscribeSites, getSites, getActiveSites, getSitesForMember, addMemberToSites, refreshSitesCache } from './sites.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
@@ -45,13 +46,13 @@ const teamActivityDetails = document.getElementById('owner-team-activity');
 const teamActivityList = document.getElementById('owner-team-activity-list');
 const dashboardStatsEl = document.getElementById('dashboard-stats');
 const dashboardActivityEl = document.getElementById('dashboard-activity');
+const activityPanel = document.getElementById('owner-activity-panel');
+const hubPanel = document.getElementById('owner-hub-panel');
+const hubListEl = document.getElementById('owner-hub-list');
 const approvalToggle = document.getElementById('approval-required-toggle');
 const approvalThresholdInput = document.getElementById('approval-threshold-input');
 const approvalThresholdSaveBtn = document.getElementById('approval-threshold-save-btn');
 const approvalThresholdStatus = document.getElementById('approval-threshold-status');
-const sitesSummaryListEl = document.getElementById('owner-sites-summary-list');
-const newSiteBtn = document.getElementById('owner-new-site-btn');
-const manageSitesBtn = document.getElementById('owner-manage-sites-btn');
 const setupChecklistPanel = document.getElementById('owner-setup-checklist-panel');
 const setupChecklistList = document.getElementById('owner-setup-checklist-list');
 const invitePanel = document.getElementById('owner-invite-panel');
@@ -106,6 +107,20 @@ let activeTab = 'awaiting';
 let latestOrders = [];
 let rejectingId = null;
 let selectedOrderId = null;
+// Dashboard hub (2026-09-15): the dashboard used to stack every section on
+// one long page; now it's a hub listing names, and each section is its own
+// page shown one at a time. null = the hub itself; otherwise one of
+// 'settings'/'people'/'analytics'/'activity'/'join-requests'/
+// 'buyer-requests'/'team'/'orders'. "Sites" isn't in this list - it already
+// has its own full page (sitesView.js), so its hub entry just dispatches
+// sitestock:show-sites directly instead of opening a page here.
+let currentPage = null;
+// Whether each of the "only show up when there's something to do" pages
+// (join-requests/buyer-requests/people) currently has anything in it - set
+// by their own render functions each pass, read by renderHub() to decide
+// which names appear in the list at all. Settings/analytics/activity/team/
+// orders are always-available pages and don't need an entry here.
+let pageAvailability = {};
 // Team panel - which member row (by membership id) is showing its inline
 // suspend/remove confirm+reason sub-form, and which action. Same shape as
 // rejectingId above.
@@ -169,6 +184,70 @@ approvalToggle.addEventListener('change', () => {
   setApprovalRequired(communityId, approvalToggle.checked);
 });
 
+// --- Dashboard hub navigation (2026-09-15) -------------------------------
+
+function showDashboardHub() {
+  currentPage = null;
+  selectedOrderId = null;
+  render();
+}
+
+function showOwnerPage(page) {
+  currentPage = page;
+  render();
+}
+
+// One delegated listener for every page's "Back to dashboard" link, rather
+// than wiring each individually - they all do the exact same thing. Never
+// includes orderDetailBackBtn, which is a different button ("Back to
+// orders") that stays on the Orders page and only returns to its own list.
+document.querySelectorAll('.owner-page-back-btn').forEach(btn => {
+  btn.addEventListener('click', showDashboardHub);
+});
+
+const HUB_ITEMS = [
+  { key: 'settings', label: 'Company settings' },
+  { key: 'sites', label: 'Sites', external: true },
+  { key: 'people', label: 'People needing attention', conditional: true },
+  { key: 'analytics', label: "This month's spend" },
+  { key: 'activity', label: 'Recent activity' },
+  { key: 'join-requests', label: 'Company join requests', conditional: true },
+  { key: 'buyer-requests', label: 'Buyer access requests', conditional: true },
+  { key: 'team', label: 'Team', conditional: true },
+  { key: 'orders', label: 'Orders' },
+];
+
+// Builds the hub's own list of names - the only thing shown on the
+// dashboard itself once currentPage is null. "Sites" dispatches straight to
+// its own existing page (sitestock:show-sites) rather than opening a page
+// here, mirroring the setup checklist's/People panel's existing site links.
+// The three "conditional" entries (see pageAvailability, set by their own
+// render functions each pass) only appear when there's actually something
+// there - same "don't show an empty management card" rule those panels
+// already followed before they became separate pages.
+function renderHub() {
+  hubPanel.hidden = currentPage !== null;
+  if (currentPage !== null) return;
+
+  const items = HUB_ITEMS.filter(i => !i.conditional || pageAvailability[i.key]);
+  hubListEl.innerHTML = items.map(i => `
+    <button type="button" class="result-card" data-hub-page="${i.key}">
+      <span class="result-name">${escapeHtml(i.label)}</span>
+    </button>
+  `).join('');
+
+  hubListEl.querySelectorAll('[data-hub-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.hubPage;
+      if (key === 'sites') {
+        window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
+      } else {
+        showOwnerPage(key);
+      }
+    });
+  });
+}
+
 function renderDashboard(inCommunity, communityId) {
   const pendingJoinCount = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending').length;
   const awaitingApproval = inCommunity.filter(o => o.status === 'pending_approval').length;
@@ -216,48 +295,6 @@ function renderDashboard(inCommunity, communityId) {
       `;
     }).join('');
 }
-
-// Phase 8E - "enter a Community, immediately see its Sites" (see
-// CLAUDE.md's Site model / PROGRESS.md Phase 8E entry): a compact,
-// read-only summary of the community's active sites, right on the
-// dashboard. All CRUD/detail/member-assignment stays in sitesView.js - 
-// clicking a row or "+ New site"/"Manage all Sites" just navigates there
-// (optionally deep-linked to one site), it never duplicates that logic here.
-function renderSitesSummary(communityId, inCommunity) {
-  const sites = getActiveSites(communityId).sort((a, b) => a.name.localeCompare(b.name));
-
-  if (sites.length === 0) {
-    sitesSummaryListEl.innerHTML = '<p class="empty-hint">No sites yet - create the first one below.</p>';
-    return;
-  }
-
-  sitesSummaryListEl.innerHTML = sites.slice(0, 5).map(s => {
-    const memberCount = getSiteMembers(s.id).length;
-    const openCount = inCommunity.filter(o =>
-      o.siteId === s.id && !['delivered', 'rejected', 'cancelled'].includes(o.status)
-    ).length;
-    return `
-      <button type="button" class="result-card" data-summary-site-id="${s.id}">
-        <span class="result-name">${escapeHtml(s.name)}</span>
-        <span class="result-meta">${memberCount} ${memberCount === 1 ? 'employee' : 'employees'} &middot; ${openCount} open order${openCount === 1 ? '' : 's'}</span>
-      </button>
-    `;
-  }).join('');
-
-  sitesSummaryListEl.querySelectorAll('[data-summary-site-id]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('sitestock:show-sites', { detail: { siteId: btn.dataset.summarySiteId } }));
-    });
-  });
-}
-
-newSiteBtn.addEventListener('click', () => {
-  window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
-});
-
-manageSitesBtn.addEventListener('click', () => {
-  window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
-});
 
 function renderApprovalSetting(communityId) {
   approvalToggle.checked = isApprovalRequired(communityId);
@@ -319,17 +356,20 @@ function renderSetupChecklist(communityId) {
   const items = computeChecklistItems(communityId);
   const allDone = items.every(i => i.done);
 
+  // Lives on the hub only (2026-09-15) - it's an onboarding nudge pointing
+  // at the other pages, not a page of its own, so it hides on every page
+  // the same way owner-hub-panel itself does.
+  setupChecklistPanel.hidden = currentPage !== null;
+
   // Collapses to one compact line once everything's done, rather than
   // disappearing outright - an Owner who later adds a 4th site or a 7th
   // employee shouldn't see a checklist silently reappear as if something
   // regressed (see the design report's "checklist becoming stale" risk).
   if (allDone) {
-    setupChecklistPanel.hidden = false;
     setupChecklistList.innerHTML = `<div class="activity-item"><span class="activity-text">Company set up. You're ready to place orders.</span></div>`;
     return;
   }
 
-  setupChecklistPanel.hidden = false;
   setupChecklistList.innerHTML = items.map(item => `
     <div class="activity-item checklist-item${item.done ? ' checklist-item-done' : ''}">
       <span class="checklist-state" aria-hidden="true">${item.done ? 'Done' : 'To do'}</span>
@@ -348,9 +388,10 @@ function handleChecklistCta(key) {
   if (key === 'site') {
     window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
   } else if (key === 'invite') {
+    showOwnerPage('settings');
     copyInviteLinkBtn.click();
   } else if (key === 'approve') {
-    joinRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showOwnerPage('join-requests');
   } else if (key === 'assign') {
     window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
   }
@@ -359,6 +400,7 @@ function handleChecklistCta(key) {
 // --- Roadmap Step 5: invite link + discoverability ----------------------
 
 function renderInvitePanel(communityId) {
+  invitePanel.hidden = currentPage !== 'settings';
   const community = getActiveCommunity();
   if (!community) return;
   // Don't stomp on the field while the owner is mid-edit (a background
@@ -446,6 +488,8 @@ discoverableToggle.addEventListener('change', async () => {
 // latestOrders - same "committed = not rejected/cancelled, created this
 // calendar month" rule the site-budget trigger uses server-side.
 function renderAnalytics(communityId, inCommunity) {
+  analyticsPanel.hidden = currentPage !== 'analytics';
+
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth();
   const thisMonth = inCommunity.filter(o =>
@@ -453,8 +497,15 @@ function renderAnalytics(communityId, inCommunity) {
     && new Date(o.createdAt).getFullYear() === y
     && new Date(o.createdAt).getMonth() === m);
 
-  if (thisMonth.length === 0) { analyticsPanel.hidden = true; return; }
-  analyticsPanel.hidden = false;
+  // Now a real, persistent hub page (2026-09-15) rather than a card that
+  // vanished with nothing to show - "nothing spent yet this month" is
+  // itself a useful thing to see, so this shows an empty state instead of
+  // hiding the whole page the way the "needs attention" pages still do.
+  if (thisMonth.length === 0) {
+    analyticsSitesEl.innerHTML = '<p class="empty-hint">No orders placed yet this month.</p>';
+    analyticsSuppliersEl.innerHTML = '';
+    return;
+  }
 
   const bySite = new Map();
   const bySupplier = new Map();
@@ -482,15 +533,13 @@ function renderPeoplePanel(communityId) {
   ].filter(Boolean);
 
   // Nothing needing attention is a genuinely good state, not an empty
-  // management card begging to be filled - hide the panel entirely rather
-  // than showing a useless "no pending items" row (see the design report's
-  // empty-states table).
-  if (rows.length === 0) {
-    peoplePanel.hidden = true;
-    return;
-  }
+  // management card begging to be filled - its hub entry simply doesn't
+  // appear (see renderHub/pageAvailability) rather than showing a useless
+  // "no pending items" page (see the design report's empty-states table).
+  pageAvailability.people = rows.length > 0;
+  peoplePanel.hidden = rows.length === 0 || currentPage !== 'people';
+  if (rows.length === 0) return;
 
-  peoplePanel.hidden = false;
   peopleList.innerHTML = rows.map(r => `
     <div class="activity-item">
       <span class="activity-text">${r.text}</span>
@@ -501,8 +550,8 @@ function renderPeoplePanel(communityId) {
   peopleList.querySelectorAll('[data-people-cta]').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.peopleCta;
-      if (key === 'joins') joinRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      else if (key === 'buyer') buyerRequestsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (key === 'joins') showOwnerPage('join-requests');
+      else if (key === 'buyer') showOwnerPage('buyer-requests');
       else if (key === 'sites') window.dispatchEvent(new CustomEvent('sitestock:show-sites'));
     });
   });
@@ -511,6 +560,7 @@ function renderPeoplePanel(communityId) {
 function renderTeam(communityId) {
   const userId = currentOwnerId();
   if (!isOwner(communityId, userId)) {
+    pageAvailability.team = false;
     teamPanel.hidden = true;
     return;
   }
@@ -519,7 +569,8 @@ function renderTeam(communityId) {
   // Migration 0023 - the Team panel now lists suspended members too (so the
   // owner can Restore them), not just approved ones.
   const members = teamMemberships(communityId, userId);
-  teamPanel.hidden = false;
+  pageAvailability.team = true;
+  teamPanel.hidden = currentPage !== 'team';
 
   if (members.length === 0) {
     teamList.innerHTML = '<p class="empty-hint">No other members yet - approve some join requests first.</p>';
@@ -717,9 +768,26 @@ function render() {
   const inCommunity = latestOrders.filter(o => o.communityId === communityId);
 
   renderDashboard(inCommunity, communityId);
+  activityPanel.hidden = currentPage !== 'activity';
   renderAnalytics(communityId, inCommunity);
-  renderSitesSummary(communityId, inCommunity);
   renderTeam(communityId);
+
+  // A page that only ever appears when it has something pending can go
+  // stale while the Owner is looking at it (the last join request gets
+  // decided from a notification, a Realtime update clears it) - fall back
+  // to the hub rather than leave them on a page with nothing left to show,
+  // the same "stale reference" discipline this app already applies to a
+  // since-deleted order or site.
+  if (['join-requests', 'buyer-requests', 'people'].includes(currentPage) && !pageAvailability[currentPage]) {
+    currentPage = null;
+  }
+
+  renderHub();
+
+  const onOrders = currentPage === 'orders';
+  ordersPanel.hidden = !onOrders || !!selectedOrderId;
+  orderDetailPanel.hidden = !onOrders || !selectedOrderId;
+  if (!onOrders) return;
 
   if (selectedOrderId) {
     const order = inCommunity.find(o => o.id === selectedOrderId);
@@ -765,15 +833,12 @@ function render() {
 
 function showOrderDetail(orderId) {
   selectedOrderId = orderId;
-  ordersPanel.hidden = true;
-  orderDetailPanel.hidden = false;
+  currentPage = 'orders';
   render();
 }
 
 function showOrdersList() {
   selectedOrderId = null;
-  orderDetailPanel.hidden = true;
-  ordersPanel.hidden = false;
   render();
 }
 
@@ -876,7 +941,8 @@ function renderOrderDetail(order) {
 // making a successful approval look like it failed.
 function renderJoinRequests(communityId) {
   const pending = getJoinRequests().filter(r => r.communityId === communityId && r.status === 'pending');
-  joinRequestsPanel.hidden = pending.length === 0;
+  pageAvailability['join-requests'] = pending.length > 0;
+  joinRequestsPanel.hidden = pending.length === 0 || currentPage !== 'join-requests';
   if (pending.length === 0) return;
 
   const activeSites = getActiveSites(communityId);
@@ -954,7 +1020,8 @@ function renderJoinRequests(communityId) {
 
 function renderBuyerRequests(communityId) {
   const pending = getBuyerRequests().filter(r => r.communityId === communityId && r.status === 'pending');
-  buyerRequestsPanel.hidden = pending.length === 0;
+  pageAvailability['buyer-requests'] = pending.length > 0;
+  buyerRequestsPanel.hidden = pending.length === 0 || currentPage !== 'buyer-requests';
   if (pending.length === 0) return;
 
   buyerRequestsList.innerHTML = pending.map(r => {
@@ -1143,9 +1210,16 @@ export function refreshOwnerView(orderId = null) {
   const communityId = getActiveCommunityId();
   const target = orderId && communityId && latestOrders.find(o => o.id === orderId && o.communityId === communityId);
   if (target) {
+    // A notification deep-link always means "open this order," regardless
+    // of whatever page was last showing - skip the hub entirely.
     showOrderDetail(orderId);
   } else {
-    showOrdersList();
+    // A plain entry into the dashboard (not from a notification) lands on
+    // the hub (2026-09-15) rather than defaulting straight into the Orders
+    // page's list the way this used to.
+    currentPage = null;
+    selectedOrderId = null;
+    render();
   }
 }
 
