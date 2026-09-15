@@ -14,7 +14,7 @@ import {
   getActiveCommunityId, getActiveCommunity,
   isApprovedMember, isOwner, isCreator, setActiveCommunityId, membershipStatus, myCommunities,
   getActiveRole, setActiveRole, eligibleRoles, resolveEntryRole, subscribeCommunities,
-  getCommunities, findUnseenGrantFor, markGrantSeen,
+  getCommunities, findUnseenGrantFor, markGrantSeen, communityCacheReady,
   buyerRequestStatus, requestBuyerRole, refreshCommunityCache,
   consumeJoinIntentFromUrl, getPendingJoinCode,
   leaveCommunity, mySuspendedMemberships,
@@ -1194,6 +1194,21 @@ window.addEventListener('sitestock:active-community-gone', () => {
 subscribeIdentity(checkForNewOwnerGrant);
 
 subscribeCommunities(() => {
+  // subscribeCommunities() itself calls this callback immediately/
+  // synchronously at subscribe time (see community.js's pub-sub
+  // convention), which runs before bootstrap()'s first refreshCommunityCache()
+  // has ever completed - at that instant cache.communities is still its
+  // module-level default ([]) and the auth session hasn't resolved yet
+  // either (authReady is still pending), so getActiveCommunity()/
+  // isApprovedMember() below would both read as "nothing" even for a
+  // perfectly valid returning session. A real bug, found live: every
+  // returning user with an already-active company got silently bounced
+  // to the picker on every page load, because that first, pre-fetch call
+  // satisfied the "access was lost" branch below on empty data alone.
+  // communityCacheReady only flips true once a real fetch has actually
+  // landed, so skip this callback's body entirely until then - the real
+  // fetch's own completion fires this same listener again anyway.
+  if (!communityCacheReady) return;
   checkForNewOwnerGrant();
   if (!getActiveCommunityId()) return;
   const community = getActiveCommunity();

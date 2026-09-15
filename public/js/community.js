@@ -31,7 +31,7 @@
 //     main.js on view entry into a role/community screen and on window
 //     focus (see main.js's Phase 8B bootstrap section)
 import { getCurrentUserId, primeProfiles } from './identity.js';
-import { subscribeAuth } from './auth.js';
+import { subscribeAuth, authReady } from './auth.js';
 import { supabase } from './supabaseClient.js';
 
 // --- UI-only local state (NOT retired to Supabase - see CLAUDE.md's
@@ -178,6 +178,22 @@ function mapBuyerRequest(r) {
 // (e.g. community_memberships only returns rows the caller owns or owns the
 // community for) so no client-side filtering by userId is needed here.
 export async function refreshCommunityCache() {
+  // subscribeAuth(fn) below calls fn() immediately at subscribe time (same
+  // pub-sub convention every module in this app uses), which runs at
+  // community.js's own module-eval time - long before auth.js's authReady
+  // (an async supabase.auth.getSession() call) has resolved for the first
+  // time. A real bug, found live: that premature call used to see
+  // getCurrentUserId() as null (session not restored yet) and take the "no
+  // user" branch below, which set communityCacheReady = true with an empty
+  // cache - and since nothing ever re-opens a company once
+  // subscribeCommunities's own live-revalidation handler (main.js) has
+  // already kicked a user back to the picker on that stale "empty" read,
+  // every returning session with an already-active company got silently
+  // bounced out on load, even though the real fetch moments later would
+  // have confirmed they were still a valid member. Awaiting authReady first
+  // is a no-op for every other caller (it only resolves once, at startup,
+  // so it's already settled by the time anyone else calls this).
+  await authReady;
   const userId = getCurrentUserId();
   if (!userId) {
     cache = { communities: [], memberships: [], ownerGrants: [], buyerGrants: [], buyerRequests: [] };
