@@ -966,6 +966,18 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin: 0;
 }
 
+/* Free/Premium plan upgrade notice (sitesView.js) - the one place in the
+   app that currently talks about a paid tier, so this is its own small,
+   single-purpose class rather than reusing/stretching an unrelated one. */
+.plan-notice {
+  border: 1px solid var(--orange);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.plan-notice p { margin: 0 0 10px; }
+.plan-notice p:last-child { margin-bottom: 0; }
+
 .variant-option-custom:hover .variant-option-radio {
   color: var(--orange-dark);
 }

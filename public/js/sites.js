@@ -16,7 +16,7 @@
 // is never the authorization boundary - RLS is; a stale cache can at worst
 // show a UI affordance a user can no longer use, and the real write is
 // independently re-checked server-side regardless.
-import { isOwner, isApprovedMember, isBuyer } from './community.js';
+import { isOwner, isApprovedMember, isBuyer, isPremium } from './community.js';
 import { getCurrentUserId, primeProfiles } from './identity.js';
 import { subscribeAuth } from './auth.js';
 import { supabase } from './supabaseClient.js';
@@ -134,6 +134,22 @@ export function getSites(communityId) {
 
 export function getActiveSites(communityId) {
   return getSites(communityId).filter(s => s.status === 'active');
+}
+
+// Free/Premium plans (migration 0052). FREE_SITE_LIMIT and the counting
+// rule ("every non-archived site counts, archiving frees a slot") mirror
+// the sites_enforce_plan_limit DB trigger exactly - these are display-only,
+// so createSite/sitesView.js can show the right UI before the write, but
+// the real enforcement is server-side and re-checked on every insert/
+// restore regardless of what these say.
+export const FREE_SITE_LIMIT = 2;
+
+export function sitesUsedTowardLimit(communityId) {
+  return getSites(communityId).filter(s => s.status !== 'archived').length;
+}
+
+export function canCreateMoreSites(communityId) {
+  return isPremium(communityId) || sitesUsedTowardLimit(communityId) < FREE_SITE_LIMIT;
 }
 
 // Called synchronously from orderLifecycle.js - must stay sync, cache-backed.

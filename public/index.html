@@ -434,6 +434,8 @@
         </div>
         <p class="hint small-hint">You can switch later - this just decides which screen you land on first. If you create your own company you'll always land on its owner dashboard, whatever you pick here. Buyer access has to be granted by an owner first - picking it here is just your preference for once you have it.</p>
 
+        <p class="hint small-hint">Every company starts on the Free plan, which includes 2 sites. Need more? Premium unlocks unlimited sites for &pound;10/month, whenever you're ready.</p>
+
         <p class="hint small-hint">We use your email to sign you in and to send account and order notifications, and your name so your team can see who placed an order. We don't use analytics or advertising. Full detail is in the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy<span class="sr-only"> (opens in a new tab)</span></a>.</p>
 
         <label class="checkbox-field" id="register-terms-field">
@@ -714,6 +716,12 @@
 
       <div class="panel" id="create-site-panel">
         <h2>New site</h2>
+        <p id="site-plan-status" class="hint small-hint"></p>
+        <div id="site-plan-limit-notice" class="plan-notice" hidden>
+          <p><strong>You've used both sites included in the Free plan.</strong> Premium removes the site limit for &pound;10/month - we're finishing our payment setup, so it isn't purchasable in the app yet.</p>
+          <a class="btn btn-secondary btn-block" href="mailto:arcooreacc@gmail.com?subject=SiteStock%20Premium">Get notified when Premium is ready</a>
+        </div>
+        <div id="create-site-fields">
         <label class="field-label" for="site-name-input">Site name</label>
         <input type="text" id="site-name-input" class="text-input" placeholder="e.g. 24 High Street" />
         <label class="field-label" for="site-address-input">Address</label>
@@ -737,6 +745,7 @@
         <input type="number" id="site-budget-input" class="text-input" min="0" step="1" placeholder="e.g. 5000 - orders over this are blocked until you raise it" />
         <button type="button" id="create-site-btn" class="btn btn-primary btn-block">Create site</button>
         <p id="create-site-status" class="form-status" role="status" aria-live="polite"></p>
+        </div>
       </div>
 
       <div class="panel">

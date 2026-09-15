@@ -125,6 +125,11 @@ function mapCommunity(r) {
     discoverable: r.discoverable,
     approvalThreshold: r.approval_threshold,
     createdAt: new Date(r.created_at).getTime(),
+    // Migration 0052 - Free/Premium plans. Read-only from here on purpose:
+    // there is no self-serve billing yet, so nothing in this app ever
+    // writes this column - see that migration's header and sites.js's
+    // FREE_SITE_LIMIT for the gating this actually drives.
+    premium: !!r.premium,
   };
 }
 function mapMembership(r) {
@@ -364,6 +369,14 @@ function membershipBlocksGrant(communityId, userId) {
 export function isOwner(communityId, userId) {
   if (isCreator(communityId, userId)) return true;
   return hasOwnerGrant(communityId, userId) && !membershipBlocksGrant(communityId, userId);
+}
+
+// Free/Premium plans (migration 0052). Read-only here - see that migration
+// for why the client can never set this itself, and sites.js's
+// FREE_SITE_LIMIT/canCreateMoreSites for what this actually gates.
+export function isPremium(communityId) {
+  const community = cache.communities.find(c => c.id === communityId);
+  return !!(community && community.premium);
 }
 
 // Every user id currently holding owner access in this community (creator +

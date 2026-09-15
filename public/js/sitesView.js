@@ -4,8 +4,9 @@ import { itemsShortSummary } from './orderStatus.js';
 import {
   subscribeSites, getSites, getSite, createSite, updateSite,
   archiveSite, changeSiteStatus, deleteSite, getSiteMembers, isSiteMember, addSiteMember, addSiteMembers, removeSiteMember,
+  FREE_SITE_LIMIT, sitesUsedTowardLimit, canCreateMoreSites,
 } from './sites.js';
-import { getActiveCommunityId, approvedMembers, subscribeCommunities } from './community.js';
+import { getActiveCommunityId, approvedMembers, subscribeCommunities, isPremium } from './community.js';
 import { getCurrentUserId, resolveDisplayName } from './identity.js';
 
 const listView = document.getElementById('sites-list-view');
@@ -34,6 +35,9 @@ const createAccessNotesInput = document.getElementById('site-access-notes-input'
 const createBudgetInput = document.getElementById('site-budget-input');
 const createBtn = document.getElementById('create-site-btn');
 const createStatusEl = document.getElementById('create-site-status');
+const createFieldsEl = document.getElementById('create-site-fields');
+const planStatusEl = document.getElementById('site-plan-status');
+const planLimitNoticeEl = document.getElementById('site-plan-limit-notice');
 const detailPanel = document.getElementById('site-detail-panel');
 const detailEl = document.getElementById('site-detail');
 const detailBackBtn = document.getElementById('site-detail-back-btn');
@@ -133,9 +137,27 @@ function siteSummary(site) {
   return { memberCount, openCount };
 }
 
+// Free/Premium plans (migration 0052) - shows the current usage against the
+// Free plan's 2-site cap, and swaps the create-site form for an upgrade
+// notice once it's reached. Purely a UI convenience: the real limit is
+// enforced server-side regardless of what this renders (see sites.js's
+// header comment on sitesUsedTowardLimit/canCreateMoreSites).
+function renderPlanStatus(communityId) {
+  if (isPremium(communityId)) {
+    planStatusEl.textContent = 'Premium plan · unlimited sites';
+  } else {
+    planStatusEl.textContent = `Free plan · ${sitesUsedTowardLimit(communityId)} of ${FREE_SITE_LIMIT} sites used`;
+  }
+  const atLimit = !canCreateMoreSites(communityId);
+  planLimitNoticeEl.hidden = !atLimit;
+  createFieldsEl.hidden = atLimit;
+}
+
 function renderList() {
   const communityId = getActiveCommunityId();
   if (!communityId) return;
+
+  renderPlanStatus(communityId);
 
   const sites = getSites(communityId)
     .filter(s => s.status === activeTab)

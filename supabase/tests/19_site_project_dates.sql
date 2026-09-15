@@ -6,6 +6,11 @@ select plan(6);
 select tests.create_user('owner-pd@test.local', 'Owner PD') as owner_pd \gset
 insert into communities (name, invite_code, owner_id) values ('PD Co', 'PDCO01', :'owner_pd') returning id as co \gset
 
+-- This file creates several sites to test date validation, not the
+-- Free-plan site cap (migration 0052) - marked Premium so that unrelated
+-- limit never interferes with what's actually under test here.
+update communities set premium = true where id = :'co';
+
 select tests.authenticate_as(:'owner_pd');
 
 select lives_ok(
