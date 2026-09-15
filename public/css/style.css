@@ -2040,7 +2040,9 @@ h3 { font-size: 1rem; font-weight: 700; }
   letter-spacing: -0.03em;
 }
 
-/* --- Buttons: mono caps, square, instant hover --- */
+/* --- Buttons: mono caps, square (smooth hover since 2026-09-15 - see the
+   "Flow & motion" block further down; this heading used to say "instant
+   hover," which stopped being true the moment that block shipped) --- */
 .btn,
 .pill-btn,
 .role-btn,
