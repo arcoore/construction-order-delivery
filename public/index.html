@@ -657,8 +657,19 @@
     <div class="panel" id="owner-analytics-panel" hidden>
       <button type="button" class="link-btn owner-page-back-btn">&larr; Back to dashboard</button>
       <h2>This month's spend</h2>
-      <p class="hint">Committed spend (orders placed this calendar month, excluding rejected/cancelled), broken down by site and by supplier.</p>
+      <div class="spend-chart-toolbar">
+        <h3 class="settings-subhead">Spend over time</h3>
+        <select id="owner-spend-chart-period" class="text-input spend-chart-period-select" aria-label="Chart time period">
+          <option value="day">Daily</option>
+          <option value="week">Weekly</option>
+          <option value="month" selected>Monthly</option>
+          <option value="year">Yearly</option>
+        </select>
+      </div>
+      <p class="hint" id="owner-spend-chart-hint">Actual purchased spend by month, last 12 months.</p>
+      <div id="owner-monthly-chart" class="spend-chart-wrap"></div>
       <h3 class="settings-subhead">By site</h3>
+      <p class="hint">Committed spend (orders placed this calendar month, excluding rejected/cancelled), broken down by site and by supplier.</p>
       <div id="owner-analytics-sites" class="activity-list"></div>
       <h3 class="settings-subhead">By supplier</h3>
       <div id="owner-analytics-suppliers" class="activity-list"></div>

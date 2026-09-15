@@ -1952,6 +1952,74 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   .site-assign-group { flex-direction: column; align-items: flex-start; }
 }
 
+/* Monthly spend trend chart (Owner "This month's spend" analytics page).
+   Hand-drawn inline SVG, not a charting library - this project has no
+   build step/npm and a CSP that only allowlists a handful of script hosts
+   (none of them a chart library), so a library was never really on the
+   table; a ~40-line SVG generator in owner.js is simpler anyway at this
+   scale. Colors come from the app's existing tokens so it follows dark
+   mode automatically, same as everything else - never hardcode a hex here. */
+.spend-chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.spend-chart-toolbar .settings-subhead {
+  margin: 0;
+}
+/* A "little dropdown", not a full-width form field - overrides
+   .text-input's own width:100%/margin-bottom, everything else (border,
+   background, focus ring) is inherited from that class on purpose so it
+   matches every other input in the app rather than inventing a new look. */
+.spend-chart-period-select {
+  width: auto;
+  margin-bottom: 0;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.spend-chart-wrap {
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+.spend-chart {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+.spend-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.spend-chart-axis {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+.spend-chart-line {
+  stroke: var(--navy-light);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.spend-chart-dot {
+  fill: var(--navy);
+  stroke: var(--card);
+  stroke-width: 2;
+}
+.spend-chart-value {
+  fill: var(--navy);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 12px;
+}
+.spend-chart-axis-label {
+  fill: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
 /* ============================================================================
    EDITORIAL REDESIGN LAYER
    A single override block, kept at the end of the file so it wins on

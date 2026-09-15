@@ -73,6 +73,9 @@ const peopleList = document.getElementById('owner-people-list');
 const analyticsPanel = document.getElementById('owner-analytics-panel');
 const analyticsSitesEl = document.getElementById('owner-analytics-sites');
 const analyticsSuppliersEl = document.getElementById('owner-analytics-suppliers');
+const monthlyChartEl = document.getElementById('owner-monthly-chart');
+const spendChartPeriodSelect = document.getElementById('owner-spend-chart-period');
+const spendChartHintEl = document.getElementById('owner-spend-chart-hint');
 
 // Keep the tab strip's visual selected state (.active) and its assistive-tech
 // selected state (aria-current) in lockstep.
@@ -182,6 +185,14 @@ approvalToggle.addEventListener('change', () => {
   const communityId = getActiveCommunityId();
   if (!communityId) return;
   setApprovalRequired(communityId, approvalToggle.checked);
+});
+
+// A plain re-render is enough here - render() recomputes inCommunity from
+// the already-cached latestOrders (see render(), below), no fresh fetch
+// needed, same as every other in-page filter control in this file.
+spendChartPeriodSelect.addEventListener('change', () => {
+  chartPeriod = spendChartPeriodSelect.value;
+  render();
 });
 
 // --- Dashboard hub navigation (2026-09-15) -------------------------------
@@ -484,11 +495,200 @@ discoverableToggle.addEventListener('change', async () => {
 // second management surface. Each row navigates to (or reuses) the exact
 // existing panel/action; nothing here approves/assigns anything itself.
 
+// Spend trend chart - a hand-drawn inline SVG (see style.css's own comment
+// on why: no build step/npm here, and no chart library is on the CSP
+// script-src allowlist, so a generated-SVG approach is simpler than adding
+// a new external dependency for one chart). Grouped by the date an order
+// was actually *purchased* (purchasedAt), not created - this mirrors the
+// dashboard's "Total Spend (Purchased)" stat tile's own real-money rule
+// rather than the "By site"/"By supplier" breakdown's looser "committed"
+// rule below, since a trend of real spend is more meaningful here than a
+// trend that includes orders still just pending approval/purchase.
+//
+// The period dropdown (#owner-spend-chart-period) switches the bucketing
+// granularity; chartPeriod is the one piece of state it drives. Every
+// granularity always shows every bucket's label and value (never
+// thins/skips points), per explicit direction - wider per-point spacing
+// plus the existing horizontal-scroll wrapper is what keeps that legible
+// at 30 daily points, rather than hiding labels.
+let chartPeriod = 'month';
+
+// count: how many trailing buckets to show. pxPerPoint: how much
+// horizontal room each bucket gets before the chart starts scrolling
+// (tuned per period - daily's labels are short ("15 Sep") but there are
+// 30 of them, yearly's are just as short but there are only 5, so it gets
+// more breathing room instead of sitting tiny and cramped in one corner).
+const CHART_PERIODS = {
+  day: { count: 30, pxPerPoint: 62, hint: 'Actual purchased spend by day, last 30 days.' },
+  week: { count: 12, pxPerPoint: 74, hint: 'Actual purchased spend by week, last 12 weeks.' },
+  month: { count: 12, pxPerPoint: 90, hint: 'Actual purchased spend by month, last 12 months.' },
+  year: { count: 5, pxPerPoint: 150, hint: 'Actual purchased spend by year, last 5 years.' },
+};
+
+// Monday-start week (matches this app's other UK/en-GB date conventions).
+function startOfWeek(d) {
+  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diff = (day === 0 ? -6 : 1) - day;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diff);
+  return monday;
+}
+
+// Builds the N trailing empty buckets for a period, each carrying its own
+// match(date) predicate - kept separate from the summing pass below so the
+// bucket-shape logic (what counts as "the same day/week/month/year") lives
+// in exactly one place per period, not duplicated between building and
+// matching.
+function buildChartBuckets(period) {
+  const now = new Date();
+  const { count } = CHART_PERIODS[period];
+  const buckets = [];
+
+  if (period === 'day') {
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      buckets.push({
+        label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        total: 0,
+        match: od => od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth() && od.getDate() === d.getDate(),
+      });
+    }
+  } else if (period === 'week') {
+    const thisWeekStart = startOfWeek(now);
+    for (let i = count - 1; i >= 0; i--) {
+      const wStart = new Date(thisWeekStart.getFullYear(), thisWeekStart.getMonth(), thisWeekStart.getDate() - i * 7);
+      buckets.push({
+        label: wStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+        total: 0,
+        match: od => startOfWeek(od).getTime() === wStart.getTime(),
+      });
+    }
+  } else if (period === 'month') {
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        label: d.toLocaleDateString('en-GB', { month: 'short' }),
+        total: 0,
+        match: od => od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth(),
+      });
+    }
+  } else if (period === 'year') {
+    for (let i = count - 1; i >= 0; i--) {
+      const y = now.getFullYear() - i;
+      buckets.push({
+        label: String(y),
+        total: 0,
+        match: od => od.getFullYear() === y,
+      });
+    }
+  }
+  return buckets;
+}
+
+function buildSpendSeries(inCommunity, period) {
+  const buckets = buildChartBuckets(period);
+  for (const o of inCommunity) {
+    if (!o.purchasedAt) continue;
+    const d = new Date(o.purchasedAt);
+    const bucket = buckets.find(b => b.match(d));
+    if (bucket) bucket.total += (o.totalPrice || 0);
+  }
+  return buckets;
+}
+
+// Picks a "nice" gridline step (1/2/5 x a power of ten) for a given max
+// value - the standard rounded-axis approach so gridlines read as £500/£250
+// etc. rather than an arbitrary fraction of whatever the real max happens
+// to be.
+function niceChartStep(maxVal) {
+  if (maxVal <= 0) return 1;
+  const roughStep = maxVal / 4;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const residual = roughStep / magnitude;
+  let niceResidual;
+  if (residual > 5) niceResidual = 10;
+  else if (residual > 2) niceResidual = 5;
+  else if (residual > 1) niceResidual = 2;
+  else niceResidual = 1;
+  return niceResidual * magnitude;
+}
+
+function renderSpendChart(inCommunity) {
+  spendChartHintEl.textContent = CHART_PERIODS[chartPeriod].hint;
+
+  const buckets = buildSpendSeries(inCommunity, chartPeriod);
+  const hasAny = buckets.some(b => b.total > 0);
+  if (!hasAny) {
+    monthlyChartEl.innerHTML = '<p class="empty-hint">No purchased orders yet — the trend will appear here once at least one order has been bought.</p>';
+    return;
+  }
+
+  const H = 320;
+  const padL = 68, padR = 24, padT = 36, padB = 60;
+  const W = Math.max(560, CHART_PERIODS[chartPeriod].pxPerPoint * buckets.length + padL + padR);
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const maxVal = Math.max(...buckets.map(b => b.total));
+  const step = niceChartStep(maxVal);
+  const gridCount = Math.max(1, Math.ceil((maxVal * 1.15) / step));
+  const axisMax = gridCount * step;
+
+  const xFor = i => padL + (buckets.length === 1 ? plotW / 2 : (i / (buckets.length - 1)) * plotW);
+  const yFor = v => padT + plotH - (v / axisMax) * plotH;
+
+  const gridLines = [];
+  for (let g = 0; g <= gridCount; g++) {
+    const val = g * step;
+    const y = yFor(val);
+    gridLines.push(`<line class="spend-chart-grid" x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" />`);
+    gridLines.push(`<text class="spend-chart-axis-label" x="${padL - 10}" y="${(y + 4).toFixed(1)}" text-anchor="end">${escapeHtml(formatPrice(val))}</text>`);
+  }
+
+  const points = buckets.map((b, i) => `${xFor(i).toFixed(1)},${yFor(b.total).toFixed(1)}`).join(' ');
+
+  const dotsAndLabels = buckets.map((b, i) => {
+    const x = xFor(i), y = yFor(b.total);
+    // The first/last point's value label would otherwise center itself
+    // half off the edge of the viewBox - anchor those two inward instead
+    // of centered, same fix a real charting library applies automatically.
+    const anchor = i === 0 ? 'start' : i === buckets.length - 1 ? 'end' : 'middle';
+    return `
+      <text class="spend-chart-value" x="${x.toFixed(1)}" y="${(y - 14).toFixed(1)}" text-anchor="${anchor}">${escapeHtml(formatPrice(b.total))}</text>
+      <circle class="spend-chart-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" />
+    `;
+  }).join('');
+
+  const xLabels = buckets.map((b, i) => {
+    const x = xFor(i);
+    const y = H - padB + 18;
+    return `<text class="spend-chart-axis-label" x="${x.toFixed(1)}" y="${y}" text-anchor="end" transform="rotate(-40 ${x.toFixed(1)} ${y})">${escapeHtml(b.label)}</text>`;
+  }).join('');
+
+  const baseY = yFor(0);
+  const periodLabel = spendChartPeriodSelect.options[spendChartPeriodSelect.selectedIndex].text;
+
+  monthlyChartEl.innerHTML = `
+    <svg class="spend-chart" style="min-width:${W}px" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeHtml(periodLabel)} purchased spend">
+      ${gridLines.join('')}
+      <line class="spend-chart-axis" x1="${padL}" y1="${baseY.toFixed(1)}" x2="${W - padR}" y2="${baseY.toFixed(1)}" />
+      <polyline class="spend-chart-line" points="${points}" fill="none" />
+      ${dotsAndLabels}
+      ${xLabels}
+    </svg>
+  `;
+  // When the chart is wider than its scroll container, default to showing
+  // the most recent (rightmost) period rather than the oldest - "now" is
+  // what an Owner actually wants to see first, history is what they'd
+  // deliberately scroll back for.
+  monthlyChartEl.scrollLeft = monthlyChartEl.scrollWidth;
+}
+
 // This-month committed spend, grouped by site and by supplier. Pure UI over
 // latestOrders - same "committed = not rejected/cancelled, created this
 // calendar month" rule the site-budget trigger uses server-side.
 function renderAnalytics(communityId, inCommunity) {
   analyticsPanel.hidden = currentPage !== 'analytics';
+  renderSpendChart(inCommunity);
 
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth();
