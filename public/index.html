@@ -718,8 +718,8 @@
         <h2>New site</h2>
         <p id="site-plan-status" class="hint small-hint"></p>
         <div id="site-plan-limit-notice" class="plan-notice" hidden>
-          <p><strong>You've used both sites included in the Free plan.</strong> Premium removes the site limit for &pound;10/month - we're finishing our payment setup, so it isn't purchasable in the app yet.</p>
-          <a class="btn btn-secondary btn-block" href="mailto:arcooreacc@gmail.com?subject=SiteStock%20Premium">Get notified when Premium is ready</a>
+          <p>You've used both sites included in the Free plan.</p>
+          <button type="button" class="btn btn-secondary btn-block" id="site-plan-see-premium-btn">See Premium</button>
         </div>
         <div id="create-site-fields">
         <label class="field-label" for="site-name-input">Site name</label>
@@ -919,6 +919,25 @@
     <div class="reject-form-actions">
       <button type="button" class="btn btn-secondary" id="notif-prefs-cancel-btn">Cancel</button>
       <button type="button" class="btn btn-primary" id="notif-prefs-save-btn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Free-plan-limit upsell (sitesView.js) - opened from the slim inline
+     reminder on the Sites screen once a company hits the 2-site cap. Its
+     own dark/gradient look is deliberate and theme-invariant (see
+     style.css's .premium-modal comment) - it's a promotional moment, not a
+     form, so it doesn't need to match the rest of the app's light/dark
+     panels. -->
+<div class="modal-overlay" id="premium-upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="premium-upgrade-title" hidden>
+  <div class="modal-box premium-modal">
+    <button type="button" class="premium-modal-close" id="premium-upgrade-close-btn" aria-label="Close">&times;</button>
+    <div class="premium-modal-inner">
+      <p class="premium-modal-kicker">SiteStock Premium</p>
+      <h2 id="premium-upgrade-title">Unlock unlimited sites</h2>
+      <p class="hint">You've reached the 2-site limit on the Free plan. Premium removes it completely for &pound;10/month &mdash; we're finishing our payment setup now, so it isn't available to buy just yet.</p>
+      <a class="premium-modal-cta" href="mailto:arcooreacc@gmail.com?subject=SiteStock%20Premium" id="premium-upgrade-mailto">Get notified when it's ready</a>
+      <p class="premium-modal-footnote">No payment is ever taken automatically.</p>
     </div>
   </div>
 </div>

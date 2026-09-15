@@ -1695,6 +1695,89 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin-bottom: 18px;
 }
 
+/* "Upgrade to Premium" pop-up (#premium-upgrade-modal, sitesView.js) - the
+   one deliberately promotional moment in the app, so it gets its own
+   full-bleed gradient card rather than the plain .modal-box look every
+   other dialog uses. Colours are hardcoded, not the --navy/--navy-light
+   tokens, because those two flip to near-white/teal in dark mode (see the
+   dark-mode block up top) - this card is meant to look the same regardless
+   of theme, the same reasoning --navy-surface/--orange-surface already
+   apply to the topbar and primary buttons (see their own comment). */
+.premium-modal {
+  position: relative;
+  max-width: 420px;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  background: linear-gradient(135deg, #12344a 0%, #17607f 100%);
+  color: white;
+}
+.premium-modal-inner {
+  position: relative;
+  padding: 30px 24px 22px;
+}
+.premium-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: #f26a2e;
+  color: white;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.premium-modal-close:hover { background: #bd4c14; }
+.premium-modal-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 14px;
+}
+.premium-modal h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  margin: 0 32px 10px 0;
+}
+/* The editorial heading rule further down (h1, h2, h3, ..., .modal-box h2)
+   sets color: var(--navy) at the SAME specificity as .premium-modal h2 and
+   comes later in the file, so it would otherwise win the tie and render
+   this heading in dark navy against the dark gradient behind it - nearly
+   invisible. #premium-upgrade-modal h2 structurally outranks it regardless
+   of source order. */
+#premium-upgrade-modal h2 {
+  color: white;
+}
+.premium-modal p.hint {
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0 0 22px;
+}
+.premium-modal-cta {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  background: white;
+  color: #12344a;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 14px;
+  text-decoration: none;
+  margin-bottom: 14px;
+}
+.premium-modal-cta:hover { background: #f2e8dc; }
+.premium-modal-footnote {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.78rem;
+  text-align: center;
+  margin: 0;
+}
+
 .notif-prefs-list {
   text-align: left;
   margin-bottom: 16px;

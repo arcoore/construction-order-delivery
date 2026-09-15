@@ -109,6 +109,12 @@ const feedbackSendBtn = document.getElementById('feedback-send-btn');
 const feedbackCancelBtn = document.getElementById('feedback-cancel-btn');
 const feedbackCloseBtn = document.getElementById('feedback-close-btn');
 const footerFeedbackBtn = document.getElementById('footer-feedback-btn');
+const premiumUpgradeModal = document.getElementById('premium-upgrade-modal');
+const premiumUpgradeCloseBtn = document.getElementById('premium-upgrade-close-btn');
+// Lives on the Sites screen's own static markup (see sitesView.js's
+// renderPlanStatus) - not a lazy-module import, just a button main.js
+// already owns like every other modal trigger (see DIALOGS below).
+const sitePlanSeePremiumBtn = document.getElementById('site-plan-see-premium-btn');
 const notifWrap = document.getElementById('notif-wrap');
 const notifBellBtn = document.getElementById('notif-bell-btn');
 const notifBadge = document.getElementById('notif-badge');
@@ -898,6 +904,14 @@ feedbackSendBtn.addEventListener('click', async () => {
   feedbackThanks.hidden = false;
 });
 
+// "Upgrade to Premium" pop-up (migration 0052) - trigger lives on the
+// Sites screen's static markup, but like every other modal it's opened/
+// closed from here, not from sitesView.js, so the lazy-loaded module
+// never needs to know this dialog exists (see "Things NOT to do" in
+// CLAUDE.md on not statically importing the five role/screen modules).
+sitePlanSeePremiumBtn?.addEventListener('click', () => { premiumUpgradeModal.hidden = false; });
+premiumUpgradeCloseBtn.addEventListener('click', () => { premiumUpgradeModal.hidden = true; });
+
 // Sites is reached only from inside an active owner session (the pill
 // itself is only ever visible when hasActiveOwnerSession() is true), so
 // this deliberately doesn't re-derive community/role chrome the way
@@ -1409,6 +1423,7 @@ const DIALOGS = [
   { el: ownerUpgradeModal, close: () => ownerUpgradeOkBtn.click() },
   { el: notifPrefsModal, close: () => notifPrefsCancelBtn.click() },
   { el: feedbackModal, close: () => (feedbackThanks.hidden ? feedbackCancelBtn : feedbackCloseBtn).click() },
+  { el: premiumUpgradeModal, close: () => premiumUpgradeCloseBtn.click() },
 ];
 let dialogOpener = null;
 
