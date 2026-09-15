@@ -2098,23 +2098,53 @@ h3 { font-size: 1rem; font-weight: 700; }
 .link-btn { color: var(--navy-light); font-weight: 600; }
 .link-btn:hover { color: var(--orange-dark); }
 
-/* --- Tabs: mono caps, underline-select --- */
-.driver-tabs { gap: 2px; border-bottom-width: 1px; }
+/* --- Tabs: mono caps, filled pill track (2026-09-15 — replaces the older
+   plain-underline look everywhere: Sites, Driver, Owner's order-status
+   tabs, Buyer). A rounded var(--sink) track holds the row; the active tab
+   gets a solid navy pill instead of just an orange underline. Tabs still
+   wrap onto a second row on narrow screens/many-tab strips (Owner has 7)
+   via .driver-tabs's existing flex-wrap — a segmented control only works
+   at 2-3 items, so this intentionally stays a "highlighted pill in a
+   track" rather than forcing every tab to equal flex width the way the
+   auth screen's own 2-tab toggle does (see its own override further down
+   this file). */
+.driver-tabs {
+  gap: 2px;
+  border-bottom: none;
+  background: var(--sink);
+  border-radius: 4px;
+  padding: 4px;
+}
 .tab-btn {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
-  padding: 11px 13px;
-  border-bottom-width: 2px;
+  padding: 9px 13px;
+  border-bottom: none;
+  border-radius: 4px;
 }
-.tab-btn.active { color: var(--navy); border-bottom-color: var(--orange); }
+.tab-btn:hover { background: rgba(23, 96, 127, 0.1); }
+.tab-btn.active {
+  color: var(--on-navy-surface);
+  background: var(--navy-surface);
+  border-bottom-color: transparent;
+}
+.tab-btn.active:hover { background: var(--navy-surface); }
 
-/* --- Panels & cards: flat, 1px grid, sharp (structural containers stay
-   square, matching landing.css's own product-shell/workflow-section/
+/* --- Panels & cards: flat 1px grid, sharp corners (structural containers
+   stay square, matching landing.css's own product-shell/workflow-section/
    site-layer-panel etc — landing only rounds buttons/pills/badges/icon
-   badges, never a card or panel) --- */
+   badges, never a card or panel), but no longer a completely flat 2D box
+   (2026-09-15) — every panel across the whole app now gets the same
+   barely-there double shadow landing.css's own sticky header uses
+   (0 .7px 1.462px + 0 3px 9px, both near-invisible alone), giving a
+   gentle sense of lift without the dashboard's many stacked panels
+   turning into a wall of heavy shadows. The auth screen's own .panel
+   override (near the end of this file) replaces this with a much
+   stronger one on purpose — that one screen is meant to read as a single
+   floating hero card, everywhere else stays this subtle. --- */
 .panel {
   border-radius: var(--radius);
-  box-shadow: none;
+  box-shadow: 0 0.7px 1.5px rgba(63, 41, 31, 0.04), 0 3px 10px rgba(63, 41, 31, 0.06);
 }
 .result-card,
 .variant-option,
@@ -2129,6 +2159,60 @@ h3 { font-size: 1rem; font-weight: 700; }
 }
 .stat-value { font-weight: 800; letter-spacing: -0.02em; color: var(--navy); }
 .stat-tile-highlight { border-color: var(--navy); }
+
+/* --- Flow & motion (2026-09-15): smooth transitions + a gentle hover lift
+   on real buttons/clickable rows, matching landing.css's own .button
+   hover-lift and its .offer-card/.problem-card/.workflow-step transition
+   rule. Every interactive/card-like primitive gets the shared transition
+   so a hover/active/focus state change animates instead of snapping —
+   this deliberately reverses the older "instant hover" approach this file
+   used to describe for buttons. Scoped to elements that are REAL buttons
+   or single-purpose clickable rows only (.result-card/.role-select-card
+   are both <button>; .community-card/.order-card are plain containers
+   that hold their own buttons, so they're excluded from the lift - giving
+   a whole non-clickable card a hover-lift would be a false affordance).
+   Automatically respects prefers-reduced-motion via the wildcard
+   transition-duration override further down this file. */
+.btn,
+.pill-btn,
+.role-btn,
+.circle-btn,
+.circle-btn-account,
+.tab-btn,
+.link-btn,
+.panel,
+.result-card,
+.variant-option,
+.role-select-card,
+.community-card,
+.order-card,
+.profile-community-row,
+.stat-tile,
+.product-preview,
+.confirm-source-card,
+.driver-card,
+.modal-box,
+.role-toggle-btn,
+.needed-by-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(18, 52, 74, 0.18);
+}
+.btn-secondary:hover,
+.pill-btn:hover {
+  transform: translateY(-1px);
+}
+.result-card:hover,
+.role-select-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(63, 41, 31, 0.14);
+}
+/* .btn:disabled:hover/.btn[disabled]:hover (further up this file) already
+   reset transform to none at higher specificity than .btn-primary:hover
+   above, so a disabled button never lifts - nothing to repeat here. */
 
 /* --- Toggle chips + icon badges: landing's soft 4px / circle treatment
    (its .role-tag/.row-action/.button = 4px, its .avatar/.role-letter/
@@ -2184,8 +2268,28 @@ h3 { font-size: 1rem; font-weight: 700; }
   padding: 4px 8px;
 }
 
-/* --- Modal: sharp card, heavier shadow --- */
-.modal-box { border-radius: var(--radius); }
+/* --- Modal: sharp card, heavier shadow (the shadow itself was missing
+   until 2026-09-15 - this comment promised it, .premium-modal already had
+   its own, the rest of the modals didn't) --- */
+.modal-box {
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(63, 41, 31, 0.35);
+}
+
+/* --- Topbar: a soft shadow separates it from scrolled content beneath,
+   matching landing.css's own sticky header treatment, instead of relying
+   on the 1px border alone. --- */
+.topbar { box-shadow: 0 2px 10px rgba(13, 39, 56, 0.25); }
+
+/* --- View transitions: a quick fade + settle whenever main.js's
+   showOnly() adds .active to a section, echoing landing.css's own
+   .reveal/.motion-item scroll-in effect. Restarts automatically every
+   time the class is (re)applied - no JS change needed. */
+@keyframes view-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.view.active { animation: view-fade-in 0.3s ease; }
 
 /* --- Focus visibility, palette-consistent --- */
 a:focus-visible,
@@ -2212,7 +2316,9 @@ summary:focus-visible,
 .btn-primary { background: var(--orange-surface); }
 .btn-primary:hover { background: #9a3d0e; }
 .circle-btn-account { background: var(--orange-surface); }
-.tab-btn.active { border-bottom-color: var(--orange-dark); }
+/* The active tab's contrast (2026-09-15 pill-fill redesign, above) now
+   comes from --navy-surface/--on-navy-surface, the same audited pair the
+   topbar uses - there's no longer a border-bottom to color here. */
 .search-input:focus,
 .text-input:focus,
 .driver-id input:focus,
@@ -2836,3 +2942,34 @@ body.cookie-choice-pending #sticky-cta { display: none; }
 .check-email-steps li { margin-bottom: 6px; }
 #check-email-panel .btn-block { margin-top: 8px; }
 #check-email-panel .link-btn { display: block; margin: 10px auto 0; }
+
+/* ============================================================================
+   AUTH SCREEN HERO TREATMENT (2026-09-15)
+   The login/register screen gets its own real hero look - a narrower
+   floating card, a soft blue glow behind it, and a bigger heading -
+   instead of just the plain shared .panel every other screen uses.
+   #auth-tabs already inherits the pill-track look every tab strip in the
+   app now has (see the shared .driver-tabs/.tab-btn rule above) - the
+   only thing genuinely unique to auth is sizing its two tabs to equal
+   width, which a many-tab strip elsewhere (Owner's 7 order-status tabs)
+   deliberately does NOT do. Radii stay within the app's own three
+   established values (0/4px/50%); the glow is blue/navy only, matching
+   the founder's own call on the Premium pop-up ("simple blue... remove
+   the orange"), not a second accent colour. */
+#auth-view {
+  padding-top: 48px;
+  background: radial-gradient(ellipse 640px 320px at 50% 0%, rgba(23, 96, 127, 0.12), transparent 70%);
+}
+#auth-view .panel {
+  max-width: 460px;
+  margin: 0 auto 18px;
+  box-shadow: 0 24px 60px rgba(18, 52, 74, 0.16);
+}
+#auth-view #auth-intro h1 {
+  font-size: 1.85rem;
+  letter-spacing: -0.03em;
+}
+#auth-tabs .tab-btn {
+  flex: 1;
+  text-align: center;
+}
