@@ -640,10 +640,18 @@ function stripGrantsFor(communityId, userId) {
   cache.buyerRequests = cache.buyerRequests.filter(r => !(r.communityId === communityId && r.userId === userId));
 }
 
+// p_client_issued_at is captured here, the instant the caller's own click
+// handler invokes this function - before the network round-trip even
+// starts - and is what migration 0053's stale-intent guard compares
+// against its own now() when the RPC actually runs server-side. See that
+// migration's header for the incident this closes (a call that timed out
+// client-side but executed for real ~90 minutes later using stale input).
+
 export async function suspendMember(membershipId, reason) {
   const { data, error } = await supabase.rpc('suspend_member', {
     p_membership_id: membershipId,
     p_reason: reason && reason.trim() ? reason.trim() : null,
+    p_client_issued_at: new Date().toISOString(),
   });
   if (error) return { ok: false, error: error.message };
   applyMembershipRow(data);
@@ -652,7 +660,10 @@ export async function suspendMember(membershipId, reason) {
 }
 
 export async function restoreMember(membershipId) {
-  const { data, error } = await supabase.rpc('restore_member', { p_membership_id: membershipId });
+  const { data, error } = await supabase.rpc('restore_member', {
+    p_membership_id: membershipId,
+    p_client_issued_at: new Date().toISOString(),
+  });
   if (error) return { ok: false, error: error.message };
   applyMembershipRow(data);
   notify();
@@ -663,6 +674,7 @@ export async function removeMember(membershipId, reason) {
   const { data, error } = await supabase.rpc('remove_member', {
     p_membership_id: membershipId,
     p_reason: reason && reason.trim() ? reason.trim() : null,
+    p_client_issued_at: new Date().toISOString(),
   });
   if (error) return { ok: false, error: error.message };
   const mapped = applyMembershipRow(data);
@@ -672,7 +684,10 @@ export async function removeMember(membershipId, reason) {
 }
 
 export async function leaveCommunity(communityId) {
-  const { data, error } = await supabase.rpc('leave_community', { p_community_id: communityId });
+  const { data, error } = await supabase.rpc('leave_community', {
+    p_community_id: communityId,
+    p_client_issued_at: new Date().toISOString(),
+  });
   if (error) return { ok: false, error: error.message };
   const mapped = applyMembershipRow(data);
   stripGrantsFor(mapped.communityId, mapped.userId);
@@ -681,7 +696,10 @@ export async function leaveCommunity(communityId) {
 }
 
 export async function rerequestMembership(communityId) {
-  const { data, error } = await supabase.rpc('rerequest_membership', { p_community_id: communityId });
+  const { data, error } = await supabase.rpc('rerequest_membership', {
+    p_community_id: communityId,
+    p_client_issued_at: new Date().toISOString(),
+  });
   if (error) return { ok: false, error: error.message };
   applyMembershipRow(data);
   notify();
