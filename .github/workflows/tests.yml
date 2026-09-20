@@ -1,0 +1,66 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e-smoke-tests:
+    name: Frontend smoke tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: tests/requirements.txt
+
+      - run: pip install -r tests/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest
+
+  pgtap-tests:
+    name: Database tests (pgTAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.114.0
+
+      # supabase/config.toml pulls several env(...) values (Turnstile secret,
+      # Google/Azure OAuth, SMTP) from the git-ignored supabase/.env that
+      # exists on a real dev machine - without it, Supabase CLI/GoTrue fail
+      # to start rather than just running with those features off. pgTAP
+      # tests talk to Postgres directly via the `tests` helper schema
+      # (tests.create_user/tests.authenticate_as, see supabase/tests/00_helpers.sql)
+      # and never exercise GoTrue's HTTP auth/OAuth/email endpoints, so these
+      # only need to be non-empty strings to satisfy startup validation -
+      # never real credentials, never secrets, safe to commit in a public
+      # workflow file.
+      - name: Write CI-only placeholder supabase/.env
+        run: |
+          cat > supabase/.env <<'EOF'
+          TURNSTILE_SECRET=ci-placeholder-not-a-real-secret
+          GOOGLE_OAUTH_CLIENT_ID=ci-placeholder.apps.googleusercontent.com
+          GOOGLE_OAUTH_SECRET=ci-placeholder-secret
+          AZURE_OAUTH_CLIENT_ID=ci-placeholder-client-id
+          AZURE_OAUTH_SECRET=ci-placeholder-secret
+          APPLE_OAUTH_CLIENT_ID=ci-placeholder-client-id
+          APPLE_OAUTH_SECRET=ci-placeholder-secret
+          SMTP_HOST=inbucket
+          SMTP_PORT=1025
+          SMTP_USER=mailpit
+          SMTP_PASS=mailpit
+          SMTP_ADMIN_EMAIL=ci@example.com
+          EOF
+
+      - run: supabase start
+      - run: supabase test db
