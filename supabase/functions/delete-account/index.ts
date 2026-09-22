@@ -36,19 +36,51 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Origin allowlist, not a wildcard - security-audit finding 2026-09-22. A
+// bearer JWT (never an ambient cookie) is what actually authenticates every
+// call here, so a wildcard was never a session-riding hole by itself, but
+// there's no reason to let an arbitrary origin READ this function's response
+// either. Mirrors the exact origin set config.toml's additional_redirect_urls
+// already trusts for this app: both live hosts, plus localhost/127.0.0.1 on
+// any port (dev_server.py's autoPort means the local port isn't fixed).
+const ALLOWED_ORIGINS = new Set([
+  'https://arcoore.github.io',
+  'https://construction-order-delivery.pages.dev',
+]);
 
-function json(body: unknown, status: number) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+function isAllowedOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function corsHeadersFor(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin');
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin',
+  };
+  if (isAllowedOrigin(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin as string;
+  }
+  return headers;
 }
 
 Deno.serve(async req => {
+  const corsHeaders = corsHeadersFor(req);
+
+  function json(body: unknown, status: number) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
