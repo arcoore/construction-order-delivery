@@ -366,8 +366,28 @@ export async function disableMfa() {
   return { ok: true };
 }
 
-export async function logout() {
-  await supabase.auth.signOut();
+// `scope: 'local'` skips GoTrue's own /auth/v1/logout call and just clears
+// the session client-side - deleteAccount() below needs this, since by the
+// time it calls logout() the account no longer exists server-side, and a
+// default (server-side/'global') signOut() would try to invalidate a
+// session for a user GoTrue can no longer find, reject with a 403, and -
+// since this was never wrapped in a try/catch - throw straight out of
+// deleteAccount()'s own `await logout()`, leaving the caller's `await
+// deleteAccount()` unresolved and the "Deleting…" button stuck forever even
+// though the account really was deleted. Found live 2026-09-22 while
+// verifying the deploy against hosted production with a real disposable
+// account. A normal user-initiated logout still defaults to a real global
+// signOut (unaffected - the account still exists, so the network round trip
+// still means something there).
+export async function logout(options) {
+  try {
+    await supabase.auth.signOut(options);
+  } catch (e) {
+    // Already-gone-server-side is the one case we deliberately tolerate
+    // (see above) - anything else is unexpected, but local state still gets
+    // cleared below regardless, since staying "logged in" to a session the
+    // server has already rejected is never the right fallback.
+  }
   currentSession = null;
   mfaChallengePending = false;
   notify();
@@ -403,7 +423,14 @@ export async function deleteAccount() {
     return { ok: false, error: body?.error || error.message || 'Could not delete your account.' };
   }
   if (data?.error) return { ok: false, error: data.error };
-  await logout();
+  // Deliberately doesn't call logout() itself - main.js's 'sitestock:logout'
+  // handler is the one place that stops Realtime, clears the active
+  // community, and routes to auth-view, and a normal Log-out click already
+  // goes through it. Found live 2026-09-22: this function used to call
+  // logout() directly, which cleared the Supabase session but skipped every
+  // bit of that - the profile screen stayed on-screen showing "Deleting…"
+  // forever even though the account really was gone, since nothing ever
+  // told main.js to route away. The caller dispatches that same event.
   return { ok: true };
 }
 

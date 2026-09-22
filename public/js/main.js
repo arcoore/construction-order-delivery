@@ -676,8 +676,11 @@ async function showProfileImpl() {
         statusEl.className = 'form-status error';
         return;
       }
-      // deleteAccount() already signed out locally on success - the normal
-      // auth-state routing takes over from here, same as any other logout.
+      // The account is gone server-side; reuse the exact same cleanup +
+      // routing a normal Log-out click already goes through (stop Realtime,
+      // clear the active community, close open panels, clear the session,
+      // route to auth-view) rather than duplicating any of it here.
+      window.dispatchEvent(new CustomEvent('sitestock:logout'));
     });
   }
 
