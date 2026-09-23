@@ -97,6 +97,8 @@ jobs:
             if [ -n "$registry" ]; then export SUPABASE_INTERNAL_IMAGE_REGISTRY="$registry"; fi
             echo "supabase start (registry: ${registry:-default})"
             if supabase start -x studio,edge-runtime,imgproxy,vector,logflare,postgres-meta,supavisor,mailpit,realtime,postgrest,kong 2>&1 | tee -a /tmp/supabase-start.log; then
+              # the pgTAP step pulls one more image (pg_prove): start it on the registry that worked
+              if [ -n "$registry" ]; then echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=$registry" >> "$GITHUB_ENV"; fi
               exit 0
             fi
             echo "start failed with registry '${registry:-default}' - trying the next one"
@@ -105,13 +107,25 @@ jobs:
           done
           exit 1
 
-      - name: Explain a failed start
+      # `supabase test db` pulls the pg_prove image, which hits the same registry
+      # throttling. Retry on ANOTHER registry only when the failure was an image
+      # pull; a genuine test failure fails the job immediately.
+      - name: Run pgTAP suite
+        run: |
+          set -o pipefail
+          for registry in "${SUPABASE_INTERNAL_IMAGE_REGISTRY:-}" docker.io public.ecr.aws ghcr.io; do
+            if [ -n "$registry" ]; then export SUPABASE_INTERNAL_IMAGE_REGISTRY="$registry"; fi
+            : > /tmp/supabase-test.log
+            if supabase test db 2>&1 | tee /tmp/supabase-test.log; then exit 0; fi
+            if ! grep -q -E "toomanyrequests|failed to pull" /tmp/supabase-test.log; then exit 1; fi
+            echo "image pull failed with registry '${registry:-default}' - trying the next one"
+            sleep 20
+          done
+          exit 1
+
+      - name: Explain a failure
         if: failure()
         run: |
-          echo "::error title=supabase start (tail)::$(tail -n 40 /tmp/supabase-start.log 2>/dev/null | tr '\n' '|' | cut -c1-3500)"
-          echo "::error title=containers::$(docker ps -a --format '{{.Names}} {{.Status}}' | tr '\n' '|' | cut -c1-3500)"
-          for c in $(docker ps -a --filter status=exited --filter status=restarting --format '{{.Names}}'); do
-            echo "::error title=log $c::$(docker logs --tail 25 "$c" 2>&1 | tr '\n' '|' | cut -c1-3500)"
-          done
-
-      - run: supabase test db
+          echo "::error title=supabase start (tail)::$(tail -n 30 /tmp/supabase-start.log 2>/dev/null | tr '\n' '|' | cut -c1-3000)"
+          echo "::error title=pgTAP output (tail)::$(tail -n 40 /tmp/supabase-test.log 2>/dev/null | tr '\n' '|' | cut -c1-3500)"
+          echo "::error title=containers::$(docker ps -a --format '{{.Names}} {{.Status}}' | tr '\n' '|' | cut -c1-2000)"
