@@ -77,20 +77,20 @@ jobs:
           SMTP_ADMIN_EMAIL=ci@example.com
           EOF
 
-      # The pgTAP suite only needs Postgres + the auth/storage schemas those
-      # services create - not Studio, the Edge runtime, image proxy, log/vector
-      # pipeline, pg-meta, the pooler or the mail catcher. Skipping them means
-      # roughly half the image pulls, which matters because ghcr.io rate-limits
-      # anonymous pulls from shared runners ("toomanyrequests" - this is what
-      # failed the 2026-09-23 runs, not the code). Even so, retry twice with a
+      # The pgTAP suite talks to Postgres directly and only needs the auth and
+      # storage SCHEMAS that the gotrue and storage-api containers create, so
+      # start just those three containers (validated: 757/757 pass) instead of
+      # ten. That matters because ghcr.io throttles anonymous image pulls from
+      # shared runners ("toomanyrequests" - this failed the 2026-09-23 runs, not
+      # the code): three pulls have far fewer chances to hit it than ten. Even so, retry twice with a
       # back-off; a start that still fails is reported by the next step as
       # ::error annotations (readable via the public check-runs API, unlike the
       # raw job log which needs admin rights).
       - name: Start local Supabase stack
         run: |
           set -o pipefail
-          for attempt in 1 2 3; do
-            if supabase start -x studio,edge-runtime,imgproxy,vector,logflare,postgres-meta,supavisor,mailpit 2>&1 | tee -a /tmp/supabase-start.log; then
+          for attempt in 1 2 3 4; do
+            if supabase start -x studio,edge-runtime,imgproxy,vector,logflare,postgres-meta,supavisor,mailpit,realtime,postgrest,kong 2>&1 | tee -a /tmp/supabase-start.log; then
               exit 0
             fi
             echo "start attempt $attempt failed"
