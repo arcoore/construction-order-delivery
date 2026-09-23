@@ -77,5 +77,26 @@ jobs:
           SMTP_ADMIN_EMAIL=ci@example.com
           EOF
 
-      - run: supabase start
+      # One retry: a container health check timing out on a cold runner is the
+      # usual cause of a start failure and is not a code problem. If it still
+      # fails, the next step turns the output into ::error annotations, which
+      # are readable through the public check-runs API (raw job logs need admin).
+      - name: Start local Supabase stack
+        run: |
+          set -o pipefail
+          if ! supabase start 2>&1 | tee /tmp/supabase-start.log; then
+            echo "first start failed - retrying once"
+            supabase stop --no-backup || true
+            supabase start 2>&1 | tee -a /tmp/supabase-start.log
+          fi
+
+      - name: Explain a failed start
+        if: failure()
+        run: |
+          echo "::error title=supabase start (tail)::$(tail -n 40 /tmp/supabase-start.log 2>/dev/null | tr '\n' '|' | cut -c1-3500)"
+          echo "::error title=containers::$(docker ps -a --format '{{.Names}} {{.Status}}' | tr '\n' '|' | cut -c1-3500)"
+          for c in $(docker ps -a --filter status=exited --filter status=restarting --format '{{.Names}}'); do
+            echo "::error title=log $c::$(docker logs --tail 25 "$c" 2>&1 | tr '\n' '|' | cut -c1-3500)"
+          done
+
       - run: supabase test db
