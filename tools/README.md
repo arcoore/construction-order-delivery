@@ -10,6 +10,9 @@ labelled "indicative" - nothing here invents a price.
 |---|---|
 | `import_offers.py` | Feed CSV (path or https URL, `.gz` ok) + mapping CSV -> the `import_supplier_offers()` database function. Standard library only. |
 | `sync_all_offers.py` | Runs the importer once per supplier in the `OFFER_FEEDS` env var. What the scheduled workflow calls. |
+| `suggest_mapping.py` | Ranks a REAL feed's rows against every catalogue product+variant and drafts the mapping CSV (confident matches only) plus a candidates file for a human to review. Uses `catalogue_snapshot.json`. |
+| `go_live.py` | The go-live switchboard: `check` (read-only readiness report), `awin` (record the publisher/merchant ids), `billing-copy` (Stripe wording for the legal pages), `operator` (swap the operator name/address/email everywhere). Dry run unless `--apply`. |
+| `set_stripe_secrets.ps1` | Hidden-prompt helper that stores the three Stripe values as Supabase secrets - run it yourself; keys never pass through chat. |
 | `feeds/<slug>.map.csv` | **Your** hand-built mapping for a real supplier (empty until you make one). |
 | `sample_feed/` | Synthetic test data (example.com URLs, obviously fake). For local testing only - **never import it into the hosted database.** |
 
@@ -61,3 +64,8 @@ labelled "indicative" - nothing here invents a price.
 - **Only https product links are kept.** A feed row with any other URL scheme still
   imports its price, but with no link.
 - Tests: `python -m pytest tests/unit` (no network, no database).
+
+## Go-live
+
+The full sequence (accounts, test-mode run, live switch, rollback) is `.tools/GO_LIVE_RUNBOOK.md`;
+`python tools/go_live.py check` shows what is ready and what is left at any moment.

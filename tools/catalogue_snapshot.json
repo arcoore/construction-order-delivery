@@ -1,0 +1,270 @@
+{
+ "note": "Snapshot of the curated catalogue (products + variants) as seeded by migrations 0017/0020, used by tools/suggest_mapping.py. Regenerate if the catalogue changes.",
+ "products": [
+  {
+   "key": "p1",
+   "name": "Treated Timber Fence Post",
+   "category": "Timber",
+   "unit": "each",
+   "keywords": [
+    "post",
+    "fence",
+    "wood",
+    "timber"
+   ],
+   "variants": [
+    "75x75mm x 2.4m",
+    "100x100mm x 1.8m",
+    "100x100mm x 2.4m",
+    "100x100mm x 3.0m"
+   ]
+  },
+  {
+   "key": "p2",
+   "name": "Rebar Reinforcement Bar",
+   "category": "Building Materials",
+   "unit": "length",
+   "keywords": [
+    "rebar",
+    "steel",
+    "reinforcement",
+    "concrete"
+   ],
+   "variants": [
+    "8mm x 6m",
+    "10mm x 6m",
+    "12mm x 6m",
+    "10mm x 12m"
+   ]
+  },
+  {
+   "key": "p3",
+   "name": "General Purpose Cement",
+   "category": "Building Materials",
+   "unit": "bag",
+   "keywords": [
+    "cement",
+    "concrete",
+    "mortar"
+   ],
+   "variants": [
+    "10kg bag",
+    "25kg bag"
+   ]
+  },
+  {
+   "key": "p4",
+   "name": "Building Sand",
+   "category": "Aggregates",
+   "unit": "bag",
+   "keywords": [
+    "sand",
+    "aggregate",
+    "ballast"
+   ],
+   "variants": [
+    "25kg bag",
+    "Bulk bag (~800kg)"
+   ]
+  },
+  {
+   "key": "p5",
+   "name": "Plasterboard",
+   "category": "Building Materials",
+   "unit": "sheet",
+   "keywords": [
+    "plasterboard",
+    "drywall",
+    "gypsum"
+   ],
+   "variants": [
+    "2400x1200x9.5mm",
+    "2400x1200x12.5mm",
+    "3000x1200x12.5mm"
+   ]
+  },
+  {
+   "key": "p6",
+   "name": "Loft Insulation Roll",
+   "category": "Insulation",
+   "unit": "roll",
+   "keywords": [
+    "insulation",
+    "loft",
+    "mineral wool"
+   ],
+   "variants": [
+    "100mm",
+    "150mm",
+    "200mm"
+   ]
+  },
+  {
+   "key": "p7",
+   "name": "OSB3 Board",
+   "category": "Timber",
+   "unit": "sheet",
+   "keywords": [
+    "osb",
+    "board",
+    "sheathing",
+    "wood"
+   ],
+   "variants": [
+    "9mm 2440x1220mm",
+    "11mm 2440x1220mm",
+    "18mm 2440x1220mm"
+   ]
+  },
+  {
+   "key": "p8",
+   "name": "Wood Screws",
+   "category": "Fixings & Fasteners",
+   "unit": "box",
+   "keywords": [
+    "screws",
+    "fixings",
+    "fasteners"
+   ],
+   "variants": [
+    "4x40mm (Box of 200)",
+    "5x100mm (Box of 100)",
+    "6x120mm (Box of 50)"
+   ]
+  },
+  {
+   "key": "p9",
+   "name": "Concrete Blocks",
+   "category": "Building Materials",
+   "unit": "each",
+   "keywords": [
+    "block",
+    "concrete block",
+    "blockwork"
+   ],
+   "variants": [
+    "7N 440x215x100mm",
+    "7N 440x215x140mm",
+    "10N 440x215x100mm"
+   ]
+  },
+  {
+   "key": "p10",
+   "name": "Concrete Roof Tiles",
+   "category": "Roofing",
+   "unit": "each",
+   "keywords": [
+    "roof",
+    "tile",
+    "roofing"
+   ],
+   "variants": [
+    "Interlocking - Slate Grey",
+    "Interlocking - Terracotta",
+    "Plain Tile - Red"
+   ]
+  },
+  {
+   "key": "p11",
+   "name": "Hi-Vis Safety Vest",
+   "category": "PPE",
+   "unit": "each",
+   "keywords": [
+    "hi-vis",
+    "vest",
+    "ppe",
+    "safety"
+   ],
+   "variants": [
+    "S",
+    "M",
+    "L",
+    "XL"
+   ]
+  },
+  {
+   "key": "p12",
+   "name": "Safety Helmet",
+   "category": "PPE",
+   "unit": "each",
+   "keywords": [
+    "helmet",
+    "hard hat",
+    "ppe",
+    "safety"
+   ],
+   "variants": [
+    "White",
+    "Yellow",
+    "Orange",
+    "Blue"
+   ]
+  },
+  {
+   "key": "p13",
+   "name": "Copper Pipe",
+   "category": "Plumbing",
+   "unit": "length",
+   "keywords": [
+    "pipe",
+    "copper",
+    "plumbing"
+   ],
+   "variants": [
+    "15mm x 3m",
+    "22mm x 3m",
+    "28mm x 3m"
+   ]
+  },
+  {
+   "key": "p14",
+   "name": "Cordless Combi Drill",
+   "category": "Tools",
+   "unit": "each",
+   "keywords": [
+    "drill",
+    "tool",
+    "cordless",
+    "power tool"
+   ],
+   "variants": [
+    "18V - Body Only",
+    "18V - 1 Battery Kit",
+    "18V - 2 Battery Kit"
+   ]
+  },
+  {
+   "key": "p15",
+   "name": "PVC Waste Pipe",
+   "category": "Plumbing",
+   "unit": "length",
+   "keywords": [
+    "pipe",
+    "pvc",
+    "waste",
+    "drainage"
+   ],
+   "variants": [
+    "32mm x 3m",
+    "40mm x 3m",
+    "110mm x 3m"
+   ]
+  },
+  {
+   "key": "p16",
+   "name": "MDF Board",
+   "category": "Timber",
+   "unit": "sheet",
+   "keywords": [
+    "mdf",
+    "board",
+    "wood"
+   ],
+   "variants": [
+    "12mm 2440x1220mm",
+    "18mm 2440x1220mm",
+    "25mm 2440x1220mm"
+   ]
+  }
+ ]
+}
