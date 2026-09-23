@@ -30,6 +30,8 @@ import { refreshOrderCache, getOrders } from './orderLifecycle.js';
 import { refreshMessageCache } from './orderMessages.js';
 import { refreshPhotoCache } from './deliveryPhotos.js';
 import { refreshSupplierCache } from './suppliers.js';
+import { refreshOffersCache } from './offers.js';
+import { billingEnabled, startCheckout, consumeBillingReturnFromUrl } from './billing.js';
 import { refreshProductsCache } from './products.js';
 import { startRealtimeForSession, stopRealtime } from './realtime.js';
 import { installErrorReporting } from './errorLog.js';
@@ -52,7 +54,7 @@ installErrorReporting();
 // grant or a lifecycle action succeeding when it shouldn't.
 async function refreshDataCaches() {
   try {
-    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache(), refreshSupplierCache(), refreshProductsCache(), refreshMessageCache(), refreshPhotoCache()]);
+    await Promise.all([refreshCommunityCache(), refreshSitesCache(), refreshOrderCache(), refreshNotificationCache(), refreshSupplierCache(), refreshOffersCache(), refreshProductsCache(), refreshMessageCache(), refreshPhotoCache()]);
   } catch (err) {
     console.error('SiteStock: failed to refresh community/site/order/notification/supplier/product data', err);
   }
@@ -115,6 +117,11 @@ const premiumUpgradeCloseBtn = document.getElementById('premium-upgrade-close-bt
 // renderPlanStatus) - not a lazy-module import, just a button main.js
 // already owns like every other modal trigger (see DIALOGS below).
 const sitePlanSeePremiumBtn = document.getElementById('site-plan-see-premium-btn');
+const premiumUpgradeHint = document.getElementById('premium-upgrade-hint');
+const premiumUpgradeMailto = document.getElementById('premium-upgrade-mailto');
+const premiumUpgradeCheckoutBtn = document.getElementById('premium-upgrade-checkout-btn');
+const premiumUpgradeFootnote = document.getElementById('premium-upgrade-footnote');
+const premiumUpgradeError = document.getElementById('premium-upgrade-error');
 const notifWrap = document.getElementById('notif-wrap');
 const notifBellBtn = document.getElementById('notif-bell-btn');
 const notifBadge = document.getElementById('notif-badge');
@@ -506,6 +513,7 @@ async function showProfileImpl() {
         <li>any delivery photos you upload</li>
         <li>your notifications and notification settings</li>
         <li>any feedback you send us through the &ldquo;Send feedback&rdquo; box</li>
+        <li>a record that a supplier link was opened for an order (which order and supplier, and when - not who clicked, so it isn't tied to your account)</li>
         <li>if you're a driver and choose to share it, an approximate location from your device - used only to sort nearby pickups, not stored long-term</li>
         <li>standard security logs (your IP address, request times) and, if the app hits an error, a diagnostic report your browser sends us</li>
       </ul>
@@ -912,7 +920,43 @@ feedbackSendBtn.addEventListener('click', async () => {
 // closed from here, not from sitesView.js, so the lazy-loaded module
 // never needs to know this dialog exists (see "Things NOT to do" in
 // CLAUDE.md on not statically importing the five role/screen modules).
-sitePlanSeePremiumBtn?.addEventListener('click', () => { premiumUpgradeModal.hidden = false; });
+// Two faces, chosen by the billing flag (public/js/env.js): with billing off
+// the pop-up is the "not available yet" notice with a mailto link; with it on,
+// the mailto is replaced by a real checkout button. The flag is the only thing
+// that differs - both faces share this one dialog so the focus-trap/Escape
+// wiring below covers either.
+function syncPremiumModal() {
+  const on = billingEnabled();
+  premiumUpgradeMailto.hidden = on;
+  premiumUpgradeCheckoutBtn.hidden = !on;
+  premiumUpgradeError.hidden = true;
+  if (on) {
+    premiumUpgradeHint.textContent = "You've reached the 2-site limit on the Free plan. Premium removes it completely for £10/month.";
+    premiumUpgradeFootnote.textContent = "You'll pay on Stripe's secure page. Cancel any time from Company settings.";
+  }
+}
+sitePlanSeePremiumBtn?.addEventListener('click', () => {
+  syncPremiumModal();
+  premiumUpgradeModal.hidden = false;
+});
+premiumUpgradeCheckoutBtn?.addEventListener('click', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId) return;
+  premiumUpgradeCheckoutBtn.disabled = true;
+  premiumUpgradeError.hidden = true;
+  const result = await startCheckout(communityId);
+  // On success the browser is already leaving for Stripe; only a failure returns here.
+  if (!result.ok) {
+    premiumUpgradeCheckoutBtn.disabled = false;
+    premiumUpgradeError.textContent = result.error;
+    premiumUpgradeError.hidden = false;
+  }
+});
+// Coming back with the browser's Back button restores this page from the
+// bfcache with the button still disabled from the click that left it.
+window.addEventListener('pageshow', e => {
+  if (e.persisted && premiumUpgradeCheckoutBtn) premiumUpgradeCheckoutBtn.disabled = false;
+});
 premiumUpgradeCloseBtn.addEventListener('click', () => { premiumUpgradeModal.hidden = true; });
 
 // Sites is reached only from inside an active owner session (the pill
@@ -1505,6 +1549,9 @@ async function bootstrap() {
   // known, including the logged-out case (showAuth() first, then this same
   // routeFromTop() logic re-runs after 'sitestock:logged-in').
   consumeJoinIntentFromUrl();
+  // Stripe's return URLs carry ?billing=success|cancelled|returned - same one-shot
+  // read-and-strip as the invite link; the Owner dashboard shows the message.
+  consumeBillingReturnFromUrl();
   await Promise.all([authReady, refreshAppStatus()]);
   // Kill switch: bail before touching any of the data caches or routing.
   if (getAppStatus().killed) {

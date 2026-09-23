@@ -1,0 +1,33 @@
+name: Keep Supabase awake
+
+# Free-tier Supabase projects pause after about a week with no database
+# activity, and a paused project makes the whole app fail to load. This makes
+# one tiny anonymous read a day so the project never looks idle.
+#
+# Uses only PUBLIC values: the project URL and the publishable (anon) key are
+# already shipped in public/js/env.js to every visitor, so nothing secret is
+# needed here. It reads the one table an anonymous caller is allowed to read
+# (app_status, the kill-switch row). A non-200 fails the run - that is also a
+# free "is the backend up" signal alongside the UptimeRobot monitors.
+#
+# Delete this workflow once the project is on a paid plan (Snagging List).
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping the database
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Anonymous read of app_status
+        run: |
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' \
+            -H "apikey: sb_publishable_jBPbTsYSxIP3vi7Tspsu7g_OUEF6ige" \
+            "https://rcdrgoxtawlemhzmpcry.supabase.co/rest/v1/app_status?select=id&limit=1")
+          echo "HTTP $code"
+          cat /tmp/body; echo
+          test "$code" = "200"

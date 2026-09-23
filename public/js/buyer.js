@@ -1,5 +1,8 @@
 import { formatPrice, getCategoryIcon, escapeHtml } from './data.js';
 import { getProduct } from './products.js';
+import { getSupplierForBranch } from './suppliers.js';
+import { logSupplierClick } from './offers.js';
+import { resolveSupplierLink, linkLabel, linkHint, affiliateDisclosure } from './affiliate.js';
 import { getActiveCommunityId } from './community.js';
 import { getCurrentUserId } from './identity.js';
 import {
@@ -441,10 +444,45 @@ function renderDetail() {
     return;
   }
 
-  const websiteUrl = order.stockistWebsite ? `https://${order.stockistWebsite}` : null;
   const product = getProduct(order.items[0] ? order.items[0].productId : null);
   const urgency = neededByUrgency(order.neededByType, order.neededBy, order.status);
   const urgencyWord = urgencyLabel(urgency);
+
+  // Where to actually BUY each line. The live supplier record when it's still
+  // visible, else a homepage-only stand-in built from the order's own
+  // snapshot (a supplier that has since gone inactive must never leave the
+  // Buyer with no way to reach the stockist). Each line prefers the merchant
+  // product link the price came from, then a merchant search, then homepage.
+  const supplier = getSupplierForBranch(order.stockistId)
+    || (order.stockistWebsite
+      ? { name: (order.stockistName || '').split(' - ')[0] || 'the supplier', website: order.stockistWebsite }
+      : null);
+  const itemLinks = order.items.map(it => ({
+    it,
+    link: supplier
+      ? resolveSupplierLink({
+          supplier,
+          offer: it.offerUrl ? { productUrl: it.offerUrl } : null,
+          query: `${it.productName}${it.variant ? ` ${it.variant}` : ''}`,
+          orderId: order.id,
+        })
+      : null,
+  }));
+  // With no product or search links to offer, N identical "open the
+  // homepage" links would just be noise - show one.
+  const onlyHomepage = itemLinks.every(x => !x.link || x.link.kind === 'home');
+  const homeLink = supplier ? resolveSupplierLink({ supplier, orderId: order.id }) : null;
+  const anyTracked = onlyHomepage ? !!(homeLink && homeLink.tracked) : itemLinks.some(x => x.link && x.link.tracked);
+  const linkAttrs = link => `data-supplier-link data-link-kind="${link.kind}" data-link-tracked="${link.tracked ? 'true' : 'false'}" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer${link.tracked ? ' sponsored' : ''}"`;
+  const linksHtml = !supplier ? '' : onlyHomepage
+    ? (homeLink ? `
+      <a class="link-btn" ${linkAttrs(homeLink)}>${escapeHtml(linkLabel('home', supplier.name))}</a>
+      <p class="hint small-hint">${escapeHtml(linkHint('home'))}</p>` : '')
+    : `<ul class="buy-links">${itemLinks.map(({ it, link }) => `
+        <li>
+          <span class="buy-link-item">${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}</span>
+          ${link ? `<a class="link-btn" ${linkAttrs(link)}>${escapeHtml(linkLabel(link.kind, supplier.name))}</a>` : ''}
+        </li>`).join('')}</ul>`;
 
   detailEl.innerHTML = `
     <h1>Review this order</h1>
@@ -453,7 +491,7 @@ function renderDetail() {
       <div class="product-preview-info">
         <strong>${itemsShortSummary(order)}</strong>
         <ul class="order-items-list">
-          ${order.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.unitPrice != null ? ` &middot; ${formatPrice(it.unitPrice)} each &middot; ${formatPrice(it.lineTotal)}` : ''}</li>`).join('')}
+          ${order.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''}${it.unitPrice != null ? ` &middot; ${formatPrice(it.unitPrice)} each &middot; ${formatPrice(it.lineTotal)} <span class="price-source ${it.priceSource === 'client' ? 'price-indicative' : 'price-live'}">${it.priceSource === 'client' ? 'indicative - confirm at checkout' : 'supplier price when ordered'}</span>` : ''}</li>`).join('')}
         </ul>
         <span class="product-preview-price">${formatPrice(order.totalPrice)} total</span>
       </div>
@@ -464,7 +502,8 @@ function renderDetail() {
         <span class="source-name">${escapeHtml(order.stockistName || 'Unknown stockist')}</span>
       </div>
       <span class="source-meta">${escapeHtml(order.stockistWebsite || '')} &middot; ${escapeHtml(order.stockistPostcode || '')}</span>
-      ${websiteUrl ? `<a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml((order.stockistName || '').split(' - ')[0])}'s website &nearr;</a>` : ''}
+      ${linksHtml}
+      ${anyTracked ? `<p class="hint small-hint affiliate-disclosure">${escapeHtml(affiliateDisclosure({ tracked: true }))}</p>` : ''}
     </div>
     <p class="hint">${order.siteName ? `For <strong>${escapeHtml(order.siteName)}</strong> - d` : 'D'}eliver to <strong>${escapeHtml(order.deliveryPostcode)}</strong>. Requested by ${escapeHtml(order.requestedBy || "Unknown")}.</p>
     <p class="hint small-hint">Buy this from the stockist above yourself, outside SiteStock - this app doesn't process the purchase. Once you've actually paid, come back here and press and hold the button below for 3 seconds to confirm.</p>
@@ -478,6 +517,14 @@ function renderDetail() {
     <h2>Messages</h2>
     <div id="buyer-order-thread"></div>
   `;
+
+  // Log that a supplier link was opened (for commission reconciliation). This
+  // never blocks or delays the navigation - the click just goes through.
+  detailEl.querySelectorAll('[data-supplier-link]').forEach(a => {
+    a.addEventListener('click', () => {
+      logSupplierClick(order.id, { kind: a.dataset.linkKind, tracked: a.dataset.linkTracked === 'true' });
+    });
+  });
 
   wireHoldButton(order.id);
   renderOrderThread(document.getElementById('buyer-order-thread'), order.id);

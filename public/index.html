@@ -622,6 +622,13 @@
       </label>
       <p class="hint small-hint">Off by default - most companies only need the invite link/code above. Turn this on only if you want strangers to be able to find and request to join without one.</p>
 
+      <h3 class="settings-subhead">Plan</h3>
+      <p id="owner-plan-summary" class="hint"></p>
+      <div class="invite-link-row" id="owner-plan-actions" hidden>
+        <button type="button" class="btn btn-secondary" id="owner-plan-btn"></button>
+      </div>
+      <p id="owner-plan-status" class="form-status" aria-live="polite"></p>
+
       <h3 class="settings-subhead">Order approval</h3>
       <label class="checkbox-field">
         <input type="checkbox" id="approval-required-toggle" checked />
@@ -954,9 +961,11 @@
     <div class="premium-modal-inner">
       <p class="premium-modal-kicker">SiteStock Premium</p>
       <h2 id="premium-upgrade-title">Unlock unlimited sites</h2>
-      <p class="hint">You've reached the 2-site limit on the Free plan. Premium removes it completely for &pound;10/month &mdash; we're finishing our payment setup now, so it isn't available to buy just yet.</p>
+      <p class="hint" id="premium-upgrade-hint">You've reached the 2-site limit on the Free plan. Premium removes it completely for &pound;10/month &mdash; we're finishing our payment setup now, so it isn't available to buy just yet.</p>
       <a class="premium-modal-cta" href="mailto:arcooreacc@gmail.com?subject=SiteStock%20Premium" id="premium-upgrade-mailto">Get notified when it's ready</a>
-      <p class="premium-modal-footnote">No payment is ever taken automatically.</p>
+      <button type="button" class="premium-modal-cta" id="premium-upgrade-checkout-btn" hidden>Upgrade for &pound;10/month</button>
+      <p class="premium-modal-footnote" id="premium-upgrade-footnote">No payment is ever taken automatically.</p>
+      <p class="premium-modal-footnote premium-modal-error" id="premium-upgrade-error" role="alert" hidden></p>
     </div>
   </div>
 </div>

@@ -76,6 +76,12 @@ function mapOrderItemRow(r) {
     // Partial fulfilment (migration 0036) - set by the driver on delivery.
     deliveredShort: r.delivered_short,
     shortfallNote: r.shortfall_note,
+    // Migration 0054 - which supplier offer priced this line, the merchant
+    // product URL as it was at order time, and whether the price was checked
+    // against a real offer ('feed'/'manual') or just asserted ('client').
+    offerId: r.offer_id,
+    offerUrl: r.offer_url,
+    priceSource: r.price_source || 'client',
   };
 }
 
@@ -417,6 +423,9 @@ function itemsPayload(items) {
     quantity: it.quantity,
     unit: it.unit,
     unitPrice: it.unitPrice ?? null,
+    // Migration 0054 - when set, the server checks the price against this
+    // live supplier offer and refuses the order if they differ.
+    offerId: it.offerId ?? null,
   }));
 }
 

@@ -1,0 +1,7 @@
+aw_product_id,merchant_product_id,product_name,search_price,currency,in_stock,stock_quantity,merchant_deep_link,aw_deep_link,merchant_image_url,category_name
+900001,WK-SAMPLE-CEM-25,SAMPLE General Purpose Cement 25kg,6.49,GBP,1,120,https://example.com/wickes/cement-25kg,https://www.awin1.com/pclick.php?p=900001&a=1&m=1,https://example.com/img/cem25.jpg,Building Materials
+900002,WK-SAMPLE-CEM-10,SAMPLE General Purpose Cement 10kg,"£3.15",GBP,1,40,https://example.com/wickes/cement-10kg,,https://example.com/img/cem10.jpg,Building Materials
+900003,WK-SAMPLE-POST-24,SAMPLE Treated Fence Post 100x100mm 2.4m,14.20,GBP,0,0,https://example.com/wickes/post-100-24,,https://example.com/img/post.jpg,Timber
+900004,WK-SAMPLE-UNMAPPED,SAMPLE Garden Gnome,4.99,GBP,1,9,https://example.com/wickes/gnome,,,Garden
+900005,WK-SAMPLE-BAD-URL,SAMPLE Bad URL Rebar,3.10,GBP,1,9,javascript:alert(1),,,Building Materials
+900006,WK-SAMPLE-ZERO,SAMPLE Zero Price Sand,0,GBP,1,9,https://example.com/wickes/sand,,,Aggregates

@@ -7,7 +7,7 @@ import {
   isApprovalRequired, setApprovalRequired, setDiscoverable, buildInviteLink, renameCommunity,
   getApprovalThreshold, setApprovalThreshold, deleteCommunity,
   teamMemberships, suspendMember, restoreMember, removeMember,
-  fetchMembershipEvents, getMembershipById,
+  fetchMembershipEvents, getMembershipById, isPremium,
 } from './community.js';
 import { getCurrentUserId, getCurrentDisplayName, resolveDisplayName } from './identity.js';
 import {
@@ -22,7 +22,8 @@ import {
 // Roadmap Step 5 adds one real write, addMemberToSites (sites.js), reused
 // as-is for the optional "assign sites at approval time" flow - one batched
 // insert for all the ticked sites.
-import { subscribeSites, getSites, getActiveSites, getSitesForMember, addMemberToSites, refreshSitesCache } from './sites.js';
+import { subscribeSites, getSites, getActiveSites, getSitesForMember, addMemberToSites, refreshSitesCache, sitesUsedTowardLimit, FREE_SITE_LIMIT } from './sites.js';
+import { billingEnabled, startCheckout, openBillingPortal, getBillingStatus, planSummary, takeBillingReturn, returnNotice } from './billing.js';
 import { formatNeededBy, neededByUrgency, urgencyLabel } from './deadline.js';
 import { statusLabel, nextActionFor, urgencyComparator, describeEvent, itemsSummary, itemsShortSummary, fulfilmentSummary } from './orderStatus.js';
 import { renderOrderThread } from './orderThreadView.js';
@@ -56,6 +57,10 @@ const approvalThresholdStatus = document.getElementById('approval-threshold-stat
 const setupChecklistPanel = document.getElementById('owner-setup-checklist-panel');
 const setupChecklistList = document.getElementById('owner-setup-checklist-list');
 const invitePanel = document.getElementById('owner-invite-panel');
+const planSummaryEl = document.getElementById('owner-plan-summary');
+const planActionsEl = document.getElementById('owner-plan-actions');
+const planBtn = document.getElementById('owner-plan-btn');
+const planStatusEl = document.getElementById('owner-plan-status');
 const deleteCompanyWrap = document.getElementById('owner-delete-company-wrap');
 const deleteCompanyInput = document.getElementById('owner-delete-company-input');
 const deleteCompanyBtn = document.getElementById('owner-delete-company-btn');
@@ -429,7 +434,56 @@ function renderInvitePanel(communityId) {
     && getSites(communityId).length === 0
     && otherMembers === 0;
   deleteCompanyWrap.hidden = !eligible;
+  renderPlanRow(communityId);
 }
+
+// --- Free / Premium plan row (Company settings) ---------------------------
+// The words come from billing.js's pure planSummary(); the ONLY authority on
+// who is Premium is the server (communities.premium, set by the Stripe webhook),
+// this just reads it. The button exists only when billing is switched on
+// (env.js) - with it off this is a plain status line, exactly the pre-billing
+// behaviour. A late/failed status read leaves the last good text in place.
+let planAction = null;
+let planFetchToken = 0;
+
+function renderPlanRow(communityId) {
+  const token = ++planFetchToken;
+  const draw = billing => {
+    if (token !== planFetchToken) return; // a newer render superseded this one
+    const summary = planSummary({
+      premium: isPremium(communityId),
+      billing,
+      sitesUsed: sitesUsedTowardLimit(communityId),
+      siteLimit: FREE_SITE_LIMIT,
+    });
+    planSummaryEl.textContent = summary.text;
+    planAction = billingEnabled() ? summary.action : null;
+    planActionsEl.hidden = !planAction;
+    if (planAction) planBtn.textContent = planAction === 'upgrade' ? 'Upgrade to Premium - £10/month' : 'Manage subscription';
+  };
+  draw(null);
+  if (currentPage === 'settings' && billingEnabled()) {
+    getBillingStatus(communityId).then(draw, () => {});
+  }
+}
+
+planBtn.addEventListener('click', async () => {
+  const communityId = getActiveCommunityId();
+  if (!communityId || !planAction) return;
+  planBtn.disabled = true;
+  planStatusEl.textContent = '';
+  planStatusEl.className = 'form-status';
+  const result = planAction === 'upgrade' ? await startCheckout(communityId) : await openBillingPortal(communityId);
+  // On success the browser is already leaving for Stripe; only a failure returns here.
+  if (!result.ok) {
+    planBtn.disabled = false;
+    planStatusEl.textContent = result.error;
+    planStatusEl.className = 'form-status error';
+  }
+});
+// Back/forward from Stripe restores this page from the bfcache with the button
+// still disabled from the click that left it.
+window.addEventListener('pageshow', e => { if (e.persisted) planBtn.disabled = false; });
 
 deleteCompanyBtn.addEventListener('click', async () => {
   const communityId = getActiveCommunityId();
@@ -1408,8 +1462,18 @@ export function refreshOwnerView(orderId = null) {
   syncTabs(tabsEl, b => b.dataset.tab === 'awaiting');
 
   const communityId = getActiveCommunityId();
+  // Coming back from Stripe (?billing=... was read at startup): land on
+  // Company settings, where the Plan row is, and say what happened.
+  const returned = takeBillingReturn();
+  const notice = returnNotice(returned);
   const target = orderId && communityId && latestOrders.find(o => o.id === orderId && o.communityId === communityId);
-  if (target) {
+  if (notice) {
+    currentPage = 'settings';
+    selectedOrderId = null;
+    planStatusEl.textContent = notice.text;
+    planStatusEl.className = `form-status ${notice.tone === 'ok' ? 'success' : ''}`.trim();
+    render();
+  } else if (target) {
     // A notification deep-link always means "open this order," regardless
     // of whatever page was last showing - skip the hub entirely.
     showOrderDetail(orderId);

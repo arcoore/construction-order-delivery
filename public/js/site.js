@@ -1,6 +1,8 @@
 import { getAvailability, getCategoryIcon, formatPrice, escapeHtml } from './data.js';
 import { searchProducts, getProduct } from './products.js';
-import { getBranchesForProduct } from './suppliers.js';
+import { getBranchesForProduct, getSupplierForBranch } from './suppliers.js';
+import { priceItemsForBranch, offersSummaryForProduct, getOfferById, refreshOffersCache } from './offers.js';
+import { resolveSupplierLink, linkLabel, linkHint, affiliateDisclosure } from './affiliate.js';
 import { geocodePostcode, distanceKm } from './geo.js';
 import {
   subscribe, createOrder, editOrder, cancelOrderDirect, requestCancellation,
@@ -109,6 +111,21 @@ searchInput.addEventListener('input', () => {
   renderResults(results);
 });
 
+// One line of price context for a catalogue product. With real supplier
+// offers it's the cheapest live price and how many suppliers list it;
+// without any (today, and for any product a feed doesn't cover) it's the
+// catalogue's own price, labelled indicative rather than passed off as live.
+function productPriceLine(p, variant = null) {
+  const summary = offersSummaryForProduct(p.id, variant);
+  if (summary) {
+    const n = summary.supplierCount;
+    const at = `live prices at ${n} supplier${n === 1 ? '' : 's'}`;
+    if (summary.allOutOfStock) return `${formatPrice(summary.minPrice)} per ${escapeHtml(p.unit)} &middot; ${at}, currently out of stock`;
+    return `from ${formatPrice(summary.minPrice)} per ${escapeHtml(p.unit)} &middot; ${at}`;
+  }
+  return `${formatPrice(p.unitPrice)} per ${escapeHtml(p.unit)} &middot; indicative`;
+}
+
 function cartBarHtml() {
   if (cart.length === 0) return '';
   const count = cart.reduce((n, it) => n + 1, 0);
@@ -148,7 +165,7 @@ function renderResults(products) {
   resultsEl.innerHTML = bar + products.map(p => `
     <button class="result-card" data-id="${p.id}">
       <span class="result-name">${escapeHtml(p.name)}</span>
-      <span class="result-meta">${escapeHtml(p.category)} &middot; ${formatPrice(p.unitPrice)} per ${escapeHtml(p.unit)}</span>
+      <span class="result-meta">${escapeHtml(p.category)} &middot; ${productPriceLine(p)}</span>
     </button>
   `).join('');
   wireCartBar();
@@ -194,7 +211,7 @@ function renderQuantityStep(product, variant) {
   );
   orderFormEl.innerHTML = `
     <h2>${escapeHtml(product.name)}${variant ? ` - ${escapeHtml(variant)}` : ''}</h2>
-    <p class="hint">${escapeHtml(product.category)} &middot; ${formatPrice(product.unitPrice)} per ${escapeHtml(product.unit)}</p>
+    <p class="hint">${escapeHtml(product.category)} &middot; ${productPriceLine(product, variant)}</p>
     <label class="field-label" for="qty-input">How many (${escapeHtml(product.unit)})?</label>
     <input type="number" id="qty-input" class="text-input" min="1" value="1" />
     <button type="button" id="add-to-order-btn" class="btn btn-primary btn-block">Add to order</button>
@@ -508,13 +525,31 @@ function renderSourceStep(details) {
   if (!repProduct) { alert('That material is no longer in the catalog.'); backToSearchKeepingCart(); return; }
   const sources = rankBranchesByDistance(getBranchesForProduct(repProduct), details);
 
+  // What the whole basket would cost at each branch's supplier, from real
+  // supplier offers where they exist and the catalogue's indicative price
+  // where they don't. "Cheapest" is only ever awarded between suppliers that
+  // have a live price for EVERY line - never on a mix of live and guessed.
+  const baskets = new Map(sources.map(s => [s.id, priceItemsForBranch(cart, s.id)]));
+  const anyLive = [...baskets.values()].some(b => b.liveCount > 0);
+  // ...and only among baskets that can actually be bought in full: a supplier
+  // that is cheapest only because one line is out of stock there isn't cheapest.
+  const buyable = [...baskets.values()].filter(b => b.liveCount === cart.length && b.outOfStock === 0);
+  const cheapestTotal = buyable.length >= 2 ? Math.min(...buyable.map(b => b.total)) : null;
+
   orderFormEl.innerHTML = `
     <h2>Where should this be ordered from?</h2>
     <p class="hint">${cart.length} ${cart.length === 1 ? 'material' : 'materials'} &middot; deliver to ${escapeHtml(details.deliveryPostcode)}</p>
-    <p class="hint">Sorted by distance from this site, nearest first. Availability shown below is a demo estimate, not live stock - pick one to tell the driver where to buy it.</p>
+    <p class="hint">Sorted by distance from this site, nearest first. ${anyLive
+      ? 'Prices marked live come from the supplier\'s own feed; pickup timings are still estimates, not live stock.'
+      : 'Prices and availability shown below are demo estimates, not live stock.'} Pick one to tell the driver where to buy it.</p>
     <div class="variant-list">
       ${sources.map(s => {
         const avail = getAvailability(s.id, repProduct.id);
+        const basket = baskets.get(s.id);
+        const coverage = basket.liveCount === cart.length
+          ? 'live prices'
+          : basket.liveCount > 0 ? `live prices for ${basket.liveCount} of ${cart.length}` : 'indicative prices';
+        const isCheapest = cheapestTotal != null && basket.liveCount === cart.length && basket.outOfStock === 0 && basket.total === cheapestTotal;
         return `
         <button type="button" class="variant-option source-option" data-branch-id="${s.id}">
           <span class="variant-option-radio" aria-hidden="true"></span>
@@ -522,6 +557,8 @@ function renderSourceStep(details) {
             <span class="source-name">${escapeHtml(s.name)}</span>
             <span class="source-meta">${escapeHtml(s.website)} &middot; ${escapeHtml(s.postcode)}</span>
             <span class="source-distance">${s.distanceKm != null ? `~${s.distanceKm.toFixed(1)} km from site` : 'Distance unavailable'}</span>
+            <span class="source-price ${basket.liveCount > 0 ? 'price-live' : 'price-indicative'}">Basket ${formatPrice(basket.total)} &middot; ${coverage}${isCheapest ? ' <span class="price-cheapest">Cheapest</span>' : ''}</span>
+            ${basket.outOfStock > 0 ? `<span class="source-stock-warning">${basket.outOfStock} ${basket.outOfStock === 1 ? 'item is' : 'items are'} out of stock at this supplier</span>` : ''}
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
           <span class="variant-option-arrow" aria-hidden="true"></span>
@@ -542,16 +579,32 @@ function renderSourceStep(details) {
 function renderConfirmStep(details, branch, avail) {
   setBackAction('Back to store selection', () => renderSourceStep(details));
 
-  const websiteUrl = `https://${branch.website}`;
-  const total = cart.reduce((sum, it) => sum + (it.unitPrice || 0) * it.quantity, 0);
+  // Price the basket as this branch's supplier would sell it: live offers
+  // where they exist, indicative catalogue prices where they don't.
+  const basket = priceItemsForBranch(cart, branch.id);
+  const total = basket.total;
+  const supplier = getSupplierForBranch(branch.id)
+    || { name: branch.name.split(' - ')[0], website: branch.website };
+  const first = basket.items[0];
+  const link = resolveSupplierLink({
+    supplier,
+    offer: first ? first.offer : null,
+    query: first ? `${first.productName}${first.variant ? ` ${first.variant}` : ''}` : '',
+  });
+  const priceNote = basket.liveCount === cart.length
+    ? 'Live prices from the supplier\'s own feed.'
+    : basket.liveCount > 0
+      ? `Live prices for ${basket.liveCount} of ${cart.length} items; the rest are indicative - the buyer confirms the real price at checkout.`
+      : 'Indicative prices - the buyer confirms the real price at checkout.';
 
   orderFormEl.innerHTML = `
     <h2>Confirm this order</h2>
 
     <ul class="order-items-list">
-      ${cart.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''} &middot; ${formatPrice((it.unitPrice || 0) * it.quantity)}</li>`).join('')}
+      ${basket.items.map(it => `<li>${escapeHtml(it.quantity)} &times; ${escapeHtml(it.unit)} ${escapeHtml(it.productName)}${it.variant ? ` (${escapeHtml(it.variant)})` : ''} &middot; ${formatPrice((it.unitPrice || 0) * it.quantity)}</li>`).join('')}
     </ul>
     <p class="hint"><strong>Total: ${formatPrice(total)}</strong></p>
+    <p class="hint small-hint">${priceNote}</p>
 
     <div class="confirm-source-card">
       <div class="confirm-source-row">
@@ -559,8 +612,11 @@ function renderConfirmStep(details, branch, avail) {
         <span class="availability-badge availability-${avail.key}">${avail.label}</span>
       </div>
       <span class="source-meta">${escapeHtml(branch.website)} &middot; ${escapeHtml(branch.postcode)}</span>
-      <a class="link-btn" href="${escapeHtml(websiteUrl)}" target="_blank" rel="noopener noreferrer">Open ${escapeHtml(branch.name.split(' - ')[0])}'s website &nearr;</a>
-      <p class="hint small-hint">Opens their homepage in a new tab - this is a demo catalog, so it isn't linked to the exact product listing.</p>
+      ${link ? `
+        <a class="link-btn" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer${link.tracked ? ' sponsored' : ''}">${escapeHtml(linkLabel(link.kind, supplier.name))}</a>
+        <p class="hint small-hint">${escapeHtml(linkHint(link.kind))}</p>
+        ${affiliateDisclosure(link) ? `<p class="hint small-hint affiliate-disclosure">${escapeHtml(affiliateDisclosure(link))}</p>` : ''}
+      ` : ''}
     </div>
 
     <p class="hint">Delivering to <strong>${escapeHtml(details.deliveryPostcode)}</strong>.</p>
@@ -581,7 +637,7 @@ async function submitOrder(details, branch, avail, confirmBtn) {
   const result = await createOrder({
     communityId,
     siteId: selectedSite ? selectedSite.id : null,
-    items: cart.map(it => ({ ...it })),
+    items: priceItemsForBranch(cart, branch.id).items,
     deliveryPostcode: details.deliveryPostcode,
     deliveryLat: details.deliveryLat,
     deliveryLon: details.deliveryLon,
@@ -598,6 +654,13 @@ async function submitOrder(details, branch, avail, confirmBtn) {
   if (!result.ok) {
     confirmBtn.disabled = false;
     alert(result.error);
+    // A supplier price moved between browsing and submitting: reload the
+    // offers and show the order again with the new prices, so the Worker
+    // reviews what they'd actually be committing to.
+    if (/supplier price changed/i.test(result.error || '')) {
+      await refreshOffersCache();
+      renderConfirmStep(details, branch, avail);
+    }
     return;
   }
 
@@ -853,6 +916,12 @@ function openEditForm(order) {
       productId: it.productId, productName: it.productName, variant: it.variant,
       unit: it.unit, unitPrice: it.unitPrice, quantity: it.quantity,
     })),
+    // The order's lines exactly as they were placed (price + which offer
+    // priced them) - submitEdit keeps an untouched line at its ordered price
+    // instead of silently re-pricing it to today's feed.
+    originalItems: (order.items || []).map(it => ({
+      productId: it.productId, variant: it.variant, unitPrice: it.unitPrice, offerId: it.offerId ?? null,
+    })),
     editIndex: null,
     pickProduct: null,
     deliveryPostcode: order.deliveryPostcode,
@@ -1059,7 +1128,7 @@ function renderEditPickMaterial() {
     results.innerHTML = products.map(p => `
       <button class="result-card" data-id="${p.id}">
         <span class="result-name">${escapeHtml(p.name)}</span>
-        <span class="result-meta">${escapeHtml(p.category)} &middot; ${formatPrice(p.unitPrice)} per ${escapeHtml(p.unit)}</span>
+        <span class="result-meta">${escapeHtml(p.category)} &middot; ${productPriceLine(p)}</span>
       </button>
     `).join('');
     results.querySelectorAll('.result-card').forEach(btn => {
@@ -1138,12 +1207,18 @@ function renderEditPickSource() {
     <div class="variant-list">
       ${sources.map(s => {
         const avail = getAvailability(s.id, product.id);
+        const basket = priceItemsForBranch(editState.items, s.id);
+        const coverage = basket.liveCount === editState.items.length
+          ? 'live prices'
+          : basket.liveCount > 0 ? `live prices for ${basket.liveCount} of ${editState.items.length}` : 'indicative prices';
         return `
         <button type="button" class="variant-option source-option" data-branch-id="${s.id}">
           <span class="variant-option-radio" aria-hidden="true"></span>
           <span class="variant-option-label">
             <span class="source-name">${escapeHtml(s.name)}</span>
             <span class="source-meta">${escapeHtml(s.website)} &middot; ${escapeHtml(s.postcode)}</span>
+            <span class="source-price ${basket.liveCount > 0 ? 'price-live' : 'price-indicative'}">Basket ${formatPrice(basket.total)} &middot; ${coverage}</span>
+            ${basket.outOfStock > 0 ? `<span class="source-stock-warning">${basket.outOfStock} ${basket.outOfStock === 1 ? 'item is' : 'items are'} out of stock at this supplier</span>` : ''}
             <span class="source-availability availability-${avail.key}">${avail.label}</span>
           </span>
           <span class="variant-option-arrow" aria-hidden="true"></span>
@@ -1243,8 +1318,26 @@ async function submitEdit() {
     return;
   }
 
+  // Re-price only what actually changed. A line that is untouched, with the
+  // supplier unchanged, keeps its ordered price (and its offer link only
+  // while that offer is still live at exactly that price - otherwise the
+  // server would refuse an edit that was only ever about a deadline). New or
+  // changed lines, and every line when the supplier changes, are priced from
+  // the new supplier's live offers where they exist.
+  const supplierIdOf = key => { const sp = key ? getSupplierForBranch(key) : null; return sp ? sp.id : null; };
+  const supplierChanged = supplierIdOf(s.stockistId) !== supplierIdOf(s.order.stockistId);
+  const pricedItems = s.items.map(it => {
+    const orig = (s.originalItems || []).find(o => o.productId === it.productId && o.variant === it.variant);
+    if (orig && !supplierChanged) {
+      const liveOffer = orig.offerId ? getOfferById(orig.offerId) : null;
+      const keepOffer = !!liveOffer && liveOffer.unitPrice === orig.unitPrice;
+      return { ...it, unitPrice: orig.unitPrice, offerId: keepOffer ? orig.offerId : null };
+    }
+    return priceItemsForBranch([it], s.stockistId).items[0];
+  });
+
   const fields = {
-    items: s.items.map(it => ({ ...it })),
+    items: pricedItems,
     deliveryPostcode,
     siteId: s.site.id,
     stockistId: s.stockistId,
@@ -1276,6 +1369,9 @@ async function submitEdit() {
     saveBtn.disabled = false;
     statusEl.textContent = result.error;
     statusEl.className = 'form-status error';
+    // A supplier price moved while this form was open: pull the fresh offers
+    // so the next Save prices against what the supplier actually charges now.
+    if (/supplier price changed/i.test(result.error || '')) await refreshOffersCache();
     return;
   }
 

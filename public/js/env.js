@@ -38,6 +38,23 @@
   // Accepted values: 'google', 'azure' (shown as "Microsoft"), 'apple'.
   window.SITESTOCK_OAUTH_PROVIDERS = ['google', 'azure'];
 
+  // Affiliate outbound links (public/js/affiliate.js). The Awin PUBLISHER id is
+  // a public value (it's visible in every affiliate link), not a secret. Empty
+  // = no affiliate account yet: supplier links still work, they just aren't
+  // tagged, and no "we may earn a commission" notice is shown. Paste the id
+  // here the day the Awin account exists - that is the whole switch. Each
+  // supplier ALSO needs affiliate_network/affiliate_merchant_id set on its row
+  // (its Awin merchant id) before its links are wrapped.
+  window.SITESTOCK_AFFILIATE = { awinPublisherId: '' };
+
+  // Premium billing (Stripe). OFF until the Stripe account + the three Edge
+  // Function secrets exist on the Supabase project (STRIPE_SECRET_KEY,
+  // STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET) - see supabase/functions/README.md
+  // for the go-live checklist. Flip `enabled` to true only as the LAST step;
+  // until then the upgrade pop-up keeps its "not available yet" wording and no
+  // payment button exists anywhere.
+  window.SITESTOCK_BILLING = { enabled: false };
+
   if (host === 'localhost' || host === '127.0.0.1') {
     return; // local dev - supabaseClient.js's own local-Supabase defaults apply
   }

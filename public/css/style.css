@@ -1772,6 +1772,22 @@ h2 { font-size: 1.15rem; margin: 0 0 4px; }
   margin-bottom: 14px;
 }
 .premium-modal-cta:hover { background: #f2e8dc; }
+/* The same pill, when it's a real <button> (billing on) rather than the
+   mailto link: buttons don't inherit font/border/cursor the way <a> does. */
+button.premium-modal-cta {
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+button.premium-modal-cta[hidden],
+a.premium-modal-cta[hidden] { display: none; }
+button.premium-modal-cta:disabled { opacity: 0.7; cursor: progress; }
+.premium-modal-error {
+  color: #ffd2c4;
+  margin-top: 10px;
+}
+.premium-modal-error[hidden] { display: none; }
 .premium-modal-footnote {
   color: rgba(255, 255, 255, 0.65);
   font-size: 0.78rem;
@@ -3044,3 +3060,63 @@ body.cookie-choice-pending #sticky-cta { display: none; }
   flex: 1;
   text-align: center;
 }
+
+/* ============================================================================
+   SUPPLIER PRICES & OUTBOUND LINKS (2026-09-23)
+   Per-supplier basket prices in the Worker's stockist step, the price-source
+   marker on a Buyer's order lines, and the "buy this at the supplier" links.
+   Colour discipline: only existing tokens, no new accent. "Live" prices read
+   as normal-weight body text with a bold figure; "indicative" ones are muted
+   so a guessed price never looks as authoritative as a supplier's own. Radii
+   stay within the app's 0 / 4px / 50%.
+   ============================================================================ */
+.source-price {
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.price-live { color: var(--text); }
+.price-indicative { color: var(--text-muted); font-weight: 500; }
+.price-cheapest {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--navy);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+.source-stock-warning {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--red);
+}
+.price-source {
+  font-size: 0.72rem;
+  font-weight: 500;
+  margin-left: 4px;
+}
+.buy-links {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.buy-links li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.buy-links li:first-child { border-top: none; }
+.buy-link-item { font-size: 0.85rem; font-weight: 600; }
+.buy-links .link-btn { padding: 4px 0 0; }
+.affiliate-disclosure { color: var(--text-muted); margin-top: 6px; }

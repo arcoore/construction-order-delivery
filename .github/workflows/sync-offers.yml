@@ -1,0 +1,42 @@
+name: Sync supplier offers
+
+# Pulls each configured merchant feed (Awin product feeds, once an affiliate
+# account exists) and full-syncs it into supplier_offers via
+# tools/import_offers.py. INERT until the OFFER_FEEDS secret is set: with it
+# empty the job prints "nothing to sync" and succeeds, so this file can sit in
+# the repo from day one. See tools/README.md for the one-off setup.
+#
+# Needs three repository secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_URL          https://rcdrgoxtawlemhzmpcry.supabase.co
+#   SUPABASE_SERVICE_KEY  the service-role key (bypasses RLS - it is the only
+#                         thing that can call import_supplier_offers)
+#   OFFER_FEEDS           {"Wickes Trade": "https://productdata.awin.com/..."}
+# The feed URL is a secret because an Awin feed URL embeds the account API key.
+
+on:
+  schedule:
+    - cron: '30 4 * * *'   # daily, 04:30 UTC - before UK trade counters open
+  workflow_dispatch:
+
+concurrency:
+  group: sync-offers
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Import merchant feeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Sync every configured feed
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          OFFER_FEEDS: ${{ secrets.OFFER_FEEDS }}
+        run: python tools/sync_all_offers.py

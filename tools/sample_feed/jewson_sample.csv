@@ -1,0 +1,3 @@
+aw_product_id,merchant_product_id,product_name,search_price,currency,in_stock,merchant_deep_link
+800001,JW-SAMPLE-CEM-25,SAMPLE Jewson Cement 25kg,5.90,GBP,in stock,https://example.com/jewson/cement-25kg
+800002,JW-SAMPLE-CEM-10,SAMPLE Jewson Cement 10kg,3.40,GBP,out of stock,https://example.com/jewson/cement-10kg

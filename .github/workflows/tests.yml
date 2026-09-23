@@ -24,6 +24,21 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest
 
+  edge-function-tests:
+    name: Edge Function unit tests (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Stripe signature check and event mapping (supabase/functions/_shared)
+      # are pure Web-Crypto code with an independently computed HMAC test vector.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+
+      - run: deno test supabase/functions/_shared/
+
   pgtap-tests:
     name: Database tests (pgTAP)
     runs-on: ubuntu-latest

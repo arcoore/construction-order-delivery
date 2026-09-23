@@ -57,6 +57,11 @@ function mapSupplier(r) {
               // only ever reference a branch's catalogue_key).
     name: r.name,
     website: r.website,
+    // Migration 0054 - affiliate/search-link config for public/js/affiliate.js.
+    // All null until a real network account / verified search URL exists.
+    affiliateNetwork: r.affiliate_network || null,
+    affiliateMerchantId: r.affiliate_merchant_id || null,
+    searchUrlTemplate: r.search_url_template || null,
   };
 }
 
@@ -116,6 +121,17 @@ subscribeAuth(() => { refreshSupplierCache(); });
 
 export function getSuppliers() {
   return cache.suppliers;
+}
+
+export function getSupplier(supplierId) {
+  return cache.suppliers.find(s => s.id === supplierId) || null;
+}
+
+// The supplier (brand) behind a branch's catalogue key - what orders store as
+// stockist_id. Null if the branch/supplier is no longer visible (inactive).
+export function getSupplierForBranch(catalogueKey) {
+  const branch = getBranch(catalogueKey);
+  return branch ? getSupplier(branch.supplierId) : null;
 }
 
 export function getSupplierBranches(supplierId) {

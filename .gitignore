@@ -11,3 +11,4 @@ backups/
 .pytest_cache/
 __pycache__/
 *.pyc
+tools/local_billing_test/mock_stripe_requests.jsonl

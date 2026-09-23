@@ -161,3 +161,10 @@ verify_enabled = true
 [api]
 enabled = true
 port = 54321
+
+# Stripe calls billing-webhook server-to-server and sends no Supabase JWT - its
+# authentication is Stripe's HMAC signature, verified inside the function over
+# the raw body (supabase/functions/_shared/stripe.ts). Every other function
+# keeps the default (JWT required).
+[functions.billing-webhook]
+verify_jwt = false
