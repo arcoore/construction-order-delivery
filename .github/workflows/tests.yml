@@ -89,13 +89,19 @@ jobs:
       - name: Start local Supabase stack
         run: |
           set -o pipefail
-          for attempt in 1 2 3 4; do
+          # Rotate through the registries that host the same Supabase images: a
+          # throttled one (ghcr.io answered "toomanyrequests" for the database image
+          # itself on 2026-09-23) shouldn't fail the suite when Docker Hub / AWS
+          # public ECR would serve it. "" = the CLI's own default.
+          for registry in "" docker.io public.ecr.aws ghcr.io; do
+            if [ -n "$registry" ]; then export SUPABASE_INTERNAL_IMAGE_REGISTRY="$registry"; fi
+            echo "supabase start (registry: ${registry:-default})"
             if supabase start -x studio,edge-runtime,imgproxy,vector,logflare,postgres-meta,supavisor,mailpit,realtime,postgrest,kong 2>&1 | tee -a /tmp/supabase-start.log; then
               exit 0
             fi
-            echo "start attempt $attempt failed"
+            echo "start failed with registry '${registry:-default}' - trying the next one"
             supabase stop --no-backup || true
-            sleep $((attempt * 60))
+            sleep 45
           done
           exit 1
 
